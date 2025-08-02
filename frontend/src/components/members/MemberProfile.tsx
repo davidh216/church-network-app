@@ -61,6 +61,73 @@ interface Member {
       description?: string;
     }
   }>;
+  
+  // Phase 3: Enhanced data
+  engagement?: {
+    engagementScore: number;
+    membershipStage: string;
+    riskLevel: string;
+    lastActivity?: string;
+    attendanceScore: number;
+    givingScore: number;
+    volunteerScore: number;
+    communityScore: number;
+    communicationScore: number;
+  };
+  familyMembers?: Array<{
+    id: string;
+    name: string;
+    firstName?: string;
+    lastName?: string;
+    avatar?: string;
+    isActive: boolean;
+    relationshipType: string;
+    isPrimary: boolean;
+  }>;
+  interactions?: Array<{
+    id: string;
+    interactionType: string;
+    subject?: string;
+    content?: string;
+    channel: string;
+    status: string;
+    category?: string;
+    priority: string;
+    responseRequired: boolean;
+    responseReceived: boolean;
+    createdAt: string;
+    completedAt?: string;
+  }>;
+  milestones?: Array<{
+    id: string;
+    milestoneType: string;
+    title: string;
+    description?: string;
+    achievedDate: string;
+    category: string;
+    impact: string;
+    isPublic: boolean;
+    celebrated: boolean;
+  }>;
+  memberNotes?: Array<{
+    id: string;
+    title?: string;
+    content: string;
+    noteType: string;
+    isPrivate: boolean;
+    isFollowUp: boolean;
+    followUpDate?: string;
+    createdAt: string;
+  }>;
+  timelineActivities?: Array<{
+    id: string;
+    activityDate: string;
+    activityType: string;
+    title: string;
+    description?: string;
+    category: string;
+    impact: string;
+  }>;
 }
 
 interface MemberProfileProps {
@@ -82,7 +149,7 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
   const fetchMember = async () => {
     try {
       setLoading(true);
-      const response = await authService.fetchWithAuth(`http://localhost:5000/api/users/${memberId}`);
+      const response = await authService.fetchWithAuth(`http://localhost:5000/api/member-details/${memberId}`);
       const data = await response.json();
       
       if (data.success) {
@@ -104,6 +171,17 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
       year: 'numeric',
       month: 'long',
       day: 'numeric'
+    });
+  };
+
+  const formatDateTime = (dateString?: string): string => {
+    if (!dateString) return 'Not set';
+    return new Date(dateString).toLocaleString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
     });
   };
 
@@ -154,6 +232,50 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
     }
   };
 
+  const getInteractionIcon = (type: string): string => {
+    switch (type) {
+      case 'email_sent': return '📧';
+      case 'email_opened': return '📬';
+      case 'sms_sent': return '📱';
+      case 'sms_replied': return '💬';
+      case 'call_made': return '📞';
+      case 'visit_logged': return '🏠';
+      case 'note_added': return '📝';
+      default: return '📋';
+    }
+  };
+
+  const getMilestoneIcon = (type: string): string => {
+    switch (type) {
+      case 'baptism': return '✝️';
+      case 'confirmation': return '🙏';
+      case 'wedding': return '💒';
+      case 'first_volunteer': return '🤝';
+      case 'leadership_role': return '👑';
+      case 'anniversary': return '🎉';
+      default: return '🏆';
+    }
+  };
+
+  const getPriorityColor = (priority: string): string => {
+    switch (priority) {
+      case 'urgent': return 'bg-red-100 text-red-800';
+      case 'high': return 'bg-orange-100 text-orange-800';
+      case 'normal': return 'bg-blue-100 text-blue-800';
+      case 'low': return 'bg-gray-100 text-gray-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const getImpactColor = (impact: string): string => {
+    switch (impact) {
+      case 'high': return 'bg-purple-100 text-purple-800';
+      case 'medium': return 'bg-blue-100 text-blue-800';
+      case 'low': return 'bg-gray-100 text-gray-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
   if (loading) {
     return (
       <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
@@ -188,13 +310,16 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
     { id: 'personal', label: 'Personal Info', icon: '👤' },
     { id: 'church', label: 'Church Info', icon: '⛪' },
     { id: 'contact', label: 'Contact & Address', icon: '📧' },
-    { id: 'family', label: 'Family & Groups', icon: '👨‍👩‍👧‍👦' },
+    { id: 'timeline', label: 'Timeline', icon: '📅' },
+    { id: 'family', label: 'Family', icon: '👨‍👩‍👧‍👦' },
+    { id: 'interactions', label: 'Interactions', icon: '💬' },
+    { id: 'milestones', label: 'Milestones', icon: '🏆' },
     { id: 'activity', label: 'Activity & Notes', icon: '📊' }
   ];
 
   return (
     <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-      <div className="relative top-10 mx-auto p-5 border max-w-6xl shadow-lg rounded-md bg-white mb-10">
+      <div className="relative top-10 mx-auto p-5 border max-w-7xl shadow-lg rounded-md bg-white mb-10">
         {/* Header */}
         <div className="flex justify-between items-start border-b border-gray-200 pb-4 mb-6">
           <div className="flex items-center space-x-4">
@@ -219,6 +344,15 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
                 {member.dateOfBirth && (
                   <span className="text-sm text-gray-500">Age {calculateAge(member.dateOfBirth)}</span>
                 )}
+                {member.engagement && (
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                    member.engagement.riskLevel === 'high' ? 'bg-red-100 text-red-800' :
+                    member.engagement.riskLevel === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                    'bg-green-100 text-green-800'
+                  }`}>
+                    {member.engagement.riskLevel} risk
+                  </span>
+                )}
               </div>
               <div className="flex flex-wrap gap-1 mt-2">
                 {member.roles.map((userRole) => (
@@ -229,6 +363,11 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
                     {userRole.role.name}
                   </span>
                 ))}
+                {member.engagement && (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                    {member.engagement.membershipStage.replace('_', ' ')}
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -251,7 +390,7 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
 
         {/* Tabs */}
         <div className="border-b border-gray-200 mb-6">
-          <nav className="-mb-px flex space-x-8">
+          <nav className="-mb-px flex space-x-8 overflow-x-auto">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
@@ -377,6 +516,22 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
                   <label className="block text-sm font-medium text-gray-700">Last Attended</label>
                   <p className="text-sm text-gray-900">{formatDate(member.lastAttended)}</p>
                 </div>
+
+                {member.engagement && (
+                  <div className="mt-6">
+                    <h3 className="text-lg font-medium text-gray-900">Engagement Analytics</h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Overall Score</label>
+                        <p className="text-sm text-gray-900">{member.engagement.engagementScore.toFixed(1)}/100</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Last Activity</label>
+                        <p className="text-sm text-gray-900">{formatDate(member.engagement.lastActivity)}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -449,29 +604,217 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
             </div>
           )}
 
-          {/* Family & Groups Tab */}
-          {activeTab === 'family' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium text-gray-900">Family Information</h3>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Family Status</label>
-                  <p className="text-sm text-gray-900">
-                    {member.isHeadOfFamily ? 'Head of Family' : 'Family Member'}
-                  </p>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Family ID</label>
-                  <p className="text-sm text-gray-900">{member.familyId || 'Not assigned to a family'}</p>
-                </div>
+          {/* Timeline Tab */}
+          {activeTab === 'timeline' && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-medium text-gray-900">Member Timeline</h3>
+                <span className="text-sm text-gray-500">
+                  {member.timelineActivities?.length || 0} activities
+                </span>
               </div>
               
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium text-gray-900">Groups & Ministries</h3>
-                <p className="text-sm text-gray-500">Group membership information will be displayed here once implemented.</p>
+              {member.timelineActivities && member.timelineActivities.length > 0 ? (
+                <div className="space-y-4">
+                  {member.timelineActivities.map((activity) => (
+                    <div key={activity.id} className="flex items-start space-x-4 p-4 bg-gray-50 rounded-lg">
+                      <div className="flex-shrink-0">
+                        <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                          <span className="text-sm font-medium text-blue-600">
+                            {activity.activityType.charAt(0).toUpperCase()}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-sm font-medium text-gray-900">{activity.title}</h4>
+                          <span className="text-xs text-gray-500">{formatDate(activity.activityDate)}</span>
+                        </div>
+                        {activity.description && (
+                          <p className="text-sm text-gray-600 mt-1">{activity.description}</p>
+                        )}
+                        <div className="flex items-center space-x-2 mt-2">
+                          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getImpactColor(activity.impact)}`}>
+                            {activity.impact} impact
+                          </span>
+                          <span className="text-xs text-gray-500 capitalize">{activity.category}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <p className="text-gray-500">No timeline activities found</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Family Tab */}
+          {activeTab === 'family' && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-medium text-gray-900">Family Information</h3>
+                <span className="text-sm text-gray-500">
+                  {member.familyMembers?.length || 0} family members
+                </span>
               </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <h4 className="text-md font-medium text-gray-900">Family Status</h4>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Family Role</label>
+                    <p className="text-sm text-gray-900">
+                      {member.isHeadOfFamily ? 'Head of Family' : 'Family Member'}
+                    </p>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Family ID</label>
+                    <p className="text-sm text-gray-900">{member.familyId || 'Not assigned to a family'}</p>
+                  </div>
+                </div>
+                
+                <div className="space-y-4">
+                  <h4 className="text-md font-medium text-gray-900">Family Members</h4>
+                  {member.familyMembers && member.familyMembers.length > 0 ? (
+                    <div className="space-y-3">
+                      {member.familyMembers.map((familyMember) => (
+                        <div key={familyMember.id} className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                          <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center">
+                            {familyMember.avatar ? (
+                              <img src={familyMember.avatar} alt={familyMember.name} className="w-8 h-8 rounded-full object-cover" />
+                            ) : (
+                              <span className="text-xs text-gray-600">
+                                {familyMember.name.split(' ').map(n => n[0]).join('').toUpperCase()}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-gray-900">{familyMember.name}</p>
+                            <p className="text-xs text-gray-500 capitalize">{familyMember.relationshipType}</p>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                              familyMember.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                            }`}>
+                              {familyMember.isActive ? 'Active' : 'Inactive'}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500">No family members found</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Interactions Tab */}
+          {activeTab === 'interactions' && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-medium text-gray-900">Member Interactions</h3>
+                <span className="text-sm text-gray-500">
+                  {member.interactions?.length || 0} interactions
+                </span>
+              </div>
+              
+              {member.interactions && member.interactions.length > 0 ? (
+                <div className="space-y-4">
+                  {member.interactions.map((interaction) => (
+                    <div key={interaction.id} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center space-x-3">
+                          <div className="text-2xl">{getInteractionIcon(interaction.interactionType)}</div>
+                          <div>
+                            <h4 className="text-sm font-medium text-gray-900">
+                              {interaction.subject || interaction.interactionType.replace('_', ' ')}
+                            </h4>
+                            <p className="text-xs text-gray-500">
+                              {interaction.channel} • {formatDateTime(interaction.createdAt)}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getPriorityColor(interaction.priority)}`}>
+                            {interaction.priority}
+                          </span>
+                          {interaction.responseRequired && (
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                              Response needed
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      {interaction.content && (
+                        <p className="text-sm text-gray-600 mt-2">{interaction.content}</p>
+                      )}
+                      {interaction.category && (
+                        <div className="mt-2">
+                          <span className="text-xs text-gray-500 capitalize">{interaction.category}</span>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <p className="text-gray-500">No interactions found</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Milestones Tab */}
+          {activeTab === 'milestones' && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-medium text-gray-900">Member Milestones</h3>
+                <span className="text-sm text-gray-500">
+                  {member.milestones?.length || 0} milestones
+                </span>
+              </div>
+              
+              {member.milestones && member.milestones.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {member.milestones.map((milestone) => (
+                    <div key={milestone.id} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-start space-x-3">
+                        <div className="text-2xl">{getMilestoneIcon(milestone.milestoneType)}</div>
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between">
+                            <h4 className="text-sm font-medium text-gray-900">{milestone.title}</h4>
+                            <span className="text-xs text-gray-500">{formatDate(milestone.achievedDate)}</span>
+                          </div>
+                          {milestone.description && (
+                            <p className="text-sm text-gray-600 mt-1">{milestone.description}</p>
+                          )}
+                          <div className="flex items-center space-x-2 mt-2">
+                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getImpactColor(milestone.impact)}`}>
+                              {milestone.impact} impact
+                            </span>
+                            <span className="text-xs text-gray-500 capitalize">{milestone.category}</span>
+                            {milestone.celebrated && (
+                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                Celebrated
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <p className="text-gray-500">No milestones found</p>
+                </div>
+              )}
             </div>
           )}
 
@@ -528,6 +871,38 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
                   </div>
                 </div>
               </div>
+              
+              {member.memberNotes && member.memberNotes.length > 0 && (
+                <div className="border-t border-gray-200 pt-6">
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">Staff Notes</h3>
+                  <div className="space-y-4">
+                    {member.memberNotes.map((note) => (
+                      <div key={note.id} className="border border-gray-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="text-sm font-medium text-gray-900">
+                            {note.title || 'Note'}
+                          </h4>
+                          <span className="text-xs text-gray-500">{formatDateTime(note.createdAt)}</span>
+                        </div>
+                        <p className="text-sm text-gray-600">{note.content}</p>
+                        <div className="flex items-center space-x-2 mt-2">
+                          <span className="text-xs text-gray-500 capitalize">{note.noteType}</span>
+                          {note.isPrivate && (
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                              Private
+                            </span>
+                          )}
+                          {note.isFollowUp && (
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                              Follow-up needed
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               
               <div className="border-t border-gray-200 pt-6">
                 <h3 className="text-lg font-medium text-gray-900 mb-4">Account Information</h3>

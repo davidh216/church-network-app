@@ -6,6 +6,7 @@ import jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
 import mediaRoutes from './routes/simple-media';
 import analyticsRoutes from './routes/analytics';
+import memberDetailsRoutes from './routes/member-details';
 
 const app = express();
 const PORT = 5000;
@@ -217,6 +218,9 @@ app.use('/api/media', authenticateToken, mediaRoutes);
 
 // ANALYTICS ROUTES
 app.use('/api/analytics', authenticateToken, analyticsRoutes);
+
+// MEMBER DETAILS ROUTES
+app.use('/api/member-details', authenticateToken, memberDetailsRoutes);
 
 // USER MANAGEMENT ROUTES
 
