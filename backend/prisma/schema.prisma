@@ -70,6 +70,14 @@ model User {
   groupMembers GroupMember[]
   attendances  Attendance[]
   
+  // CRM Relations
+  engagement     MemberEngagement?
+  activities     MemberActivity[]
+  interactions   MemberInteraction[]
+  milestones     MemberMilestone[]
+  memberNotes    MemberNote[]
+  memberTags     UserTag[]
+  
   @@map("users")
 }
 
@@ -199,4 +207,153 @@ model Attendance {
   
   @@unique([userId, serviceDate, serviceType])
   @@map("attendance")
+}
+
+model MemberEngagement {
+  id                 String   @id @default(cuid())
+  userId             String
+  engagementScore    Float    @default(0)    // 0-100 engagement score
+  lastCalculated     DateTime @default(now())
+  
+  // Engagement metrics
+  attendanceScore    Float    @default(0)    // Based on service attendance
+  givingScore        Float    @default(0)    // Based on giving consistency
+  volunteerScore     Float    @default(0)    // Based on volunteer participation
+  communityScore     Float    @default(0)    // Based on group participation
+  communicationScore Float    @default(0)    // Based on email/sms engagement
+  
+  // Activity counters (rolling 12 months)
+  servicesAttended   Int      @default(0)
+  eventsAttended     Int      @default(0)
+  volunteerHours     Float    @default(0)
+  donationCount      Int      @default(0)
+  groupMeetings      Int      @default(0)
+  
+  // Lifecycle indicators
+  membershipStage    String   @default("visitor") // "visitor", "new_member", "active_member", "core_member", "leader", "at_risk", "inactive"
+  riskLevel          String   @default("low")     // "low", "medium", "high"
+  lastActivity       DateTime?
+  
+  // Timestamps
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  
+  // Relations
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId])
+  @@map("member_engagement")
+}
+
+model MemberActivity {
+  id          String   @id @default(cuid())
+  userId      String
+  activityType String  // "service_attendance", "event_attendance", "donation", "volunteer", "communication_open", "profile_update", etc.
+  description String?
+  metadata    String?  // JSON string for additional data
+  points      Int      @default(0) // Points awarded for this activity
+  
+  // Timestamps
+  createdAt   DateTime @default(now())
+  
+  // Relations
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("member_activities")
+}
+
+model MemberInteraction {
+  id             String   @id @default(cuid())
+  userId         String
+  interactionType String  // "email_sent", "email_opened", "sms_sent", "sms_replied", "call_made", "visit_logged", "note_added"
+  subject        String?
+  content        String?
+  staffMemberId  String?  // Who initiated the interaction
+  channel        String   // "email", "sms", "phone", "in_person", "social_media"
+  status         String   @default("completed") // "scheduled", "completed", "failed"
+  
+  // Metadata
+  metadata       String?  // JSON for additional data
+  responseTime   Int?     // Minutes to respond (for two-way communications)
+  
+  // Timestamps
+  scheduledFor   DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime @default(now())
+  
+  // Relations
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("member_interactions")
+}
+
+model MemberMilestone {
+  id            String   @id @default(cuid())
+  userId        String
+  milestoneType String   // "first_visit", "baptism", "confirmation", "wedding", "first_volunteer", "leadership_role", "anniversary"
+  title         String
+  description   String?
+  achievedDate  DateTime
+  isPublic      Boolean  @default(true)
+  celebrated    Boolean  @default(false)
+  
+  // Timestamps
+  createdAt     DateTime @default(now())
+  
+  // Relations
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("member_milestones")
+}
+
+model MemberNote {
+  id           String   @id @default(cuid())
+  userId       String
+  authorId     String   // Staff member who wrote the note
+  title        String?
+  content      String
+  noteType     String   @default("general") // "general", "pastoral_care", "follow_up", "prayer_request", "concern"
+  isPrivate    Boolean  @default(false)
+  isFollowUp   Boolean  @default(false)
+  followUpDate DateTime?
+  
+  // Timestamps
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  // Relations
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("member_notes")
+}
+
+model MemberTag {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  color     String   @default("#3B82F6") // Hex color for UI display
+  category  String   @default("general") // "ministry", "demographic", "interest", "status", "general"
+  isActive  Boolean  @default(true)
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  
+  // Relations
+  memberTags UserTag[]
+  
+  @@map("member_tags")
+}
+
+model UserTag {
+  id       String @id @default(cuid())
+  userId   String
+  tagId    String
+  addedBy  String? // Staff member who added the tag
+  addedAt  DateTime @default(now())
+  
+  // Relations
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tag      MemberTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, tagId])
+  @@map("user_tags")
 }

@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run dev:*)",
+      "Bash(curl:*)",
+      "Bash(npx prisma migrate dev:*)",
+      "Bash(git init:*)",
+      "Bash(git config:*)",
+      "Bash(git add:*)",
+      "Bash(git rm:*)",
+      "Bash(rm:*)",
+      "Bash(git reset:*)",
+      "Bash(git commit:*)",
+      "Bash(gh:*)",
+      "Bash(git remote add:*)",
+      "Bash(git branch:*)",
+      "Bash(git push:*)"
+    ],
+    "deny": []
+  }
+}

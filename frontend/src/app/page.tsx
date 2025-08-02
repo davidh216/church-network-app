@@ -8,6 +8,7 @@ import MemberList from '../components/members/MemberList';
 import AddEditMemberModal from '../components/members/AddEditMemberModal';
 import SimpleMediaLibrary from '../components/media/SimpleMediaLibrary';
 import VideoPlayer from '../components/media/VideoPlayer';
+import MemberAnalyticsDashboard from '../components/analytics/MemberAnalyticsDashboard';
 
 export default function Home() {
   const [user, setUser] = useState<User | null>(null);
@@ -21,6 +22,7 @@ export default function Home() {
   const [playingMedia, setPlayingMedia] = useState(null);
   const [mediaPlaylist, setMediaPlaylist] = useState([]);
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
+  const [showAnalytics, setShowAnalytics] = useState(false);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -87,6 +89,7 @@ export default function Home() {
                 onClick={() => {
                   setShowMembers(false);
                   setShowMedia(false);
+                  setShowAnalytics(false);
                 }}
                 className="text-left hover:opacity-80 transition-opacity"
               >
@@ -130,7 +133,7 @@ export default function Home() {
 
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         {/* Dashboard Section */}
-        {!showMembers && !showMedia && (
+        {!showMembers && !showMedia && !showAnalytics && (
           <div className="px-4 py-6 sm:px-0">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {/* Profile Card */}
@@ -181,6 +184,12 @@ export default function Home() {
                       className="w-full text-left px-3 py-2 bg-purple-50 hover:bg-purple-100 rounded-md text-sm text-purple-700"
                     >
                       🎵 Media Library
+                    </button>
+                    <button 
+                      onClick={() => setShowAnalytics(true)}
+                      className="w-full text-left px-3 py-2 bg-indigo-50 hover:bg-indigo-100 rounded-md text-sm text-indigo-700"
+                    >
+                      📊 Member Analytics
                     </button>
                     <button className="w-full text-left px-3 py-2 bg-yellow-50 hover:bg-yellow-100 rounded-md text-sm text-yellow-700">
                       💬 Slack Workspace
@@ -258,6 +267,22 @@ export default function Home() {
           </div>
         )}
 
+        {/* Analytics Dashboard Section */}
+        {showAnalytics && (
+          <div className="mt-8">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold text-gray-900">Member Analytics</h2>
+              <button
+                onClick={() => setShowAnalytics(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                ← Back to Dashboard
+              </button>
+            </div>
+            {/* Analytics dashboard will be rendered as a modal */}
+          </div>
+        )}
+
         {/* STEP 5: Media Library Section */}
         {showMedia && (
           <div className="mt-8">
@@ -319,6 +344,13 @@ export default function Home() {
               setPlayingMedia(mediaPlaylist[prevIndex]);
             }
           }}
+        />
+      )}
+
+      {/* Member Analytics Dashboard Modal */}
+      {showAnalytics && (
+        <MemberAnalyticsDashboard
+          onClose={() => setShowAnalytics(false)}
         />
       )}
     </div>

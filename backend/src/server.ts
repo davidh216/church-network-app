@@ -5,6 +5,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
 import mediaRoutes from './routes/simple-media';
+import analyticsRoutes from './routes/analytics';
 
 const app = express();
 const PORT = 5000;
@@ -202,6 +203,9 @@ app.get('/api/auth/me', authenticateToken, (req: any, res) => {
 
 // MEDIA ROUTES - ADD THIS LINE AFTER authenticateToken is defined
 app.use('/api/media', authenticateToken, mediaRoutes);
+
+// ANALYTICS ROUTES
+app.use('/api/analytics', authenticateToken, analyticsRoutes);
 
 // USER MANAGEMENT ROUTES
 
