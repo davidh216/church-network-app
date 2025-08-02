@@ -1,0 +1,246 @@
+# Embrace Church Network App
+
+A comprehensive church management platform built with modern web technologies, designed to help churches manage their community, media, and member relationships effectively.
+
+## 🚀 Features
+
+### **Enhanced Membership Management**
+- **Comprehensive Member Profiles**: Track personal info, church history, contact details, family relationships, and ministry involvement
+- **Advanced Search & Filtering**: Multi-criteria search with role, status, and membership type filters
+- **Dual View Modes**: Professional table view and modern card layout
+- **Family Management**: Organize members into family units with head-of-family relationships
+- **Groups & Ministries**: Small groups, committees, and service team organization
+- **Attendance Tracking**: Monitor service participation and engagement
+
+### **Modern Video Player System**
+- **Professional Video Player**: YouTube-optimized with fullscreen support
+- **Playlist Functionality**: Navigate through video collections seamlessly
+- **Enhanced Controls**: Keyboard shortcuts, custom overlays, and responsive design
+- **Media Library**: Organized video content with search, filtering, and categorization
+- **Grid & List Views**: Flexible viewing options for media browsing
+
+### **Authentication & Security**
+- **Role-Based Access Control**: Admin, Leader, and Member permission levels
+- **JWT Authentication**: Secure token-based authentication system
+- **User Profile Management**: Complete profile editing and management
+
+### **Responsive Design**
+- **Mobile-First**: Optimized for all devices and screen sizes
+- **Modern UI/UX**: Clean, professional interface with smooth animations
+- **Accessibility**: WCAG compliant with proper ARIA labels and keyboard navigation
+
+## 🛠️ Technology Stack
+
+### **Frontend**
+- **Next.js 15**: React framework with App Router
+- **React 19**: Latest React with modern hooks and features
+- **TypeScript**: Full type safety throughout the application
+- **Tailwind CSS 4**: Utility-first CSS framework for rapid styling
+- **ESLint**: Code quality and consistency enforcement
+
+### **Backend**
+- **Node.js**: JavaScript runtime environment
+- **Express.js**: Fast, unopinionated web framework
+- **TypeScript**: Type-safe server-side development
+- **Prisma**: Next-generation ORM with type safety
+- **SQLite**: Lightweight, serverless database (easily upgradeable to PostgreSQL)
+
+### **Security & Authentication**
+- **JWT**: JSON Web Tokens for stateless authentication
+- **bcryptjs**: Password hashing and security
+- **CORS**: Cross-Origin Resource Sharing configuration
+- **Helmet**: Security middleware for Express
+
+## 📋 Database Schema
+
+### **Core Models**
+
+#### **User (Members)**
+- Personal information (name, DOB, gender, marital status, occupation)
+- Church-specific data (membership date, baptism, confirmation, previous church)
+- Contact details (email, phone, address, emergency contacts)
+- Communication preferences (email, SMS, mail opt-ins)
+- Family relationships and ministry involvement
+- Skills, interests, and volunteer capabilities
+
+#### **Roles & Permissions**
+- Hierarchical role system (Admin, Leader, Member)
+- Granular permissions for different system areas
+- User-role assignments with multiple roles support
+
+#### **Families**
+- Family unit organization
+- Head of family designation
+- Shared family information and address
+
+#### **Groups & Ministries**
+- Small groups, committees, service teams
+- Group leadership and member roles
+- Meeting schedules and location tracking
+
+#### **Media Management**
+- YouTube video integration
+- Content categorization and tagging
+- Approval workflow for published content
+
+#### **Attendance Tracking**
+- Service attendance monitoring
+- Multiple service types support
+- Historical attendance data
+
+## 🚦 Getting Started
+
+### **Prerequisites**
+- Node.js 18+ and npm
+- Git for version control
+
+### **Installation**
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/yourusername/church-network-app.git
+   cd church-network-app
+   ```
+
+2. **Backend Setup**
+   ```bash
+   cd backend
+   npm install
+   npx prisma migrate dev
+   npx prisma generate
+   npm run dev
+   ```
+
+3. **Frontend Setup**
+   ```bash
+   cd ../frontend
+   npm install
+   npm run dev
+   ```
+
+4. **Access the Application**
+   - Frontend: http://localhost:3000
+   - Backend API: http://localhost:5000
+   - Health Check: http://localhost:5000/health
+
+### **Default Setup**
+The application automatically creates default roles (Admin, Leader, Member) on first startup. Register your first user to begin managing your church community.
+
+## 📁 Project Structure
+
+```
+church-network-app/
+├── backend/                    # Express.js API server
+│   ├── prisma/                # Database schema and migrations
+│   │   ├── schema.prisma      # Prisma database schema
+│   │   └── migrations/        # Database migration files
+│   ├── src/                   # Source code
+│   │   ├── server.ts          # Main server file
+│   │   └── routes/            # API route handlers
+│   └── package.json           # Backend dependencies
+├── frontend/                  # Next.js React application
+│   ├── src/                   # Source code
+│   │   ├── app/               # Next.js app directory
+│   │   ├── components/        # React components
+│   │   │   ├── auth/          # Authentication components
+│   │   │   ├── members/       # Member management components
+│   │   │   └── media/         # Media library components
+│   │   └── lib/               # Utility libraries
+│   └── package.json           # Frontend dependencies
+└── README.md                  # This file
+```
+
+## 🔧 API Endpoints
+
+### **Authentication**
+- `POST /api/auth/register` - Register new user
+- `POST /api/auth/login` - User login
+- `GET /api/auth/me` - Get current user profile
+
+### **User Management**
+- `GET /api/users` - Get all users (members)
+- `GET /api/users/:id` - Get specific user
+- `PUT /api/users/:id` - Update user profile
+
+### **Media Management**
+- `GET /api/media` - Get media library content
+- `POST /api/media` - Add new media
+- `GET /api/media/:id` - Get specific media item
+
+### **Role Management**
+- `GET /api/roles` - Get all available roles
+
+## 🎯 Usage Guide
+
+### **Member Management**
+1. **Adding Members**: Use the "Add Member" button to register new church members
+2. **Viewing Profiles**: Click "View" on any member to see comprehensive profile information
+3. **Search & Filter**: Use the advanced search to find members by name, email, phone, role, or status
+4. **View Modes**: Toggle between table and card views for different browsing experiences
+
+### **Media Library**
+1. **Adding Videos**: Add YouTube videos with titles, descriptions, and category tags
+2. **Video Player**: Enhanced player with playlist support, fullscreen, and keyboard controls
+3. **Organization**: Filter and search videos by category, date, or content
+
+### **User Roles**
+- **Admin**: Full system access, user management, and configuration
+- **Leader**: Member management, content approval, and ministry oversight
+- **Member**: Basic access to media library and personal profile management
+
+## 🔮 Roadmap
+
+### **Phase 1: Core Foundation** ✅
+- Authentication system
+- Basic member management
+- Media library with video player
+- Enhanced membership profiles
+
+### **Phase 2: Advanced Features** (In Progress)
+- [ ] Bulk member import/export
+- [ ] Communication tools (email/SMS)
+- [ ] Advanced family management
+- [ ] Group and ministry management
+- [ ] Attendance tracking interface
+
+### **Phase 3: Analytics & Reporting**
+- [ ] Membership analytics dashboard
+- [ ] Attendance reports and trends
+- [ ] Engagement metrics
+- [ ] Custom report generation
+
+### **Phase 4: Integration & Expansion**
+- [ ] Slack workspace integration
+- [ ] Email marketing integration
+- [ ] Calendar and event management
+- [ ] Online giving integration
+- [ ] Mobile app development
+
+## 🤝 Contributing
+
+We welcome contributions to the Embrace Church Network App! Please read our contributing guidelines and submit pull requests for any improvements.
+
+### **Development Setup**
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- Built with modern web technologies for scalability and performance
+- Designed specifically for church community management needs
+- Inspired by the mission to strengthen church connections and engagement
+
+## 📞 Support
+
+For support, questions, or feature requests, please open an issue on GitHub or contact the development team.
+
+---
+
+**Embrace Church Network App** - Strengthening church communities through technology. 🏛️❤️

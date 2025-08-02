@@ -1,0 +1,202 @@
+// Enhanced Prisma Schema - Replace your current schema.prisma with this
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  phone     String?
+  avatar    String?
+  bio       String?
+  isActive  Boolean  @default(true)
+  
+  // Enhanced member information
+  firstName        String?
+  lastName         String?
+  dateOfBirth      DateTime?
+  gender           String?    // "male", "female", "other", "prefer_not_to_say"
+  maritalStatus    String?    // "single", "married", "divorced", "widowed", "separated"
+  occupation       String?
+  emergencyContact String?
+  emergencyPhone   String?
+  
+  // Church-specific information
+  membershipDate   DateTime?
+  baptismDate      DateTime?
+  confirmationDate DateTime?
+  membershipType   String?    // "member", "visitor", "regular_attendee", "inactive"
+  previousChurch   String?
+  howHeardAboutUs  String?
+  
+  // Address information
+  address          String?
+  city             String?
+  state            String?
+  zipCode          String?
+  country          String?
+  
+  // Communication preferences
+  emailOptIn       Boolean  @default(true)
+  smsOptIn         Boolean  @default(false)
+  mailOptIn        Boolean  @default(true)
+  
+  // Family information
+  familyId         String?
+  isHeadOfFamily   Boolean  @default(false)
+  
+  // Notes and tracking
+  notes            String?
+  lastAttended     DateTime?
+  volunteerSkills  String?    // JSON array as string
+  interests        String?    // JSON array as string
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  roles        UserRole[]
+  mediaUploads Media[]
+  family       Family?        @relation(fields: [familyId], references: [id])
+  groupMembers GroupMember[]
+  attendances  Attendance[]
+  
+  @@map("users")
+}
+
+model Role {
+  id          String @id @default(cuid())
+  name        String @unique // "admin", "leader", "member"
+  description String?
+  permissions String // JSON string for now
+  
+  // Relations
+  users UserRole[]
+  
+  @@map("roles")
+}
+
+model UserRole {
+  id     String @id @default(cuid())
+  userId String
+  roleId String
+  
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, roleId])
+  @@map("user_roles")
+}
+
+model Media {
+  id          String    @id @default(cuid())
+  title       String
+  description String?
+  type        String    // IMAGE, VIDEO, AUDIO, DOCUMENT, YOUTUBE_VIDEO
+  url         String
+  thumbnailUrl String?
+  fileSize    Int?
+  mimeType    String?
+  
+  // Content organization
+  tags        String    // JSON array as string
+  isApproved  Boolean   @default(false)
+  isPublic    Boolean   @default(true)
+  
+  // Upload info
+  uploadedById String
+  uploadedBy   User      @relation(fields: [uploadedById], references: [id])
+  
+  // Timestamps
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  @@map("media")
+}
+
+model Family {
+  id          String @id @default(cuid())
+  familyName  String
+  headOfFamily String?
+  address     String?
+  city        String?
+  state       String?
+  zipCode     String?
+  country     String?
+  
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relations
+  members     User[]
+  
+  @@map("families")
+}
+
+model Group {
+  id          String @id @default(cuid())
+  name        String
+  description String?
+  type        String  // "ministry", "small_group", "committee", "service_team"
+  isActive    Boolean @default(true)
+  meetingDay  String? // "monday", "tuesday", etc.
+  meetingTime String?
+  location    String?
+  
+  // Leadership
+  leaderId    String?
+  
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relations
+  members     GroupMember[]
+  
+  @@map("groups")
+}
+
+model GroupMember {
+  id       String @id @default(cuid())
+  userId   String
+  groupId  String
+  role     String @default("member") // "leader", "co-leader", "member"
+  joinDate DateTime @default(now())
+  isActive Boolean @default(true)
+  
+  // Relations
+  user     User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group    Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, groupId])
+  @@map("group_members")
+}
+
+model Attendance {
+  id           String   @id @default(cuid())
+  userId       String
+  serviceDate  DateTime
+  serviceType  String   @default("sunday_service") // "sunday_service", "bible_study", "prayer_meeting", etc.
+  present      Boolean  @default(true)
+  notes        String?
+  
+  // Timestamps
+  createdAt    DateTime @default(now())
+  
+  // Relations
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, serviceDate, serviceType])
+  @@map("attendance")
+}
