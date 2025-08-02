@@ -56,6 +56,7 @@ model User {
   // Notes and tracking
   notes            String?
   lastAttended     DateTime?
+  lastLoginAt      DateTime?   // Track when user last logged in
   volunteerSkills  String?    // JSON array as string
   interests        String?    // JSON array as string
   
@@ -356,4 +357,21 @@ model UserTag {
   
   @@unique([userId, tagId])
   @@map("user_tags")
+}
+
+model SavedSearch {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  query       String   // JSON string containing the search query
+  isPublic    Boolean  @default(false)
+  createdBy   String   // User who created the search
+  usageCount  Int      @default(0)
+  
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  lastUsed    DateTime?
+  
+  @@map("saved_searches")
 }

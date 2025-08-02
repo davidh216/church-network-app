@@ -44,11 +44,14 @@ const authenticateToken = async (req: any, res: any, next: any) => {
   const token = authHeader && authHeader.split(' ')[1];
 
   if (!token) {
+    console.log('No token provided');
     return res.status(401).json({ error: 'Access token required' });
   }
 
   try {
     const decoded: any = jwt.verify(token, JWT_SECRET);
+    console.log('Token decoded, looking for user:', decoded.userId);
+    
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
       include: {
@@ -60,13 +63,21 @@ const authenticateToken = async (req: any, res: any, next: any) => {
       }
     });
     
-    if (!user || !user.isActive) {
-      return res.status(401).json({ error: 'Invalid or inactive user' });
+    if (!user) {
+      console.log('User not found in database:', decoded.userId);
+      return res.status(401).json({ error: 'User not found' });
     }
     
+    if (!user.isActive) {
+      console.log('User is inactive:', user.email);
+      return res.status(401).json({ error: 'User account is inactive' });
+    }
+    
+    console.log('User authenticated successfully:', user.email);
     req.user = user;
     next();
   } catch (error) {
+    console.log('Token verification failed:', error instanceof Error ? error.message : String(error));
     return res.status(403).json({ error: 'Invalid token' });
   }
 };
@@ -235,6 +246,245 @@ app.get('/api/users', authenticateToken, async (req: any, res) => {
   } catch (error) {
     console.error('Get users error:', error);
     res.status(500).json({ error: 'Failed to get users' });
+  }
+});
+
+// Get enhanced users with engagement data (protected)
+app.get('/api/users/enhanced', authenticateToken, async (req: any, res) => {
+  try {
+    console.log('Enhanced users endpoint called by:', req.user.email);
+    const users = await prisma.user.findMany({
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        phone: true,
+        avatar: true,
+        bio: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true,
+        membershipDate: true,
+        lastLoginAt: true,
+        roles: {
+          include: {
+            role: true
+          }
+        },
+        engagement: {
+          select: {
+            engagementScore: true,
+            membershipStage: true,
+            riskLevel: true,
+            lastActivity: true,
+            attendanceScore: true,
+            givingScore: true,
+            volunteerScore: true,
+            communityScore: true,
+            communicationScore: true
+          }
+        }
+      }
+    });
+
+    console.log(`Found ${users.length} users for enhanced query`);
+    res.json({ success: true, users });
+  } catch (error) {
+    console.error('Get enhanced users error:', error);
+    res.status(500).json({ error: 'Failed to get enhanced users' });
+  }
+});
+
+// Export users (CSV/Excel)
+app.get('/api/users/export', authenticateToken, async (req: any, res) => {
+  try {
+    const { format = 'csv', members } = req.query;
+    
+    // Build query based on selected members
+    const whereClause = members ? 
+      { id: { in: members.split(',') } } : 
+      { isActive: true };
+    
+    const users = await prisma.user.findMany({
+      where: whereClause,
+      include: {
+        roles: {
+          include: {
+            role: true
+          }
+        },
+        engagement: true
+      }
+    });
+
+    // Transform data for export
+    const exportData = users.map(user => {
+      const row: Record<string, any> = {
+        'Name': user.name,
+        'Email': user.email,
+        'Phone': user.phone || '',
+        'Bio': user.bio || '',
+        'Status': user.isActive ? 'Active' : 'Inactive',
+        'Roles': user.roles.map(r => r.role.name).join(', '),
+        'Engagement Score': user.engagement?.engagementScore || 0,
+        'Membership Stage': user.engagement?.membershipStage || 'Unknown',
+        'Risk Level': user.engagement?.riskLevel || 'Unknown',
+        'Attendance Score': user.engagement?.attendanceScore || 0,
+        'Giving Score': user.engagement?.givingScore || 0,
+        'Volunteer Score': user.engagement?.volunteerScore || 0,
+        'Community Score': user.engagement?.communityScore || 0,
+        'Communication Score': user.engagement?.communicationScore || 0,
+        'Join Date': user.createdAt.toISOString().split('T')[0],
+        'Membership Date': user.membershipDate ? user.membershipDate.toISOString().split('T')[0] : '',
+        'Last Activity': user.engagement?.lastActivity ? user.engagement.lastActivity.toISOString().split('T')[0] : '',
+        'Last Login': user.lastLoginAt ? user.lastLoginAt.toISOString().split('T')[0] : ''
+      };
+      return row;
+    });
+
+    if (format === 'csv') {
+      // Generate CSV
+      const headers = Object.keys(exportData[0] || {});
+      const csvContent = [
+        headers.join(','),
+        ...exportData.map(row => 
+          headers.map(header => `"${row[header]?.toString() || ''}"`).join(',')
+        )
+      ].join('\n');
+      
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename=members.csv');
+      res.send(csvContent);
+    } else {
+      // For Excel format, we'd typically use a library like xlsx
+      // For now, return JSON that frontend can process
+      res.json({ success: true, data: exportData });
+    }
+    
+  } catch (error) {
+    console.error('Export users error:', error);
+    res.status(500).json({ error: 'Failed to export users' });
+  }
+});
+
+// Saved searches endpoints
+app.get('/api/users/saved-searches', authenticateToken, async (req: any, res) => {
+  try {
+    const searches = await prisma.savedSearch.findMany({
+      where: {
+        OR: [
+          { createdBy: req.user.id },
+          { isPublic: true }
+        ]
+      },
+      orderBy: [
+        { lastUsed: 'desc' },
+        { createdAt: 'desc' }
+      ]
+    });
+    
+    const formattedSearches = searches.map(search => ({
+      id: search.id,
+      name: search.name,
+      description: search.description,
+      query: JSON.parse(search.query),
+      isPublic: search.isPublic,
+      createdAt: search.createdAt,
+      usageCount: search.usageCount,
+      lastUsed: search.lastUsed
+    }));
+    
+    res.json({ success: true, searches: formattedSearches });
+  } catch (error) {
+    console.error('Get saved searches error:', error);
+    res.status(500).json({ error: 'Failed to get saved searches' });
+  }
+});
+
+app.post('/api/users/saved-searches', authenticateToken, async (req: any, res) => {
+  try {
+    const { name, description, query, isPublic } = req.body;
+    
+    if (!name || !query) {
+      return res.status(400).json({ error: 'Name and query are required' });
+    }
+    
+    const savedSearch = await prisma.savedSearch.create({
+      data: {
+        name,
+        description: description || null,
+        query: JSON.stringify(query),
+        isPublic: isPublic || false,
+        createdBy: req.user.id
+      }
+    });
+    
+    res.json({ 
+      success: true, 
+      message: 'Search saved successfully',
+      search: {
+        id: savedSearch.id,
+        name: savedSearch.name,
+        description: savedSearch.description,
+        query: JSON.parse(savedSearch.query),
+        isPublic: savedSearch.isPublic,
+        createdAt: savedSearch.createdAt
+      }
+    });
+  } catch (error) {
+    console.error('Save search error:', error);
+    res.status(500).json({ error: 'Failed to save search' });
+  }
+});
+
+app.delete('/api/users/saved-searches/:id', authenticateToken, async (req: any, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Only allow deletion if user owns the search or is admin
+    const search = await prisma.savedSearch.findUnique({
+      where: { id }
+    });
+    
+    if (!search) {
+      return res.status(404).json({ error: 'Search not found' });
+    }
+    
+    const currentUserRoles = req.user.roles.map((ur: any) => ur.role.name);
+    const isAdmin = currentUserRoles.includes('admin');
+    
+    if (search.createdBy !== req.user.id && !isAdmin) {
+      return res.status(403).json({ error: 'Not authorized to delete this search' });
+    }
+    
+    await prisma.savedSearch.delete({
+      where: { id }
+    });
+    
+    res.json({ success: true, message: 'Search deleted successfully' });
+  } catch (error) {
+    console.error('Delete search error:', error);
+    res.status(500).json({ error: 'Failed to delete search' });
+  }
+});
+
+// Update search usage stats
+app.post('/api/users/saved-searches/:id/use', authenticateToken, async (req: any, res) => {
+  try {
+    const { id } = req.params;
+    
+    await prisma.savedSearch.update({
+      where: { id },
+      data: {
+        usageCount: { increment: 1 },
+        lastUsed: new Date()
+      }
+    });
+    
+    res.json({ success: true, message: 'Usage tracked' });
+  } catch (error) {
+    console.error('Track usage error:', error);
+    res.status(500).json({ error: 'Failed to track usage' });
   }
 });
 

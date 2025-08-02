@@ -14,7 +14,11 @@
       "Bash(gh:*)",
       "Bash(git remote add:*)",
       "Bash(git branch:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(npx prisma studio:*)",
+      "Bash(npx prisma:*)",
+      "Bash(node check-users.js)",
+      "Bash(node:*)"
     ],
     "deny": []
   }
