@@ -1,30 +1,13 @@
-// Minimal render helper for component tests until B4 brings @testing-library/react.
-import { act, type ReactNode } from 'react';
-import { createRoot } from 'react-dom/client';
+// Shared helpers for component tests, built on @testing-library/react.
+// src/test/setup.ts unmounts everything after each test (testing-library `cleanup`).
+import { act, render as rtlRender, type RenderResult } from '@testing-library/react';
+import type { ReactNode } from 'react';
 
-(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-
-export interface Rendered {
-  container: HTMLElement;
-  unmount: () => void;
-}
-
-/** Renders `ui` into a detached container and lets pending effects and promises settle. */
-export async function render(ui: ReactNode): Promise<Rendered> {
-  const container = document.createElement('div');
-  document.body.appendChild(container);
-  const root = createRoot(container);
-  await act(async () => {
-    root.render(ui);
-  });
+/** Renders `ui` and lets pending effects and resolved promises (mocked API calls) settle. */
+export async function render(ui: ReactNode): Promise<RenderResult> {
+  const result = rtlRender(ui);
   await settle();
-  return {
-    container,
-    unmount: () => {
-      act(() => root.unmount());
-      container.remove();
-    },
-  };
+  return result;
 }
 
 /** Flushes resolved promises and the React updates they cause. */

@@ -1,8 +1,8 @@
 import { act } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, UNAUTHENTICATED_EVENT } from '@/lib/api/client';
 import { makeUser } from '@/test/fixtures';
-import { render, settle, type Rendered } from '@/test/render';
+import { render, settle } from '@/test/render';
 import { AuthProvider, useAuth, useHasRole, useIsStaff, type AuthContextValue } from './AuthProvider';
 
 const router = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn() }));
@@ -20,10 +20,9 @@ function Probe() {
   return <p data-testid="status">{auth.status}:{auth.user?.name ?? 'none'}</p>;
 }
 
-let rendered: Rendered | undefined;
 async function mount(path = '/') {
   window.history.replaceState(null, '', path);
-  rendered = await render(
+  const rendered = await render(
     <AuthProvider>
       <Probe />
     </AuthProvider>,
@@ -36,10 +35,6 @@ beforeEach(() => {
   api.logout.mockResolvedValue(undefined);
 });
 
-afterEach(() => {
-  rendered?.unmount();
-  rendered = undefined;
-});
 
 describe('AuthProvider', () => {
   it('starts loading, then becomes authenticated from me()', async () => {

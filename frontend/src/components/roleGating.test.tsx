@@ -1,12 +1,11 @@
 import { act } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Home from '@/app/page';
 import LoginForm from '@/components/auth/LoginForm';
 import SimpleMediaLibrary from '@/components/media/SimpleMediaLibrary';
-import MemberList from '@/components/members/MemberList';
 import { AuthProvider } from '@/lib/auth/AuthProvider';
 import { makeUser } from '@/test/fixtures';
-import { buttonTexts, render, settle, type Rendered } from '@/test/render';
+import { buttonTexts, render, settle } from '@/test/render';
 import type { Member } from '@/types/domain';
 
 const router = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn() }));
@@ -26,11 +25,10 @@ const directory: Member[] = [
   { id: 'm2', name: 'Bob Example', isActive: true, createdAt: '2026-01-02T00:00:00.000Z', roles: [] },
 ];
 
-let rendered: Rendered | undefined;
 async function renderAs(roleNames: string[], ui: React.ReactNode) {
   authApi.me.mockResolvedValue(makeUser(roleNames));
-  rendered = await render(<AuthProvider>{ui}</AuthProvider>);
-  return rendered.container;
+  const { container } = await render(<AuthProvider>{ui}</AuthProvider>);
+  return container;
 }
 
 beforeEach(() => {
@@ -39,41 +37,10 @@ beforeEach(() => {
   mediaApi.listMedia.mockResolvedValue([]);
 });
 
-afterEach(() => {
-  rendered?.unmount();
-  rendered = undefined;
-});
 
 const noop = () => undefined;
 
-describe('MemberList role gating', () => {
-  it('hides Add Member, View, Edit and selection from a member', async () => {
-    const container = await renderAs(['member'], (
-      <MemberList onEditMember={noop} onAddMember={noop} refreshTrigger={0} />
-    ));
-    expect(container.textContent).toContain('Ann Example');
-    const buttons = buttonTexts(container);
-    expect(buttons).not.toContain('Add Member');
-    expect(buttons).not.toContain('View');
-    expect(buttons).not.toContain('Edit');
-    expect(container.querySelectorAll('input[type="checkbox"]')).toHaveLength(0);
-    expect(container.textContent).not.toContain('Actions');
-  });
-
-  it('shows the staff controls, and Export after selecting, to a leader', async () => {
-    const container = await renderAs(['leader'], (
-      <MemberList onEditMember={noop} onAddMember={noop} refreshTrigger={0} />
-    ));
-    const buttons = buttonTexts(container);
-    expect(buttons).toContain('Add Member');
-    expect(buttons.filter((b) => b === 'View')).toHaveLength(2);
-    expect(buttons.filter((b) => b === 'Edit')).toHaveLength(2);
-
-    const rowCheckbox = container.querySelectorAll<HTMLInputElement>('tbody input[type="checkbox"]')[0];
-    await act(async () => rowCheckbox?.click());
-    expect(buttonTexts(container)).toContain('Export Selected (1)');
-  });
-});
+// MemberList role gating lives in members/MemberList.test.tsx.
 
 describe('SimpleMediaLibrary role gating', () => {
   it('hides Add Video from a member', async () => {
@@ -118,7 +85,7 @@ describe('LoginForm', () => {
     const signedIn = makeUser(['member'], { name: 'Ann' });
     authApi.login.mockResolvedValue(signedIn);
     const onSuccess = vi.fn();
-    rendered = await render(
+    const rendered = await render(
       <AuthProvider>
         <LoginForm onSuccess={onSuccess} onSwitchToRegister={noop} />
       </AuthProvider>,

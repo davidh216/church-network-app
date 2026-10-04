@@ -3,7 +3,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { act } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Home from '@/app/page';
 import SimpleMediaLibrary from '@/components/media/SimpleMediaLibrary';
 import VideoPlayer from '@/components/media/VideoPlayer';
@@ -13,7 +13,7 @@ import SavedSearches from '@/components/members/SavedSearches';
 import { ApiError } from '@/lib/api/client';
 import { AuthProvider } from '@/lib/auth/AuthProvider';
 import { makeUser } from '@/test/fixtures';
-import { buttonTexts, render, settle, type Rendered } from '@/test/render';
+import { buttonTexts, render, settle } from '@/test/render';
 import type { MediaItem, Member } from '@/types/domain';
 
 const router = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn() }));
@@ -63,11 +63,10 @@ function video(n: number): MediaItem {
 }
 const playlist = [video(1), video(2), video(3)];
 
-let rendered: Rendered | undefined;
 async function renderAs(roleNames: string[], ui: React.ReactNode) {
   authApi.me.mockResolvedValue(makeUser(roleNames));
-  rendered = await render(<AuthProvider>{ui}</AuthProvider>);
-  return rendered.container;
+  const { container } = await render(<AuthProvider>{ui}</AuthProvider>);
+  return container;
 }
 
 function button(container: HTMLElement, text: string): HTMLButtonElement {
@@ -89,10 +88,6 @@ beforeEach(() => {
   savedSearchesApi.listSavedSearches.mockResolvedValue([]);
 });
 
-afterEach(() => {
-  rendered?.unmount();
-  rendered = undefined;
-});
 
 const noop = () => undefined;
 
@@ -117,7 +112,7 @@ describe('Tailwind v4 utilities', () => {
 describe('VideoPlayer playlist', () => {
   it('renders playlist items as buttons that call onSelect with their index', async () => {
     const onSelect = vi.fn();
-    rendered = await render(
+    const rendered = await render(
       <VideoPlayer media={playlist[0]!} onClose={noop} playlist={playlist} currentIndex={0} onSelect={onSelect} />,
     );
     const { container } = rendered;
@@ -183,7 +178,7 @@ describe('BulkActionsToolbar', () => {
   it('offers only CSV export and clearing the selection', async () => {
     const onExport = vi.fn();
     const onClear = vi.fn();
-    rendered = await render(<BulkActionsToolbar selectedCount={2} onExport={onExport} onClearSelection={onClear} />);
+    const rendered = await render(<BulkActionsToolbar selectedCount={2} onExport={onExport} onClearSelection={onClear} />);
     const { container } = rendered;
     expect(buttonTexts(container)).toEqual(['Export CSV', 'Clear Selection']);
     expect(container.textContent).not.toMatch(/Excel|Tags|Email Campaign|Create Group|Print Labels|Reports|Bulk Update/);
