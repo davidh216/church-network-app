@@ -21,13 +21,13 @@ router.get('/', async (req, res) => {
 
     if (search) {
       whereClause.OR = [
-        { title: { contains: search as string } },
-        { description: { contains: search as string } },
+        { title: { contains: search as string, mode: 'insensitive' } },
+        { description: { contains: search as string, mode: 'insensitive' } },
       ];
     }
 
     if (tag && tag !== 'all') {
-      whereClause.tags = { contains: tag as string };
+      whereClause.tags = { contains: tag as string, mode: 'insensitive' };
     }
 
     const media = await prisma.media.findMany({
