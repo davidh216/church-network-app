@@ -1,27 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { API_BASE, authService } from '../../lib/auth';
-
-interface MemberAnalytics {
-  totalMembers: number;
-  activeMembers: number;
-  newMembersThisMonth: number;
-  atRiskMembers: number;
-  averageEngagementScore: number;
-  topEngagedMembers: Array<{
-    user: {
-      id: string;
-      name: string;
-      email: string;
-      avatar?: string;
-    };
-    engagementScore: number;
-    membershipStage: string;
-  }>;
-  membershipStageDistribution: Record<string, number>;
-  riskLevelDistribution: Record<string, number>;
-}
+import { getAnalytics, refreshAllEngagement } from '../../lib/api/analytics';
+import { getErrorMessage } from '../../lib/errors';
+import type { MemberAnalytics } from '../../types/domain';
 
 interface MemberAnalyticsDashboardProps {
   onClose: () => void;
@@ -40,17 +22,9 @@ export default function MemberAnalyticsDashboard({ onClose }: MemberAnalyticsDas
   const fetchAnalytics = async () => {
     try {
       setLoading(true);
-      const response = await authService.fetchWithAuth(`${API_BASE}/analytics/members`);
-      const data = await response.json();
-      
-      if (data.success) {
-        setAnalytics(data.analytics);
-      } else {
-        setError('Failed to load analytics');
-      }
+      setAnalytics(await getAnalytics());
     } catch (err) {
-      setError('Failed to load analytics');
-      console.error('Error fetching analytics:', err);
+      setError(getErrorMessage(err, 'Failed to load analytics'));
     } finally {
       setLoading(false);
     }
@@ -59,21 +33,11 @@ export default function MemberAnalyticsDashboard({ onClose }: MemberAnalyticsDas
   const refreshAllEngagementScores = async () => {
     try {
       setRefreshing(true);
-      const response = await authService.fetchWithAuth(
-        `${API_BASE}/analytics/members/engagement/refresh-all`,
-        { method: 'POST' }
-      );
-      const data = await response.json();
-      
-      if (data.success) {
-        // Refresh analytics after updating scores
-        await fetchAnalytics();
-      } else {
-        setError('Failed to refresh engagement scores');
-      }
+      await refreshAllEngagement();
+      // Refresh analytics after updating scores
+      await fetchAnalytics();
     } catch (err) {
-      setError('Failed to refresh engagement scores');
-      console.error('Error refreshing scores:', err);
+      setError(getErrorMessage(err, 'Failed to refresh engagement scores'));
     } finally {
       setRefreshing(false);
     }

@@ -2,8 +2,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { API_BASE, authService } from '../../lib/auth';
-
+import { createMedia, listMedia } from '../../lib/api/media';
 import { getErrorMessage } from '../../lib/errors';
 import type { MediaItem } from '../../types/domain';
 
@@ -28,23 +27,9 @@ export default function SimpleMediaLibrary({ onPlayMedia }: SimpleMediaLibraryPr
   const fetchMedia = useCallback(async () => {
     try {
       setLoading(true);
-      const params = new URLSearchParams();
-      if (searchTerm) params.append('search', searchTerm);
-      if (selectedTag !== 'all') params.append('tag', selectedTag);
-      
-      const response = await authService.fetchWithAuth(
-        `${API_BASE}/media?${params.toString()}`
-      );
-      const data = await response.json();
-      
-      if (data.success) {
-        setMedia(data.media);
-      } else {
-        setError('Failed to load media');
-      }
+      setMedia(await listMedia({ search: searchTerm, tag: selectedTag }));
     } catch (err) {
-      setError('Failed to load media');
-      console.error('Error fetching media:', err);
+      setError(getErrorMessage(err, 'Failed to load media'));
     } finally {
       setLoading(false);
     }
@@ -422,21 +407,13 @@ function AddVideoModal({ onClose, onSave }: AddVideoModalProps) {
         throw new Error('Please enter a valid YouTube URL');
       }
 
-      const response = await authService.fetchWithAuth(`${API_BASE}/media`, {
-        method: 'POST',
-        body: JSON.stringify({
-          title: formData.title,
-          description: formData.description,
-          type: 'YOUTUBE_VIDEO',
-          url: formData.url,
-          tags: formData.tags,
-        }),
+      await createMedia({
+        title: formData.title,
+        description: formData.description,
+        type: 'YOUTUBE_VIDEO',
+        url: formData.url,
+        tags: formData.tags,
       });
-
-      const data = await response.json();
-      if (!data.success) {
-        throw new Error(data.error || 'Failed to add video');
-      }
 
       onSave();
     } catch (err: unknown) {

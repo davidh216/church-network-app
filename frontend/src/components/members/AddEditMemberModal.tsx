@@ -2,8 +2,9 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { API_BASE, authService } from '../../lib/auth';
-import { getErrorMessage, readApiError } from '../../lib/errors';
+import { listRoles } from '../../lib/api/roles';
+import { createUser, updateUser } from '../../lib/api/users';
+import { getErrorMessage } from '../../lib/errors';
 import type { Member, Role } from '../../types/domain';
 
 interface AddEditMemberModalProps {
@@ -31,20 +32,17 @@ export default function AddEditMemberModal({ isOpen, onClose, onSave, member }: 
 
   const fetchRoles = useCallback(async () => {
     try {
-      const response = await authService.fetchWithAuth(`${API_BASE}/roles`);
-      const data = await response.json();
-      if (data.success) {
-        setRoles(data.roles);
-        // A new member defaults to the member role unless roles were already picked.
-        if (!member) {
-          const memberRole = (data.roles as Role[]).find((r) => r.name === 'member');
-          if (memberRole) {
-            setSelectedRoles((prev) => (prev.length ? prev : [memberRole.id]));
-          }
+      const fetchedRoles = await listRoles();
+      setRoles(fetchedRoles);
+      // A new member defaults to the member role unless roles were already picked.
+      if (!member) {
+        const memberRole = fetchedRoles.find((r) => r.name === 'member');
+        if (memberRole) {
+          setSelectedRoles((prev) => (prev.length ? prev : [memberRole.id]));
         }
       }
     } catch (err) {
-      console.error('Error fetching roles:', err);
+      setError(getErrorMessage(err, 'Failed to load roles'));
     }
   }, [member]);
 
@@ -88,38 +86,24 @@ export default function AddEditMemberModal({ isOpen, onClose, onSave, member }: 
         const originalRoleIds = member.roles.map((ur) => ur.role.id).sort();
         const nextRoleIds = [...selectedRoles].sort();
         const rolesChanged = JSON.stringify(originalRoleIds) !== JSON.stringify(nextRoleIds);
-        const response = await authService.fetchWithAuth(`${API_BASE}/users/${member.id}`, {
-          method: 'PUT',
-          body: JSON.stringify({
-            name: formData.name,
-            phone: formData.phone || null,
-            bio: formData.bio || null,
-            ...(formData.isActive !== member.isActive ? { isActive: formData.isActive } : {}),
-            ...(rolesChanged ? { roleIds: selectedRoles } : {}),
-          }),
+        await updateUser(member.id, {
+          name: formData.name,
+          phone: formData.phone || null,
+          bio: formData.bio || null,
+          ...(formData.isActive !== member.isActive ? { isActive: formData.isActive } : {}),
+          ...(rolesChanged ? { roleIds: selectedRoles } : {}),
         });
-
-        if (!response.ok) {
-          throw new Error(await readApiError(response, 'Failed to update member'));
-        }
       } else {
         // Create new member (staff only). Self-registration uses /api/auth/register instead.
-        const response = await authService.fetchWithAuth(`${API_BASE}/users`, {
-          method: 'POST',
-          body: JSON.stringify({
-            name: formData.name,
-            email: formData.email,
-            password: formData.password,
-            phone: formData.phone || null,
-            bio: formData.bio || null,
-            isActive: formData.isActive,
-            roleIds: selectedRoles,
-          }),
+        await createUser({
+          name: formData.name,
+          email: formData.email,
+          password: formData.password,
+          phone: formData.phone || null,
+          bio: formData.bio || null,
+          isActive: formData.isActive,
+          roleIds: selectedRoles,
         });
-
-        if (!response.ok) {
-          throw new Error(await readApiError(response, 'Failed to create member'));
-        }
       }
 
       onSave();

@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { API_BASE, authService } from '../../lib/auth';
-
+import * as savedSearchesApi from '../../lib/api/savedSearches';
+import { getErrorMessage } from '../../lib/errors';
 import type { SavedSearch, SearchQuery } from '../../types/domain';
 
 interface SavedSearchesProps {
@@ -14,6 +14,7 @@ interface SavedSearchesProps {
 export default function SavedSearches({ onLoadSearch, onClose, currentQuery }: SavedSearchesProps) {
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [showSaveForm, setShowSaveForm] = useState(false);
   const [saveForm, setSaveForm] = useState({
     name: '',
@@ -27,13 +28,9 @@ export default function SavedSearches({ onLoadSearch, onClose, currentQuery }: S
 
   const fetchSavedSearches = async () => {
     try {
-      const response = await authService.fetchWithAuth(`${API_BASE}/users/saved-searches`);
-      const data = await response.json();
-      if (data.success) {
-        setSavedSearches(data.searches);
-      }
-    } catch (error) {
-      console.error('Failed to fetch saved searches:', error);
+      setSavedSearches(await savedSearchesApi.listSavedSearches());
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to load saved searches'));
     } finally {
       setLoading(false);
     }
@@ -43,24 +40,17 @@ export default function SavedSearches({ onLoadSearch, onClose, currentQuery }: S
     if (!currentQuery || !saveForm.name.trim()) return;
 
     try {
-      const response = await authService.fetchWithAuth(`${API_BASE}/users/saved-searches`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: saveForm.name,
-          description: saveForm.description,
-          query: currentQuery,
-          isPublic: saveForm.isPublic
-        })
+      await savedSearchesApi.createSavedSearch({
+        name: saveForm.name,
+        description: saveForm.description,
+        query: currentQuery,
+        isPublic: saveForm.isPublic
       });
-
-      if (response.ok) {
-        await fetchSavedSearches();
-        setShowSaveForm(false);
-        setSaveForm({ name: '', description: '', isPublic: false });
-      }
-    } catch (error) {
-      console.error('Failed to save search:', error);
+      await fetchSavedSearches();
+      setShowSaveForm(false);
+      setSaveForm({ name: '', description: '', isPublic: false });
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to save search'));
     }
   };
 
@@ -68,16 +58,17 @@ export default function SavedSearches({ onLoadSearch, onClose, currentQuery }: S
     if (!confirm('Are you sure you want to delete this saved search?')) return;
 
     try {
-      const response = await authService.fetchWithAuth(`${API_BASE}/users/saved-searches/${searchId}`, {
-        method: 'DELETE'
-      });
-
-      if (response.ok) {
-        setSavedSearches(savedSearches.filter(s => s.id !== searchId));
-      }
-    } catch (error) {
-      console.error('Failed to delete search:', error);
+      await savedSearchesApi.deleteSavedSearch(searchId);
+      setSavedSearches(savedSearches.filter(s => s.id !== searchId));
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to delete search'));
     }
+  };
+
+  const handleLoadSavedSearch = (search: SavedSearch) => {
+    onLoadSearch(search.query);
+    // Usage tracking is best effort; a failure must not block loading the search.
+    savedSearchesApi.useSavedSearch(search.id).catch(() => undefined);
   };
 
   // Predefined searches for common scenarios
@@ -158,6 +149,12 @@ export default function SavedSearches({ onLoadSearch, onClose, currentQuery }: S
           </button>
         </div>
       </div>
+
+      {error && (
+        <div role="alert" className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded text-sm">
+          {error}
+        </div>
+      )}
 
       {showSaveForm && (
         <div className="mb-6 p-4 bg-blue-50 rounded-lg">
@@ -240,7 +237,7 @@ export default function SavedSearches({ onLoadSearch, onClose, currentQuery }: S
               >
                 <div
                   className="flex-1 cursor-pointer"
-                  onClick={() => onLoadSearch(search.query)}
+                  onClick={() => handleLoadSavedSearch(search)}
                 >
                   <div className="flex items-center space-x-2">
                     <h5 className="text-sm font-medium text-gray-900">{search.name}</h5>

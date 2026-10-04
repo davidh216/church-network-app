@@ -1,143 +1,18 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { API_BASE, authService } from '../../lib/auth';
-
-interface Member {
-  id: string;
-  name: string;
-  firstName?: string;
-  lastName?: string;
-  email: string;
-  phone?: string;
-  avatar?: string;
-  bio?: string;
-  isActive: boolean;
-  
-  // Enhanced member information
-  dateOfBirth?: string;
-  gender?: string;
-  maritalStatus?: string;
-  occupation?: string;
-  emergencyContact?: string;
-  emergencyPhone?: string;
-  
-  // Church-specific information
-  membershipDate?: string;
-  baptismDate?: string;
-  confirmationDate?: string;
-  membershipType?: string;
-  previousChurch?: string;
-  howHeardAboutUs?: string;
-  
-  // Address information
-  address?: string;
-  city?: string;
-  state?: string;
-  zipCode?: string;
-  country?: string;
-  
-  // Communication preferences
-  emailOptIn: boolean;
-  smsOptIn: boolean;
-  mailOptIn: boolean;
-  
-  // Family information
-  familyId?: string;
-  isHeadOfFamily: boolean;
-  
-  // Notes and tracking
-  notes?: string;
-  lastAttended?: string;
-  volunteerSkills?: string;
-  interests?: string;
-  
-  createdAt: string;
-  updatedAt: string;
-  roles: Array<{
-    role: {
-      id: string;
-      name: string;
-      description?: string;
-    }
-  }>;
-  
-  // Phase 3: Enhanced data
-  engagement?: {
-    engagementScore: number;
-    membershipStage: string;
-    riskLevel: string;
-    lastActivity?: string;
-    attendanceScore: number;
-    givingScore: number;
-    volunteerScore: number;
-    communityScore: number;
-    communicationScore: number;
-  };
-  familyMembers?: Array<{
-    id: string;
-    name: string;
-    firstName?: string;
-    lastName?: string;
-    avatar?: string;
-    isActive: boolean;
-    relationshipType: string;
-    isPrimary: boolean;
-  }>;
-  interactions?: Array<{
-    id: string;
-    interactionType: string;
-    subject?: string;
-    content?: string;
-    channel: string;
-    status: string;
-    category?: string;
-    priority: string;
-    responseRequired: boolean;
-    responseReceived: boolean;
-    createdAt: string;
-    completedAt?: string;
-  }>;
-  milestones?: Array<{
-    id: string;
-    milestoneType: string;
-    title: string;
-    description?: string;
-    achievedDate: string;
-    category: string;
-    impact: string;
-    isPublic: boolean;
-    celebrated: boolean;
-  }>;
-  memberNotes?: Array<{
-    id: string;
-    title?: string;
-    content: string;
-    noteType: string;
-    isPrivate: boolean;
-    isFollowUp: boolean;
-    followUpDate?: string;
-    createdAt: string;
-  }>;
-  timelineActivities?: Array<{
-    id: string;
-    activityDate: string;
-    activityType: string;
-    title: string;
-    description?: string;
-    category: string;
-    impact: string;
-  }>;
-}
+import { getMemberDetails } from '../../lib/api/memberDetails';
+import { getErrorMessage } from '../../lib/errors';
+import type { MemberDetails } from '../../types/domain';
 
 interface MemberProfileProps {
   memberId: string;
   onClose: () => void;
-  onEdit: (member: Member) => void;
+  onEdit: (member: MemberDetails) => void;
 }
 
 export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfileProps) {
-  const [member, setMember] = useState<Member | null>(null);
+  const [member, setMember] = useState<MemberDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState('personal');
@@ -145,17 +20,9 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
   const fetchMember = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await authService.fetchWithAuth(`${API_BASE}/member-details/${memberId}`);
-      const data = await response.json();
-      
-      if (data.success) {
-        setMember(data.user);
-      } else {
-        setError('Failed to load member details');
-      }
+      setMember(await getMemberDetails(memberId));
     } catch (err) {
-      setError('Failed to load member details');
-      console.error('Error fetching member:', err);
+      setError(getErrorMessage(err, 'Failed to load member details'));
     } finally {
       setLoading(false);
     }

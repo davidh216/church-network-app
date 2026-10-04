@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { authService, type User } from '../lib/auth';
+import { logout, me } from '../lib/api/auth';
+import type { User } from '../types/domain';
 import LoginForm from '../components/auth/LoginForm';
 import RegisterForm from '../components/auth/RegisterForm';
 import MemberList from '../components/members/MemberList';
@@ -28,10 +29,10 @@ export default function Home() {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const currentUser = await authService.getCurrentUser();
-        setUser(currentUser);
-      } catch (error) {
-        console.error('Auth check failed:', error);
+        setUser(await me());
+      } catch {
+        // No session (401) or API unreachable: show the sign-in form.
+        setUser(null);
       } finally {
         setLoading(false);
       }
@@ -40,8 +41,12 @@ export default function Home() {
     checkAuth();
   }, []);
 
-  const handleLogout = () => {
-    authService.logout();
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch {
+      // The session is dropped locally either way; the cookie expires on its own.
+    }
     setUser(null);
   };
 

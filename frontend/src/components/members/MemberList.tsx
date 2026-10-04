@@ -2,12 +2,13 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { API_BASE, authService } from '../../lib/auth';
+import { exportUsers, listUsers } from '../../lib/api/users';
 import MemberProfile from './MemberProfile';
 import AdvancedSearchBuilder from './AdvancedSearchBuilder';
 import SavedSearches from './SavedSearches';
 import BulkActionsToolbar from './BulkActionsToolbar';
 
+import { getErrorMessage } from '../../lib/errors';
 import type { Member, SearchQuery } from '../../types/domain';
 
 // Pure helpers live at module scope so they are initialised before render uses them.
@@ -32,11 +33,6 @@ function getNestedValue(obj: unknown, path: string): unknown {
 }
 
 // Download name from the export's Content-Disposition header (exposed by the API's CORS config).
-function filenameFromDisposition(header: string | null, fallback = 'members.csv'): string {
-  const match = header?.match(/filename="?([^";]+)"?/i);
-  return match?.[1] ?? fallback;
-}
-
 interface MemberListProps {
   onEditMember: (member: Member) => void;
   onAddMember: () => void;
@@ -67,17 +63,9 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
   const fetchMembers = async () => {
     try {
       setLoading(true);
-      const response = await authService.fetchWithAuth(`${API_BASE}/users`);
-      const data = await response.json();
-      
-      if (data.success) {
-        setMembers(data.users);
-      } else {
-        setError('Failed to load members');
-      }
+      setMembers(await listUsers());
     } catch (err) {
-      setError('Failed to load members');
-      console.error('Error fetching members:', err);
+      setError(getErrorMessage(err, 'Failed to load members'));
     } finally {
       setLoading(false);
     }
@@ -200,26 +188,19 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
     setCurrentPage(1);
   };
   
-  const exportMembers = async (format: 'csv') => {
+  const exportMembers = async () => {
     try {
-      const params = new URLSearchParams({ format, members: Array.from(selectedMembers).join(',') });
-      const response = await authService.fetchWithAuth(`${API_BASE}/users/export?${params.toString()}`);
-      if (!response.ok) {
-        setError('Export failed');
-        return;
-      }
-      const blob = await response.blob();
+      const { blob, filename } = await exportUsers(Array.from(selectedMembers));
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = filenameFromDisposition(response.headers.get('Content-Disposition'));
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
     } catch (err) {
-      console.error('Export failed:', err);
-      setError('Export failed');
+      setError(getErrorMessage(err, 'Export failed'));
     }
   };
   
@@ -325,7 +306,7 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
               
               {selectedMembers.size > 0 && (
                 <button
-                  onClick={() => exportMembers('csv')}
+                  onClick={() => exportMembers()}
                   className="px-4 py-2 text-sm font-medium bg-green-100 text-green-700 hover:bg-green-200 rounded-md transition-colors"
                 >
                   Export Selected ({selectedMembers.size})
@@ -469,7 +450,7 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
       {selectedMembers.size > 0 && (
         <BulkActionsToolbar
           selectedCount={selectedMembers.size}
-          onExport={(format) => exportMembers(format)}
+          onExport={() => exportMembers()}
           onClearSelection={() => setSelectedMembers(new Set())}
           onBulkUpdate={() => {/* Implement bulk update */}}
         />

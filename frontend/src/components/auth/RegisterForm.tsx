@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { authService } from '@/lib/auth';
+import { register } from '@/lib/api/auth';
 import { getErrorMessage } from '@/lib/errors';
 
 interface RegisterFormProps {
@@ -37,7 +37,7 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
 
     setLoading(true);
     try {
-      const response = await authService.register(email, password, name);
+      const response = await register({ email, password, name });
       setSubmittedMessage(response.message);
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'Registration failed. Please try again.'));

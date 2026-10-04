@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { authService } from '@/lib/auth';
+import { login } from '@/lib/api/auth';
 import { getErrorMessage } from '@/lib/errors';
 import type { User } from '@/types/domain';
 
@@ -22,8 +22,7 @@ export default function LoginForm({ onSuccess, onSwitchToRegister }: LoginFormPr
     setError('');
 
     try {
-      const response = await authService.login(email, password);
-      onSuccess(response.user);
+      onSuccess(await login(email, password));
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'Login failed'));
     } finally {
