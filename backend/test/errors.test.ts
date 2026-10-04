@@ -64,8 +64,8 @@ describe('error handler', () => {
 
   it('maps a missing record in the real app to 404', async () => {
     await resetDatabase();
-    await createUser({ email: 'errors-admin@test.local', role: 'admin' });
-    const token = await login('errors-admin@test.local');
+    await createUser({ email: 'errors-admin@errors.test.local', role: 'admin' });
+    const token = await login('errors-admin@errors.test.local');
     const res = await request(app).get('/api/analytics/members/cjld2cjxh0000qzrmn831i7rn/engagement').set(bearer(token));
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: 'Not found' });

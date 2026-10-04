@@ -15,7 +15,7 @@ describe('auth rate limit (RATE_LIMIT_AUTH_MAX=3)', () => {
   });
 
   it('answers 429 RATE_LIMITED after 3 attempts, counting login and register together', async () => {
-    const attempt = () => request(app).post('/api/auth/login').send({ email: 'ghost@test.local', password: 'wrong-password-1' });
+    const attempt = () => request(app).post('/api/auth/login').send({ email: 'ghost@rate-limit.test.local', password: 'wrong-password-1' });
     const first = await attempt();
     expect(first.status).toBe(401);
     expect(first.headers['ratelimit-policy']).toMatch(/^"3-in-15min"; q=3; w=900;/);
@@ -29,7 +29,7 @@ describe('auth rate limit (RATE_LIMIT_AUTH_MAX=3)', () => {
 
     const register = await request(app)
       .post('/api/auth/register')
-      .send({ email: 'limited@test.local', password: 'long-enough-pass1', name: 'Limited' });
+      .send({ email: 'limited@rate-limit.test.local', password: 'long-enough-pass1', name: 'Limited' });
     expect(register.status).toBe(429);
     expect(register.body.code).toBe('RATE_LIMITED');
   });

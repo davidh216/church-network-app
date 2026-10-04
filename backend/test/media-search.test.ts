@@ -8,8 +8,8 @@ describe('media search (postgres, case-insensitive)', () => {
 
   beforeAll(async () => {
     await resetDatabase();
-    await createUser({ email: 'media-admin@test.local', role: 'admin' });
-    token = await login('media-admin@test.local');
+    await createUser({ email: 'media-admin@media-search.test.local', role: 'admin' });
+    token = await login('media-admin@media-search.test.local');
     const created = await request(app)
       .post('/api/media')
       .set(bearer(token))

@@ -11,10 +11,10 @@ let memberId: string;
 describe('modules', () => {
   beforeAll(async () => {
     await resetDatabase();
-    await createUser({ email: 'modules-leader@test.local', role: 'leader' });
-    memberId = (await createUser({ email: 'modules-member@test.local', role: 'member' })).id;
-    staff = await login('modules-leader@test.local');
-    member = await login('modules-member@test.local');
+    await createUser({ email: 'modules-leader@modules.test.local', role: 'leader' });
+    memberId = (await createUser({ email: 'modules-member@modules.test.local', role: 'member' })).id;
+    staff = await login('modules-leader@modules.test.local');
+    member = await login('modules-member@modules.test.local');
   });
 
   describe('member-details', () => {
@@ -149,7 +149,7 @@ describe('modules', () => {
       const res = await request(app).get(`/api/users/export?format=json&members=${memberId}`).set(bearer(staff));
       expect(res.status).toBe(200);
       expect(res.body.data).toHaveLength(1);
-      expect(res.body.data[0].Email).toBe('modules-member@test.local');
+      expect(res.body.data[0].Email).toBe('modules-member@modules.test.local');
     });
   });
 });

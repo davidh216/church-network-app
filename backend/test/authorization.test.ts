@@ -19,10 +19,10 @@ async function roleId(token: string, name: string): Promise<string> {
 describe('authorization', () => {
   beforeAll(async () => {
     await resetDatabase();
-    const admin = await createUser({ email: 'admin@test.local', role: 'admin' });
-    const leader = await createUser({ email: 'leader@test.local', role: 'leader' });
-    const member = await createUser({ email: 'member@test.local', role: 'member' });
-    const other = await createUser({ email: 'other@test.local', role: 'member', name: 'Other Person' });
+    const admin = await createUser({ email: 'admin@authorization.test.local', role: 'admin' });
+    const leader = await createUser({ email: 'leader@authorization.test.local', role: 'leader' });
+    const member = await createUser({ email: 'member@authorization.test.local', role: 'member' });
+    const other = await createUser({ email: 'other@authorization.test.local', role: 'member', name: 'Other Person' });
     adminId = admin.id;
     leaderId = leader.id;
     memberId = member.id;
@@ -34,9 +34,9 @@ describe('authorization', () => {
         { userId: other.id, authorId: leader.id, content: 'LEADER PRIVATE follow-up', isPrivate: true },
       ],
     });
-    adminToken = await login('admin@test.local');
-    leaderToken = await login('leader@test.local');
-    memberToken = await login('member@test.local');
+    adminToken = await login('admin@authorization.test.local');
+    leaderToken = await login('leader@authorization.test.local');
+    memberToken = await login('member@authorization.test.local');
   });
 
   describe('a plain member', () => {
@@ -56,7 +56,7 @@ describe('authorization', () => {
     });
 
     it('cannot create users or change roles/status', async () => {
-      expect((await request(app).post('/api/users').set(bearer(memberToken)).send({ name: 'x', email: 'x@test.local', password: 'long-enough-pass1' })).status).toBe(403);
+      expect((await request(app).post('/api/users').set(bearer(memberToken)).send({ name: 'x', email: 'x@authorization.test.local', password: 'long-enough-pass1' })).status).toBe(403);
       expect((await request(app).put(`/api/users/${otherMemberId}`).set(bearer(memberToken)).send({ name: 'Hacked' })).status).toBe(403);
       expect((await request(app).put(`/api/users/${memberId}`).set(bearer(memberToken)).send({ isActive: false })).status).toBe(403);
       const leaderRoleId = await roleId(memberToken, 'leader');
@@ -83,7 +83,7 @@ describe('authorization', () => {
 
     it('can read and edit their own profile', async () => {
       const self = await request(app).get(`/api/users/${memberId}`).set(bearer(memberToken));
-      expect(self.body.user.email).toBe('member@test.local');
+      expect(self.body.user.email).toBe('member@authorization.test.local');
       const upd = await request(app).put(`/api/users/${memberId}`).set(bearer(memberToken)).send({ name: 'Renamed Member', phone: null });
       expect(upd.status).toBe(200);
       expect(upd.body.user.name).toBe('Renamed Member');
@@ -124,7 +124,7 @@ describe('authorization', () => {
       const res = await request(app).get('/api/users').set(bearer(leaderToken));
       expect(res.status).toBe(200);
       const u = res.body.users.find((x: { id: string }) => x.id === otherMemberId);
-      expect(u.email).toBe('other@test.local');
+      expect(u.email).toBe('other@authorization.test.local');
       expect('engagement' in u).toBe(true);
       expect(u.password).toBeUndefined();
     });
@@ -154,25 +154,25 @@ describe('authorization', () => {
         const denied = await request(app)
           .post('/api/users')
           .set(bearer(leaderToken))
-          .send({ name: 'Sneaky', email: `sneaky-${name}@test.local`, password: 'long-enough-pass1', roleIds: [await roleId(leaderToken, name)] });
+          .send({ name: 'Sneaky', email: `sneaky-${name}@authorization.test.local`, password: 'long-enough-pass1', roleIds: [await roleId(leaderToken, name)] });
         expect(denied.status).toBe(403);
         expect(denied.body.error).toBe('Only an admin can grant staff roles');
       }
       expect(await prisma.user.count({ where: { email: { startsWith: 'sneaky' } } })).toBe(0);
-      const ok = await request(app).post('/api/users').set(bearer(leaderToken)).send({ name: 'Created By Leader', email: 'Created@test.local', password: 'long-enough-pass1' });
+      const ok = await request(app).post('/api/users').set(bearer(leaderToken)).send({ name: 'Created By Leader', email: 'Created@authorization.test.local', password: 'long-enough-pass1' });
       expect(ok.status).toBe(201);
-      expect(ok.body.user.email).toBe('created@test.local');
+      expect(ok.body.user.email).toBe('created@authorization.test.local');
       expect(ok.body.user.isActive).toBe(true);
       expect(ok.body.user.roles.map((r: { role: { name: string } }) => r.role.name)).toEqual(['member']);
     });
 
     it('can approve a pending registration', async () => {
-      await request(app).post('/api/auth/register').send({ email: 'pending@test.local', password: 'long-enough-pass1', name: 'Pending' });
-      const pending = await prisma.user.findUniqueOrThrow({ where: { email: 'pending@test.local' } });
-      expect((await request(app).post('/api/auth/login').send({ email: 'pending@test.local', password: 'long-enough-pass1' })).status).toBe(401);
+      await request(app).post('/api/auth/register').send({ email: 'pending@authorization.test.local', password: 'long-enough-pass1', name: 'Pending' });
+      const pending = await prisma.user.findUniqueOrThrow({ where: { email: 'pending@authorization.test.local' } });
+      expect((await request(app).post('/api/auth/login').send({ email: 'pending@authorization.test.local', password: 'long-enough-pass1' })).status).toBe(401);
       const approve = await request(app).put(`/api/users/${pending.id}`).set(bearer(leaderToken)).send({ isActive: true });
       expect(approve.status).toBe(200);
-      expect((await request(app).post('/api/auth/login').send({ email: 'pending@test.local', password: 'long-enough-pass1' })).status).toBe(200);
+      expect((await request(app).post('/api/auth/login').send({ email: 'pending@authorization.test.local', password: 'long-enough-pass1' })).status).toBe(200);
     });
 
     it('cannot change roles, even to member', async () => {
@@ -186,11 +186,11 @@ describe('authorization', () => {
       expect(res.status).toBe(403);
       expect(res.body.error).toBe('Only an admin can modify staff accounts');
       expect((await prisma.user.findUniqueOrThrow({ where: { id: adminId } })).isActive).toBe(true);
-      expect(await login('admin@test.local')).toBeTruthy();
+      expect(await login('admin@authorization.test.local')).toBeTruthy();
     });
 
     it('cannot edit another leader', async () => {
-      const otherLeader = await createUser({ email: 'leader2@test.local', role: 'leader', name: 'Second Leader' });
+      const otherLeader = await createUser({ email: 'leader2@authorization.test.local', role: 'leader', name: 'Second Leader' });
       const res = await request(app).put(`/api/users/${otherLeader.id}`).set(bearer(leaderToken)).send({ name: 'x' });
       expect(res.status).toBe(403);
       expect(res.body.error).toBe('Only an admin can modify staff accounts');

@@ -16,8 +16,8 @@ const CASES: Case[] = [
   { method: 'post', path: () => '/api/auth/change-password', body: { newPassword: 'long-enough-pass1' }, field: 'currentPassword' },
   { method: 'post', path: () => `/api/users/${memberId}/reset-password`, body: { newPassword: 'short' }, field: 'newPassword' },
   { method: 'post', path: () => `/api/users/${BAD_ID}/reset-password`, body: { newPassword: 'long-enough-pass1' }, field: 'id' },
-  { method: 'post', path: () => '/api/users', body: { name: '', email: 'ok@test.local', password: 'long-enough-pass1' }, field: 'name' },
-  { method: 'post', path: () => '/api/users', body: { name: 'X', email: 'ok@test.local', password: 'long-enough-pass1', roleIds: ['x'] }, field: 'roleIds' },
+  { method: 'post', path: () => '/api/users', body: { name: '', email: 'ok@validation.test.local', password: 'long-enough-pass1' }, field: 'name' },
+  { method: 'post', path: () => '/api/users', body: { name: 'X', email: 'ok@validation.test.local', password: 'long-enough-pass1', roleIds: ['x'] }, field: 'roleIds' },
   { method: 'put', path: () => `/api/users/${memberId}`, body: { isActive: 'yes' }, field: 'isActive' },
   { method: 'put', path: () => `/api/users/${BAD_ID}`, body: { name: 'X' }, field: 'id' },
   { method: 'post', path: () => '/api/users/saved-searches', body: { name: '', query: {} }, field: 'name' },
@@ -43,9 +43,9 @@ const CASES: Case[] = [
 describe('request validation', () => {
   beforeAll(async () => {
     await resetDatabase();
-    await createUser({ email: 'validation-admin@test.local', role: 'admin' });
-    memberId = (await createUser({ email: 'validation-member@test.local', role: 'member' })).id;
-    token = await login('validation-admin@test.local');
+    await createUser({ email: 'validation-admin@validation.test.local', role: 'admin' });
+    memberId = (await createUser({ email: 'validation-member@validation.test.local', role: 'member' })).id;
+    token = await login('validation-admin@validation.test.local');
   });
 
   it.each(CASES)('$method ($field) -> 400 VALIDATION', async ({ method, path, body, field }) => {
