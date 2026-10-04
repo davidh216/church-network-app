@@ -23,15 +23,51 @@ export const optionalText = (max: number) =>
     .optional();
 
 // Stringly-typed CRM columns (see prisma/schema.prisma). Phase 3 turns them into database enums.
-export const membershipStage = z.enum(['visitor', 'new_member', 'active_member', 'core_member', 'leader', 'at_risk', 'inactive']);
+export const membershipStage = z.enum([
+  'visitor',
+  'new_member',
+  'active_member',
+  'core_member',
+  'leader',
+  'at_risk',
+  'inactive',
+]);
 export const riskLevel = z.enum(['low', 'medium', 'high']);
-export const interactionType = z.enum(['email_sent', 'email_opened', 'sms_sent', 'sms_replied', 'call_made', 'visit_logged', 'note_added']);
+export const interactionType = z.enum([
+  'email_sent',
+  'email_opened',
+  'sms_sent',
+  'sms_replied',
+  'call_made',
+  'visit_logged',
+  'note_added',
+]);
 export const channel = z.enum(['email', 'sms', 'phone', 'in_person', 'social_media']);
 export const priority = z.enum(['low', 'normal', 'high', 'urgent']);
-export const interactionCategory = z.enum(['welcome', 'follow_up', 'pastoral_care', 'event_invitation', 'giving_reminder', 'volunteer_request']);
-export const milestoneCategory = z.enum(['general', 'spiritual', 'service', 'family', 'personal', 'ministry']);
+export const interactionCategory = z.enum([
+  'welcome',
+  'follow_up',
+  'pastoral_care',
+  'event_invitation',
+  'giving_reminder',
+  'volunteer_request',
+]);
+export const milestoneCategory = z.enum([
+  'general',
+  'spiritual',
+  'service',
+  'family',
+  'personal',
+  'ministry',
+]);
 export const impact = z.enum(['low', 'medium', 'high']);
-export const noteType = z.enum(['general', 'pastoral_care', 'follow_up', 'prayer_request', 'concern']);
+export const noteType = z.enum([
+  'general',
+  'pastoral_care',
+  'follow_up',
+  'prayer_request',
+  'concern',
+]);
 
 // Arbitrary JSON metadata attached to activities and interactions (stored as a JSON string).
 export const metadata = z.record(z.string(), z.unknown()).optional();

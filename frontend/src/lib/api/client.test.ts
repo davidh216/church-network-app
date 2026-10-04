@@ -14,7 +14,11 @@ function mockFetch(response: Response) {
   return fn;
 }
 
-function lastCall(fn: ReturnType<typeof mockFetch>): { url: string; init: RequestInit; headers: Headers } {
+function lastCall(fn: ReturnType<typeof mockFetch>): {
+  url: string;
+  init: RequestInit;
+  headers: Headers;
+} {
   const [url, init = {}] = fn.mock.calls[0] ?? [];
   return { url: String(url), init, headers: new Headers(init.headers) };
 }
@@ -59,7 +63,9 @@ describe('apiFetch', () => {
       ),
     );
 
-    const err: unknown = await apiFetch('/users', { method: 'POST', json: {} }).catch((e: unknown) => e);
+    const err: unknown = await apiFetch('/users', { method: 'POST', json: {} }).catch(
+      (e: unknown) => e,
+    );
 
     expect(isApiError(err)).toBe(true);
     expect(err).toBeInstanceOf(ApiError);
@@ -76,7 +82,10 @@ describe('apiFetch', () => {
     await expect(apiFetch('/users/x')).rejects.toMatchObject({ status: 404, message: 'Not found' });
 
     mockFetch(new Response('<html>Bad gateway</html>', { status: 502 }));
-    await expect(apiFetch('/users')).rejects.toMatchObject({ status: 502, message: 'Request failed (502)' });
+    await expect(apiFetch('/users')).rejects.toMatchObject({
+      status: 502,
+      message: 'Request failed (502)',
+    });
   });
 
   it('dispatches embrace:unauthenticated on 401 and still throws', async () => {

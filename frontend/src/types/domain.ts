@@ -109,7 +109,7 @@ export interface MemberDetails {
   avatar?: string;
   bio?: string;
   isActive: boolean;
-  
+
   // Enhanced member information
   dateOfBirth?: string;
   gender?: string;
@@ -117,7 +117,7 @@ export interface MemberDetails {
   occupation?: string;
   emergencyContact?: string;
   emergencyPhone?: string;
-  
+
   // Church-specific information
   membershipDate?: string;
   baptismDate?: string;
@@ -125,29 +125,29 @@ export interface MemberDetails {
   membershipType?: string;
   previousChurch?: string;
   howHeardAboutUs?: string;
-  
+
   // Address information
   address?: string;
   city?: string;
   state?: string;
   zipCode?: string;
   country?: string;
-  
+
   // Communication preferences
   emailOptIn: boolean;
   smsOptIn: boolean;
   mailOptIn: boolean;
-  
+
   // Family information
   familyId?: string;
   isHeadOfFamily: boolean;
-  
+
   // Notes and tracking
   notes?: string;
   lastAttended?: string;
   volunteerSkills?: string;
   interests?: string;
-  
+
   createdAt: string;
   updatedAt: string;
   roles: Array<{
@@ -155,9 +155,9 @@ export interface MemberDetails {
       id: string;
       name: string;
       description?: string;
-    }
+    };
   }>;
-  
+
   // Phase 3: Enhanced data
   engagement?: {
     engagementScore: number;

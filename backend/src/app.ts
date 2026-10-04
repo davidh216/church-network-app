@@ -18,7 +18,9 @@ import analyticsRoutes from './modules/analytics/router';
 import memberDetailsRoutes from './modules/member-details/router';
 
 // package.json sits one level above both src/ (tsx) and dist/ (node).
-const { version } = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8')) as { version: string };
+const { version } = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8')) as {
+  version: string;
+};
 
 export function createApp() {
   const app = express();
@@ -27,12 +29,18 @@ export function createApp() {
   app.use(requestLogger);
   app.use(helmet());
   // Content-Disposition is exposed so the browser can read the export's filename.
-  app.use(cors({ origin: corsOrigins, credentials: true, exposedHeaders: ['Content-Disposition'] }));
+  app.use(
+    cors({ origin: corsOrigins, credentials: true, exposedHeaders: ['Content-Disposition'] }),
+  );
   app.use(express.json({ limit: '100kb' }));
   app.use(cookieParser());
 
   app.get('/health', async (_req, res) => {
-    const info = { version, uptime: Math.round(process.uptime()), timestamp: new Date().toISOString() };
+    const info = {
+      version,
+      uptime: Math.round(process.uptime()),
+      timestamp: new Date().toISOString(),
+    };
     try {
       await prisma.$queryRaw`SELECT 1`;
       res.json({ status: 'OK', message: 'Church app backend is running', ...info });

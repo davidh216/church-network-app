@@ -37,7 +37,11 @@ describe('auth endpoints', () => {
   it('login posts credentials and returns the user (no token handling)', async () => {
     respond({ success: true, user: { id: 'u1', name: 'Ann' } });
     await expect(auth.login('a@b.c', 'secret')).resolves.toEqual({ id: 'u1', name: 'Ann' });
-    expect(call()).toEqual({ url: '/api/auth/login', method: 'POST', body: { email: 'a@b.c', password: 'secret' } });
+    expect(call()).toEqual({
+      url: '/api/auth/login',
+      method: 'POST',
+      body: { email: 'a@b.c', password: 'secret' },
+    });
   });
 
   it('logout posts to /auth/logout and accepts 204', async () => {
@@ -55,7 +59,9 @@ describe('auth endpoints', () => {
   it('register returns the pending-approval result', async () => {
     const result = { success: true, pendingApproval: true, message: 'Wait', user: { id: 'u2' } };
     respond(result, { status: 201 });
-    await expect(auth.register({ email: 'a@b.c', password: 'p', name: 'A' })).resolves.toEqual(result);
+    await expect(auth.register({ email: 'a@b.c', password: 'p', name: 'A' })).resolves.toEqual(
+      result,
+    );
     expect(call()).toEqual({
       url: '/api/auth/register',
       method: 'POST',
@@ -85,14 +91,21 @@ describe('users endpoints', () => {
   it('updateUser puts the payload', async () => {
     respond({ success: true, user: { id: 'u1' } });
     await users.updateUser('u1', { name: 'New', phone: null });
-    expect(call()).toEqual({ url: '/api/users/u1', method: 'PUT', body: { name: 'New', phone: null } });
+    expect(call()).toEqual({
+      url: '/api/users/u1',
+      method: 'PUT',
+      body: { name: 'New', phone: null },
+    });
   });
 
   it('exportUsers requests CSV for the selection and reads the filename', async () => {
     fetchMock.mockResolvedValueOnce(
       new Response('Name\nAnn', {
         status: 200,
-        headers: { 'Content-Type': 'text/csv', 'Content-Disposition': 'attachment; filename="members.csv"' },
+        headers: {
+          'Content-Type': 'text/csv',
+          'Content-Disposition': 'attachment; filename="members.csv"',
+        },
       }),
     );
     const file = await users.exportUsers(['u1', 'u2']);
@@ -134,7 +147,12 @@ describe('roles, media, analytics, member details', () => {
 
   it('createMedia posts a YouTube video', async () => {
     respond({ success: true, media: { id: 'm1' } }, { status: 201 });
-    const input = { title: 'T', url: 'https://youtu.be/abc', type: 'YOUTUBE_VIDEO' as const, tags: ['sermon'] };
+    const input = {
+      title: 'T',
+      url: 'https://youtu.be/abc',
+      type: 'YOUTUBE_VIDEO' as const,
+      tags: ['sermon'],
+    };
     await expect(media.createMedia(input)).resolves.toEqual({ id: 'm1' });
     expect(call()).toEqual({ url: '/api/media', method: 'POST', body: input });
   });
@@ -146,12 +164,18 @@ describe('roles, media, analytics, member details', () => {
 
     respond({ success: true, message: 'Updated 3' });
     await expect(analytics.refreshAllEngagement()).resolves.toBe('Updated 3');
-    expect(call(1)).toMatchObject({ url: '/api/analytics/members/engagement/refresh-all', method: 'POST' });
+    expect(call(1)).toMatchObject({
+      url: '/api/analytics/members/engagement/refresh-all',
+      method: 'POST',
+    });
   });
 
   it('getMemberDetails', async () => {
     respond({ success: true, user: { id: 'u1', emailOptIn: true } });
-    await expect(memberDetails.getMemberDetails('u1')).resolves.toEqual({ id: 'u1', emailOptIn: true });
+    await expect(memberDetails.getMemberDetails('u1')).resolves.toEqual({
+      id: 'u1',
+      emailOptIn: true,
+    });
     expect(call().url).toBe('/api/member-details/u1');
   });
 });

@@ -24,7 +24,7 @@ export default function SavedSearches({ onLoadSearch, onClose, currentQuery }: S
   const [saveForm, setSaveForm] = useState({
     name: '',
     description: '',
-    isPublic: false
+    isPublic: false,
   });
 
   useEffect(() => {
@@ -49,7 +49,7 @@ export default function SavedSearches({ onLoadSearch, onClose, currentQuery }: S
         name: saveForm.name,
         description: saveForm.description,
         query: currentQuery,
-        isPublic: saveForm.isPublic
+        isPublic: saveForm.isPublic,
       });
       await fetchSavedSearches();
       setShowSaveForm(false);
@@ -64,7 +64,7 @@ export default function SavedSearches({ onLoadSearch, onClose, currentQuery }: S
 
     try {
       await savedSearchesApi.deleteSavedSearch(searchId);
-      setSavedSearches(savedSearches.filter(s => s.id !== searchId));
+      setSavedSearches(savedSearches.filter((s) => s.id !== searchId));
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to delete search'));
     }
@@ -83,52 +83,72 @@ export default function SavedSearches({ onLoadSearch, onClose, currentQuery }: S
       description: 'Members with engagement score above 80%',
       query: {
         conditions: [
-          { field: 'engagement.engagementScore', operator: 'greater_than', value: '80', logic: 'AND' }
+          {
+            field: 'engagement.engagementScore',
+            operator: 'greater_than',
+            value: '80',
+            logic: 'AND',
+          },
         ],
-        type: 'advanced'
-      }
+        type: 'advanced',
+      },
     },
     {
       name: 'At Risk Members',
       description: 'Members with high or medium risk levels',
       query: {
         conditions: [
-          { field: 'engagement.riskLevel', operator: 'in', value: 'high,medium', logic: 'AND' }
+          { field: 'engagement.riskLevel', operator: 'in', value: 'high,medium', logic: 'AND' },
         ],
-        type: 'advanced'
-      }
+        type: 'advanced',
+      },
     },
     {
       name: 'New Members (Last 30 Days)',
       description: 'Members who joined in the last 30 days',
       query: {
         conditions: [
-          { field: 'createdAt', operator: 'after', value: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], logic: 'AND' }
+          {
+            field: 'createdAt',
+            operator: 'after',
+            value: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            logic: 'AND',
+          },
         ],
-        type: 'advanced'
-      }
+        type: 'advanced',
+      },
     },
     {
       name: 'Leaders and Core Members',
       description: 'Members in leadership or core member stages',
       query: {
         conditions: [
-          { field: 'engagement.membershipStage', operator: 'in', value: 'leader,core_member', logic: 'AND' }
+          {
+            field: 'engagement.membershipStage',
+            operator: 'in',
+            value: 'leader,core_member',
+            logic: 'AND',
+          },
         ],
-        type: 'advanced'
-      }
+        type: 'advanced',
+      },
     },
     {
       name: 'Inactive Members',
-      description: 'Members who haven\'t been active recently',
+      description: "Members who haven't been active recently",
       query: {
         conditions: [
-          { field: 'engagement.membershipStage', operator: 'equals', value: 'inactive', logic: 'OR' },
-          { field: 'engagement.riskLevel', operator: 'equals', value: 'high', logic: 'OR' }
+          {
+            field: 'engagement.membershipStage',
+            operator: 'equals',
+            value: 'inactive',
+            logic: 'OR',
+          },
+          { field: 'engagement.riskLevel', operator: 'equals', value: 'high', logic: 'OR' },
         ],
-        type: 'advanced'
-      }
-    }
+        type: 'advanced',
+      },
+    },
   ];
 
   return (
@@ -144,19 +164,24 @@ export default function SavedSearches({ onLoadSearch, onClose, currentQuery }: S
               Save Current Search
             </button>
           )}
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
-          >
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
             </svg>
           </button>
         </div>
       </div>
 
       {error && (
-        <div role="alert" className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded text-sm">
+        <div
+          role="alert"
+          className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded text-sm"
+        >
           {error}
         </div>
       )}
@@ -234,7 +259,9 @@ export default function SavedSearches({ onLoadSearch, onClose, currentQuery }: S
             <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
           </div>
         ) : savedSearches.length === 0 ? (
-          <p className="text-sm text-gray-500 py-4">No saved searches yet. Create complex searches and save them for quick access.</p>
+          <p className="text-sm text-gray-500 py-4">
+            No saved searches yet. Create complex searches and save them for quick access.
+          </p>
         ) : (
           <div className="space-y-2">
             {savedSearches.map((search) => (
@@ -270,7 +297,12 @@ export default function SavedSearches({ onLoadSearch, onClose, currentQuery }: S
                   title="Delete search"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                    />
                   </svg>
                 </button>
               </div>

@@ -22,7 +22,13 @@ export async function resetDatabase() {
   }
 }
 
-export async function createUser(opts: { email: string; role: RoleName; password?: string; isActive?: boolean; name?: string }) {
+export async function createUser(opts: {
+  email: string;
+  role: RoleName;
+  password?: string;
+  isActive?: boolean;
+  name?: string;
+}) {
   const role = await prisma.role.findUniqueOrThrow({ where: { name: opts.role } });
   return prisma.user.create({
     data: {
@@ -47,7 +53,8 @@ export function sessionToken(res: request.Response): string | undefined {
 export async function login(email: string, password = 'correct-horse-battery'): Promise<string> {
   const res = await request(app).post('/api/auth/login').send({ email, password });
   const token = sessionToken(res);
-  if (res.status !== 200 || !token) throw new Error(`login failed for ${email}: ${res.status} ${JSON.stringify(res.body)}`);
+  if (res.status !== 200 || !token)
+    throw new Error(`login failed for ${email}: ${res.status} ${JSON.stringify(res.body)}`);
   return token;
 }
 

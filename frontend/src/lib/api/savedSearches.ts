@@ -23,5 +23,7 @@ export async function deleteSavedSearch(id: string): Promise<void> {
  * call it through the module namespace (`savedSearchesApi.useSavedSearch`).
  */
 export async function useSavedSearch(id: string): Promise<void> {
-  await apiFetch<unknown>(`/users/saved-searches/${encodeURIComponent(id)}/use`, { method: 'POST' });
+  await apiFetch<unknown>(`/users/saved-searches/${encodeURIComponent(id)}/use`, {
+    method: 'POST',
+  });
 }

@@ -13,7 +13,11 @@ export const requestLogger = pinoHttp({
     return id;
   },
   serializers: {
-    req: (req: { id: unknown; method: string; url: string }) => ({ id: req.id, method: req.method, path: req.url.split('?')[0] }),
+    req: (req: { id: unknown; method: string; url: string }) => ({
+      id: req.id,
+      method: req.method,
+      path: req.url.split('?')[0],
+    }),
     res: (res: { statusCode: number }) => ({ statusCode: res.statusCode }),
   },
 });

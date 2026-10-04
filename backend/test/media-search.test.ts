@@ -24,7 +24,12 @@ describe('media search (postgres, case-insensitive)', () => {
     await request(app)
       .post('/api/media')
       .set(bearer(token))
-      .send({ title: 'Youth night', type: 'YOUTUBE_VIDEO', url: 'https://youtu.be/def456', tags: ['youth'] });
+      .send({
+        title: 'Youth night',
+        type: 'YOUTUBE_VIDEO',
+        url: 'https://youtu.be/def456',
+        tags: ['youth'],
+      });
   });
 
   const titles = async (query: string) => {

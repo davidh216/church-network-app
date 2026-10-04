@@ -19,7 +19,12 @@ import type { MediaItem, Member } from '@/types/domain';
 const router = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn() }));
 vi.mock('next/navigation', () => ({ useRouter: () => router }));
 
-const authApi = vi.hoisted(() => ({ me: vi.fn(), login: vi.fn(), logout: vi.fn(), register: vi.fn() }));
+const authApi = vi.hoisted(() => ({
+  me: vi.fn(),
+  login: vi.fn(),
+  logout: vi.fn(),
+  register: vi.fn(),
+}));
 vi.mock('@/lib/api/auth', () => authApi);
 
 const usersApi = vi.hoisted(() => ({ listUsers: vi.fn(), exportUsers: vi.fn() }));
@@ -48,7 +53,13 @@ const staffRows: Member[] = [
   },
 ];
 const directoryRows: Member[] = [
-  { id: 'm1', name: 'Ann Example', isActive: true, createdAt: '2026-01-01T00:00:00.000Z', roles: [] },
+  {
+    id: 'm1',
+    name: 'Ann Example',
+    isActive: true,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    roles: [],
+  },
 ];
 
 function video(n: number): MediaItem {
@@ -88,7 +99,6 @@ beforeEach(() => {
   savedSearchesApi.listSavedSearches.mockResolvedValue([]);
 });
 
-
 const noop = () => undefined;
 
 describe('Tailwind v4 utilities', () => {
@@ -101,7 +111,8 @@ describe('Tailwind v4 utilities', () => {
   }
 
   it('uses no v3-only opacity, flex-shrink or flex-grow utilities', () => {
-    const v3Only = /\b(bg|text|border|ring|divide|placeholder)-opacity-\d+|\bflex-shrink(-\d+)?\b|\bflex-grow(-\d+)?\b/;
+    const v3Only =
+      /\b(bg|text|border|ring|divide|placeholder)-opacity-\d+|\bflex-shrink(-\d+)?\b|\bflex-grow(-\d+)?\b/;
     const offenders = sourceFiles(join(__dirname, '..')).filter((file) =>
       v3Only.test(readFileSync(file, 'utf8')),
     );
@@ -113,10 +124,18 @@ describe('VideoPlayer playlist', () => {
   it('renders playlist items as buttons that call onSelect with their index', async () => {
     const onSelect = vi.fn();
     const rendered = await render(
-      <VideoPlayer media={playlist[0]!} onClose={noop} playlist={playlist} currentIndex={0} onSelect={onSelect} />,
+      <VideoPlayer
+        media={playlist[0]!}
+        onClose={noop}
+        playlist={playlist}
+        currentIndex={0}
+        onSelect={onSelect}
+      />,
     );
     const { container } = rendered;
-    await act(async () => container.querySelector<HTMLButtonElement>('button[title="Toggle Playlist"]')!.click());
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('button[title="Toggle Playlist"]')!.click(),
+    );
 
     const items = Array.from(container.querySelectorAll('button')).filter((b) =>
       (b.textContent ?? '').includes('Sermon'),
@@ -137,8 +156,12 @@ describe('VideoPlayer playlist', () => {
     const play = container.querySelectorAll<HTMLButtonElement>('.group > button')[0]!;
     await act(async () => play.click());
     expect(container.querySelector('iframe')?.title).toBe('Sermon 1');
-    await act(async () => container.querySelector<HTMLButtonElement>('button[title="Toggle Playlist"]')!.click());
-    await act(async () => button(container.querySelector('.playlist-scrollbar')!, 'Sermon 3').click());
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('button[title="Toggle Playlist"]')!.click(),
+    );
+    await act(async () =>
+      button(container.querySelector('.playlist-scrollbar')!, 'Sermon 3').click(),
+    );
     expect(container.querySelector('iframe')?.title).toBe('Sermon 3');
     expect(container.textContent).toContain('3 of 3');
   });
@@ -167,10 +190,9 @@ describe('dashboard', () => {
     expect(text).not.toContain('Slack Workspace');
     expect(text).not.toContain('Membership Overview');
     expect(text).not.toContain('Active System');
-    expect(buttonTexts(container).filter((b) => b.includes('Members') || b.includes('Media'))).toEqual([
-      '👥 View Members',
-      '🎵 Media Library',
-    ]);
+    expect(
+      buttonTexts(container).filter((b) => b.includes('Members') || b.includes('Media')),
+    ).toEqual(['👥 View Members', '🎵 Media Library']);
   });
 });
 
@@ -178,10 +200,14 @@ describe('BulkActionsToolbar', () => {
   it('offers only CSV export and clearing the selection', async () => {
     const onExport = vi.fn();
     const onClear = vi.fn();
-    const rendered = await render(<BulkActionsToolbar selectedCount={2} onExport={onExport} onClearSelection={onClear} />);
+    const rendered = await render(
+      <BulkActionsToolbar selectedCount={2} onExport={onExport} onClearSelection={onClear} />,
+    );
     const { container } = rendered;
     expect(buttonTexts(container)).toEqual(['Export CSV', 'Clear Selection']);
-    expect(container.textContent).not.toMatch(/Excel|Tags|Email Campaign|Create Group|Print Labels|Reports|Bulk Update/);
+    expect(container.textContent).not.toMatch(
+      /Excel|Tags|Email Campaign|Create Group|Print Labels|Reports|Bulk Update/,
+    );
     await act(async () => button(container, 'Export CSV').click());
     await act(async () => button(container, 'Clear Selection').click());
     expect(onExport).toHaveBeenCalledTimes(1);
@@ -196,9 +222,10 @@ describe('MemberList', () => {
   }
 
   it('hides Advanced Search and Saved Searches until the evaluator exists', async () => {
-    const container = await renderAs(['admin'], (
-      <MemberList onEditMember={noop} onAddMember={noop} refreshTrigger={0} />
-    ));
+    const container = await renderAs(
+      ['admin'],
+      <MemberList onEditMember={noop} onAddMember={noop} refreshTrigger={0} />,
+    );
     const buttons = buttonTexts(container);
     expect(buttons).not.toContain('Advanced Search');
     expect(buttons).not.toContain('Saved Searches');
@@ -209,14 +236,20 @@ describe('MemberList', () => {
     const revokeObjectURL = vi.fn();
     vi.stubGlobal('URL', Object.assign(URL, { createObjectURL, revokeObjectURL }));
     const clicked: string[] = [];
-    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
       clicked.push(this.download);
     });
-    usersApi.exportUsers.mockResolvedValue({ blob: new Blob(['a,b']), filename: 'members-2026-10-04.csv' });
+    usersApi.exportUsers.mockResolvedValue({
+      blob: new Blob(['a,b']),
+      filename: 'members-2026-10-04.csv',
+    });
 
-    const container = await renderAs(['admin'], (
-      <MemberList onEditMember={noop} onAddMember={noop} refreshTrigger={0} />
-    ));
+    const container = await renderAs(
+      ['admin'],
+      <MemberList onEditMember={noop} onAddMember={noop} refreshTrigger={0} />,
+    );
     await selectFirstRow(container);
     await act(async () => button(container, 'Export CSV').click());
     await settle();
@@ -230,43 +263,59 @@ describe('MemberList', () => {
 
   it('shows a dismissible error toast when the export fails', async () => {
     usersApi.exportUsers.mockRejectedValue(new ApiError(403, 'Insufficient permissions'));
-    const container = await renderAs(['admin'], (
-      <MemberList onEditMember={noop} onAddMember={noop} refreshTrigger={0} />
-    ));
+    const container = await renderAs(
+      ['admin'],
+      <MemberList onEditMember={noop} onAddMember={noop} refreshTrigger={0} />,
+    );
     await selectFirstRow(container);
     await act(async () => button(container, 'Export Selected (1)').click());
     await settle();
 
     const toast = container.querySelector('[role="alert"]');
     expect(toast?.textContent).toContain('Insufficient permissions');
-    await act(async () => toast!.querySelector<HTMLButtonElement>('button[aria-label="Dismiss"]')!.click());
+    await act(async () =>
+      toast!.querySelector<HTMLButtonElement>('button[aria-label="Dismiss"]')!.click(),
+    );
     expect(container.querySelector('[role="alert"]')).toBeNull();
   });
 
   it('shows members only the directory columns and filters', async () => {
     usersApi.listUsers.mockResolvedValue(directoryRows);
-    const container = await renderAs(['member'], (
-      <MemberList onEditMember={noop} onAddMember={noop} refreshTrigger={0} />
-    ));
+    const container = await renderAs(
+      ['member'],
+      <MemberList onEditMember={noop} onAddMember={noop} refreshTrigger={0} />,
+    );
     expect(headers(container)).toEqual(['Member', 'Role', 'Joined']);
     expect(container.textContent).not.toContain('Inactive');
     expect(container.querySelectorAll('select')).toHaveLength(1); // roles only
   });
 
   it('shows staff the contact, engagement, stage and status columns', async () => {
-    const container = await renderAs(['leader'], (
-      <MemberList onEditMember={noop} onAddMember={noop} refreshTrigger={0} />
-    ));
-    expect(headers(container)).toEqual(['', 'Member', 'Contact', 'Role', 'Engagement', 'Stage', 'Status', 'Joined', 'Actions']);
+    const container = await renderAs(
+      ['leader'],
+      <MemberList onEditMember={noop} onAddMember={noop} refreshTrigger={0} />,
+    );
+    expect(headers(container)).toEqual([
+      '',
+      'Member',
+      'Contact',
+      'Role',
+      'Engagement',
+      'Stage',
+      'Status',
+      'Joined',
+      'Actions',
+    ]);
     expect(container.querySelectorAll('select').length).toBeGreaterThan(1);
   });
 });
 
 describe('SavedSearches', () => {
   it('does not offer the predefined quick searches', async () => {
-    const container = await renderAs(['admin'], (
-      <SavedSearches onLoadSearch={noop} onClose={noop} currentQuery={null} />
-    ));
+    const container = await renderAs(
+      ['admin'],
+      <SavedSearches onLoadSearch={noop} onClose={noop} currentQuery={null} />,
+    );
     expect(container.textContent).toContain('Your Saved Searches');
     expect(container.textContent).not.toContain('Quick Searches');
     expect(container.textContent).not.toContain('High Engagement Members');

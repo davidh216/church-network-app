@@ -84,7 +84,12 @@ export async function apiRequest(path: string, init: ApiFetchInit = {}): Promise
     }
     const parsed = await readBody(response);
     const errorBody = parsed && typeof parsed === 'object' ? (parsed as ApiErrorBody) : null;
-    throw new ApiError(response.status, errorMessage(response.status, errorBody), errorBody?.code, errorBody?.details);
+    throw new ApiError(
+      response.status,
+      errorMessage(response.status, errorBody),
+      errorBody?.code,
+      errorBody?.details,
+    );
   }
   return response;
 }

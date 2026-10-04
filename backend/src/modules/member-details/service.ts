@@ -19,7 +19,9 @@ function visibleNotes(viewer: AuthenticatedUser): Prisma.MemberNoteWhereInput {
   return isAdmin(viewer) ? {} : { OR: [{ isPrivate: false }, { authorId: viewer.id }] };
 }
 
-const relative = { select: { id: true, name: true, firstName: true, lastName: true, avatar: true, isActive: true } };
+const relative = {
+  select: { id: true, name: true, firstName: true, lastName: true, avatar: true, isActive: true },
+};
 
 // The full CRM profile of a member: roles, engagement, family, recent interactions,
 // milestones, notes the viewer may see, timeline and tags. Never the password hash.
@@ -43,10 +45,20 @@ export async function getMemberDetails(id: string, viewer: AuthenticatedUser) {
 
   // Relationships in both directions, flattened and de-duplicated by person.
   const familyMembers = [
-    ...user.familyRelationships.map((rel) => ({ ...rel.relatedUser, relationshipType: rel.relationshipType, isPrimary: true })),
-    ...user.relatedFamilyMembers.map((rel) => ({ ...rel.primaryUser, relationshipType: rel.relationshipType, isPrimary: false })),
+    ...user.familyRelationships.map((rel) => ({
+      ...rel.relatedUser,
+      relationshipType: rel.relationshipType,
+      isPrimary: true,
+    })),
+    ...user.relatedFamilyMembers.map((rel) => ({
+      ...rel.primaryUser,
+      relationshipType: rel.relationshipType,
+      isPrimary: false,
+    })),
   ];
-  const uniqueFamilyMembers = familyMembers.filter((member, index) => index === familyMembers.findIndex((m) => m.id === member.id));
+  const uniqueFamilyMembers = familyMembers.filter(
+    (member, index) => index === familyMembers.findIndex((m) => m.id === member.id),
+  );
 
   return { ...user, familyMembers: uniqueFamilyMembers };
 }
@@ -78,7 +90,11 @@ export function listMilestones(userId: string, query: z.output<typeof milestones
   });
 }
 
-export function listNotes(userId: string, viewer: AuthenticatedUser, query: z.output<typeof notesQuery>) {
+export function listNotes(
+  userId: string,
+  viewer: AuthenticatedUser,
+  query: z.output<typeof notesQuery>,
+) {
   return prisma.memberNote.findMany({
     where: { AND: [{ userId, noteType: query.noteType }, visibleNotes(viewer)] },
     orderBy: { createdAt: 'desc' },

@@ -37,7 +37,7 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'long',
-      day: 'numeric'
+      day: 'numeric',
     });
   };
 
@@ -48,7 +48,7 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
     });
   };
 
@@ -74,24 +74,24 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
     const birthDate = new Date(dateOfBirth);
     let age = today.getFullYear() - birthDate.getFullYear();
     const monthDiff = today.getMonth() - birthDate.getMonth();
-    
+
     if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
       age--;
     }
-    
+
     return age;
   };
 
   const getMembershipDuration = (membershipDate?: string): string => {
     if (!membershipDate) return 'Unknown';
-    
+
     const startDate = new Date(membershipDate);
     const today = new Date();
     const diffTime = Math.abs(today.getTime() - startDate.getTime());
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     const years = Math.floor(diffDays / 365);
     const months = Math.floor((diffDays % 365) / 30);
-    
+
     if (years > 0) {
       return `${years} year${years > 1 ? 's' : ''}, ${months} month${months > 1 ? 's' : ''}`;
     } else {
@@ -101,45 +101,69 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
 
   const getInteractionIcon = (type: string): string => {
     switch (type) {
-      case 'email_sent': return '📧';
-      case 'email_opened': return '📬';
-      case 'sms_sent': return '📱';
-      case 'sms_replied': return '💬';
-      case 'call_made': return '📞';
-      case 'visit_logged': return '🏠';
-      case 'note_added': return '📝';
-      default: return '📋';
+      case 'email_sent':
+        return '📧';
+      case 'email_opened':
+        return '📬';
+      case 'sms_sent':
+        return '📱';
+      case 'sms_replied':
+        return '💬';
+      case 'call_made':
+        return '📞';
+      case 'visit_logged':
+        return '🏠';
+      case 'note_added':
+        return '📝';
+      default:
+        return '📋';
     }
   };
 
   const getMilestoneIcon = (type: string): string => {
     switch (type) {
-      case 'baptism': return '✝️';
-      case 'confirmation': return '🙏';
-      case 'wedding': return '💒';
-      case 'first_volunteer': return '🤝';
-      case 'leadership_role': return '👑';
-      case 'anniversary': return '🎉';
-      default: return '🏆';
+      case 'baptism':
+        return '✝️';
+      case 'confirmation':
+        return '🙏';
+      case 'wedding':
+        return '💒';
+      case 'first_volunteer':
+        return '🤝';
+      case 'leadership_role':
+        return '👑';
+      case 'anniversary':
+        return '🎉';
+      default:
+        return '🏆';
     }
   };
 
   const getPriorityColor = (priority: string): string => {
     switch (priority) {
-      case 'urgent': return 'bg-red-100 text-red-800';
-      case 'high': return 'bg-orange-100 text-orange-800';
-      case 'normal': return 'bg-blue-100 text-blue-800';
-      case 'low': return 'bg-gray-100 text-gray-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'urgent':
+        return 'bg-red-100 text-red-800';
+      case 'high':
+        return 'bg-orange-100 text-orange-800';
+      case 'normal':
+        return 'bg-blue-100 text-blue-800';
+      case 'low':
+        return 'bg-gray-100 text-gray-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
     }
   };
 
   const getImpactColor = (impact: string): string => {
     switch (impact) {
-      case 'high': return 'bg-purple-100 text-purple-800';
-      case 'medium': return 'bg-blue-100 text-blue-800';
-      case 'low': return 'bg-gray-100 text-gray-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'high':
+        return 'bg-purple-100 text-purple-800';
+      case 'medium':
+        return 'bg-blue-100 text-blue-800';
+      case 'low':
+        return 'bg-gray-100 text-gray-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
     }
   };
 
@@ -181,7 +205,7 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
     { id: 'family', label: 'Family', icon: '👨‍👩‍👧‍👦' },
     { id: 'interactions', label: 'Interactions', icon: '💬' },
     { id: 'milestones', label: 'Milestones', icon: '🏆' },
-    { id: 'activity', label: 'Activity & Notes', icon: '📊' }
+    { id: 'activity', label: 'Activity & Notes', icon: '📊' },
   ];
 
   return (
@@ -192,31 +216,49 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
           <div className="flex items-center space-x-4">
             <div className="w-16 h-16 bg-gray-300 rounded-full flex items-center justify-center">
               {member.avatar ? (
-                <img src={member.avatar} alt={member.name} className="w-16 h-16 rounded-full object-cover" />
+                <img
+                  src={member.avatar}
+                  alt={member.name}
+                  className="w-16 h-16 rounded-full object-cover"
+                />
               ) : (
                 <span className="text-2xl text-gray-600">
-                  {member.name.split(' ').map(n => n[0]).join('').toUpperCase()}
+                  {member.name
+                    .split(' ')
+                    .map((n) => n[0])
+                    .join('')
+                    .toUpperCase()}
                 </span>
               )}
             </div>
             <div>
               <h2 className="text-2xl font-bold text-gray-900">{member.name}</h2>
               <div className="flex items-center space-x-4 mt-1">
-                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                  member.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                }`}>
+                <span
+                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                    member.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                  }`}
+                >
                   {member.isActive ? 'Active' : 'Inactive'}
                 </span>
-                <span className="text-sm text-gray-500">Member since {formatDate(member.membershipDate)}</span>
+                <span className="text-sm text-gray-500">
+                  Member since {formatDate(member.membershipDate)}
+                </span>
                 {member.dateOfBirth && (
-                  <span className="text-sm text-gray-500">Age {calculateAge(member.dateOfBirth)}</span>
+                  <span className="text-sm text-gray-500">
+                    Age {calculateAge(member.dateOfBirth)}
+                  </span>
                 )}
                 {member.engagement && (
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                    member.engagement.riskLevel === 'high' ? 'bg-red-100 text-red-800' :
-                    member.engagement.riskLevel === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                    'bg-green-100 text-green-800'
-                  }`}>
+                  <span
+                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                      member.engagement.riskLevel === 'high'
+                        ? 'bg-red-100 text-red-800'
+                        : member.engagement.riskLevel === 'medium'
+                          ? 'bg-yellow-100 text-yellow-800'
+                          : 'bg-green-100 text-green-800'
+                    }`}
+                  >
                     {member.engagement.riskLevel} risk
                   </span>
                 )}
@@ -238,7 +280,7 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
               </div>
             </div>
           </div>
-          
+
           <div className="flex items-center space-x-3">
             <button
               onClick={() => onEdit(member)}
@@ -277,13 +319,12 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
 
         {/* Tab Content */}
         <div className="space-y-6">
-          
           {/* Personal Info Tab */}
           {activeTab === 'personal' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-4">
                 <h3 className="text-lg font-medium text-gray-900">Basic Information</h3>
-                
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700">First Name</label>
@@ -294,45 +335,55 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
                     <p className="text-sm text-gray-900">{member.lastName || 'Not set'}</p>
                   </div>
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Date of Birth</label>
                   <p className="text-sm text-gray-900">{formatDate(member.dateOfBirth)}</p>
                 </div>
-                
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Gender</label>
-                    <p className="text-sm text-gray-900 capitalize">{member.gender || 'Not specified'}</p>
+                    <p className="text-sm text-gray-900 capitalize">
+                      {member.gender || 'Not specified'}
+                    </p>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Marital Status</label>
-                    <p className="text-sm text-gray-900 capitalize">{member.maritalStatus || 'Not specified'}</p>
+                    <label className="block text-sm font-medium text-gray-700">
+                      Marital Status
+                    </label>
+                    <p className="text-sm text-gray-900 capitalize">
+                      {member.maritalStatus || 'Not specified'}
+                    </p>
                   </div>
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Occupation</label>
                   <p className="text-sm text-gray-900">{member.occupation || 'Not specified'}</p>
                 </div>
               </div>
-              
+
               <div className="space-y-4">
                 <h3 className="text-lg font-medium text-gray-900">Emergency Contact</h3>
-                
+
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Emergency Contact Name</label>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Emergency Contact Name
+                  </label>
                   <p className="text-sm text-gray-900">{member.emergencyContact || 'Not set'}</p>
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Emergency Phone</label>
                   <p className="text-sm text-gray-900">{member.emergencyPhone || 'Not set'}</p>
                 </div>
-                
+
                 <div className="mt-6">
                   <h3 className="text-lg font-medium text-gray-900">Bio</h3>
-                  <p className="text-sm text-gray-900 whitespace-pre-wrap">{member.bio || 'No bio available'}</p>
+                  <p className="text-sm text-gray-900 whitespace-pre-wrap">
+                    {member.bio || 'No bio available'}
+                  </p>
                 </div>
               </div>
             </div>
@@ -343,42 +394,54 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-4">
                 <h3 className="text-lg font-medium text-gray-900">Membership Information</h3>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Membership Type</label>
-                  <p className="text-sm text-gray-900 capitalize">{member.membershipType || 'Not specified'}</p>
+                  <p className="text-sm text-gray-900 capitalize">
+                    {member.membershipType || 'Not specified'}
+                  </p>
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Membership Date</label>
                   <p className="text-sm text-gray-900">{formatDate(member.membershipDate)}</p>
-                  <p className="text-xs text-gray-500">Duration: {getMembershipDuration(member.membershipDate)}</p>
+                  <p className="text-xs text-gray-500">
+                    Duration: {getMembershipDuration(member.membershipDate)}
+                  </p>
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Baptism Date</label>
                   <p className="text-sm text-gray-900">{formatDate(member.baptismDate)}</p>
                 </div>
-                
+
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Confirmation Date</label>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Confirmation Date
+                  </label>
                   <p className="text-sm text-gray-900">{formatDate(member.confirmationDate)}</p>
                 </div>
               </div>
-              
+
               <div className="space-y-4">
                 <h3 className="text-lg font-medium text-gray-900">Background</h3>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Previous Church</label>
-                  <p className="text-sm text-gray-900">{member.previousChurch || 'Not specified'}</p>
+                  <p className="text-sm text-gray-900">
+                    {member.previousChurch || 'Not specified'}
+                  </p>
                 </div>
-                
+
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">How Did You Hear About Us?</label>
-                  <p className="text-sm text-gray-900">{member.howHeardAboutUs || 'Not specified'}</p>
+                  <label className="block text-sm font-medium text-gray-700">
+                    How Did You Hear About Us?
+                  </label>
+                  <p className="text-sm text-gray-900">
+                    {member.howHeardAboutUs || 'Not specified'}
+                  </p>
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Last Attended</label>
                   <p className="text-sm text-gray-900">{formatDate(member.lastAttended)}</p>
@@ -389,12 +452,20 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
                     <h3 className="text-lg font-medium text-gray-900">Engagement Analytics</h3>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700">Overall Score</label>
-                        <p className="text-sm text-gray-900">{member.engagement.engagementScore.toFixed(1)}/100</p>
+                        <label className="block text-sm font-medium text-gray-700">
+                          Overall Score
+                        </label>
+                        <p className="text-sm text-gray-900">
+                          {member.engagement.engagementScore.toFixed(1)}/100
+                        </p>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700">Last Activity</label>
-                        <p className="text-sm text-gray-900">{formatDate(member.engagement.lastActivity)}</p>
+                        <label className="block text-sm font-medium text-gray-700">
+                          Last Activity
+                        </label>
+                        <p className="text-sm text-gray-900">
+                          {formatDate(member.engagement.lastActivity)}
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -408,44 +479,50 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-4">
                 <h3 className="text-lg font-medium text-gray-900">Contact Information</h3>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Email</label>
                   <p className="text-sm text-gray-900">{member.email}</p>
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Phone</label>
                   <p className="text-sm text-gray-900">{member.phone || 'Not provided'}</p>
                 </div>
-                
+
                 <div className="mt-6">
                   <h3 className="text-lg font-medium text-gray-900">Communication Preferences</h3>
                   <div className="space-y-2 mt-2">
                     <div className="flex items-center">
-                      <div className={`w-3 h-3 rounded-full mr-3 ${member.emailOptIn ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                      <div
+                        className={`w-3 h-3 rounded-full mr-3 ${member.emailOptIn ? 'bg-green-500' : 'bg-red-500'}`}
+                      ></div>
                       <span className="text-sm text-gray-700">Email Communications</span>
                     </div>
                     <div className="flex items-center">
-                      <div className={`w-3 h-3 rounded-full mr-3 ${member.smsOptIn ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                      <div
+                        className={`w-3 h-3 rounded-full mr-3 ${member.smsOptIn ? 'bg-green-500' : 'bg-red-500'}`}
+                      ></div>
                       <span className="text-sm text-gray-700">SMS/Text Messages</span>
                     </div>
                     <div className="flex items-center">
-                      <div className={`w-3 h-3 rounded-full mr-3 ${member.mailOptIn ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                      <div
+                        className={`w-3 h-3 rounded-full mr-3 ${member.mailOptIn ? 'bg-green-500' : 'bg-red-500'}`}
+                      ></div>
                       <span className="text-sm text-gray-700">Physical Mail</span>
                     </div>
                   </div>
                 </div>
               </div>
-              
+
               <div className="space-y-4">
                 <h3 className="text-lg font-medium text-gray-900">Address</h3>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Street Address</label>
                   <p className="text-sm text-gray-900">{member.address || 'Not provided'}</p>
                 </div>
-                
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700">City</label>
@@ -456,7 +533,7 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
                     <p className="text-sm text-gray-900">{member.state || 'Not provided'}</p>
                   </div>
                 </div>
-                
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700">ZIP Code</label>
@@ -480,11 +557,14 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
                   {member.timelineActivities?.length || 0} activities
                 </span>
               </div>
-              
+
               {member.timelineActivities && member.timelineActivities.length > 0 ? (
                 <div className="space-y-4">
                   {member.timelineActivities.map((activity) => (
-                    <div key={activity.id} className="flex items-start space-x-4 p-4 bg-gray-50 rounded-lg">
+                    <div
+                      key={activity.id}
+                      className="flex items-start space-x-4 p-4 bg-gray-50 rounded-lg"
+                    >
                       <div className="shrink-0">
                         <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
                           <span className="text-sm font-medium text-blue-600">
@@ -495,16 +575,22 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between">
                           <h4 className="text-sm font-medium text-gray-900">{activity.title}</h4>
-                          <span className="text-xs text-gray-500">{formatDate(activity.activityDate)}</span>
+                          <span className="text-xs text-gray-500">
+                            {formatDate(activity.activityDate)}
+                          </span>
                         </div>
                         {activity.description && (
                           <p className="text-sm text-gray-600 mt-1">{activity.description}</p>
                         )}
                         <div className="flex items-center space-x-2 mt-2">
-                          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getImpactColor(activity.impact)}`}>
+                          <span
+                            className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getImpactColor(activity.impact)}`}
+                          >
                             {activity.impact} impact
                           </span>
-                          <span className="text-xs text-gray-500 capitalize">{activity.category}</span>
+                          <span className="text-xs text-gray-500 capitalize">
+                            {activity.category}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -527,7 +613,7 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
                   {member.familyMembers?.length || 0} family members
                 </span>
               </div>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-4">
                   <h4 className="text-md font-medium text-gray-900">Family Status</h4>
@@ -537,36 +623,55 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
                       {member.isHeadOfFamily ? 'Head of Family' : 'Family Member'}
                     </p>
                   </div>
-                  
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Family ID</label>
-                    <p className="text-sm text-gray-900">{member.familyId || 'Not assigned to a family'}</p>
+                    <p className="text-sm text-gray-900">
+                      {member.familyId || 'Not assigned to a family'}
+                    </p>
                   </div>
                 </div>
-                
+
                 <div className="space-y-4">
                   <h4 className="text-md font-medium text-gray-900">Family Members</h4>
                   {member.familyMembers && member.familyMembers.length > 0 ? (
                     <div className="space-y-3">
                       {member.familyMembers.map((familyMember) => (
-                        <div key={familyMember.id} className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                        <div
+                          key={familyMember.id}
+                          className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg"
+                        >
                           <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center">
                             {familyMember.avatar ? (
-                              <img src={familyMember.avatar} alt={familyMember.name} className="w-8 h-8 rounded-full object-cover" />
+                              <img
+                                src={familyMember.avatar}
+                                alt={familyMember.name}
+                                className="w-8 h-8 rounded-full object-cover"
+                              />
                             ) : (
                               <span className="text-xs text-gray-600">
-                                {familyMember.name.split(' ').map(n => n[0]).join('').toUpperCase()}
+                                {familyMember.name
+                                  .split(' ')
+                                  .map((n) => n[0])
+                                  .join('')
+                                  .toUpperCase()}
                               </span>
                             )}
                           </div>
                           <div className="flex-1">
                             <p className="text-sm font-medium text-gray-900">{familyMember.name}</p>
-                            <p className="text-xs text-gray-500 capitalize">{familyMember.relationshipType}</p>
+                            <p className="text-xs text-gray-500 capitalize">
+                              {familyMember.relationshipType}
+                            </p>
                           </div>
                           <div className="flex items-center space-x-2">
-                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                              familyMember.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                            }`}>
+                            <span
+                              className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                                familyMember.isActive
+                                  ? 'bg-green-100 text-green-800'
+                                  : 'bg-red-100 text-red-800'
+                              }`}
+                            >
                               {familyMember.isActive ? 'Active' : 'Inactive'}
                             </span>
                           </div>
@@ -590,14 +695,16 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
                   {member.interactions?.length || 0} interactions
                 </span>
               </div>
-              
+
               {member.interactions && member.interactions.length > 0 ? (
                 <div className="space-y-4">
                   {member.interactions.map((interaction) => (
                     <div key={interaction.id} className="border border-gray-200 rounded-lg p-4">
                       <div className="flex items-start justify-between">
                         <div className="flex items-center space-x-3">
-                          <div className="text-2xl">{getInteractionIcon(interaction.interactionType)}</div>
+                          <div className="text-2xl">
+                            {getInteractionIcon(interaction.interactionType)}
+                          </div>
                           <div>
                             <h4 className="text-sm font-medium text-gray-900">
                               {interaction.subject || interaction.interactionType.replace('_', ' ')}
@@ -608,7 +715,9 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
                           </div>
                         </div>
                         <div className="flex items-center space-x-2">
-                          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getPriorityColor(interaction.priority)}`}>
+                          <span
+                            className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getPriorityColor(interaction.priority)}`}
+                          >
                             {interaction.priority}
                           </span>
                           {interaction.responseRequired && (
@@ -623,7 +732,9 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
                       )}
                       {interaction.category && (
                         <div className="mt-2">
-                          <span className="text-xs text-gray-500 capitalize">{interaction.category}</span>
+                          <span className="text-xs text-gray-500 capitalize">
+                            {interaction.category}
+                          </span>
                         </div>
                       )}
                     </div>
@@ -646,7 +757,7 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
                   {member.milestones?.length || 0} milestones
                 </span>
               </div>
-              
+
               {member.milestones && member.milestones.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {member.milestones.map((milestone) => (
@@ -656,16 +767,22 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
                         <div className="flex-1">
                           <div className="flex items-center justify-between">
                             <h4 className="text-sm font-medium text-gray-900">{milestone.title}</h4>
-                            <span className="text-xs text-gray-500">{formatDate(milestone.achievedDate)}</span>
+                            <span className="text-xs text-gray-500">
+                              {formatDate(milestone.achievedDate)}
+                            </span>
                           </div>
                           {milestone.description && (
                             <p className="text-sm text-gray-600 mt-1">{milestone.description}</p>
                           )}
                           <div className="flex items-center space-x-2 mt-2">
-                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getImpactColor(milestone.impact)}`}>
+                            <span
+                              className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getImpactColor(milestone.impact)}`}
+                            >
                               {milestone.impact} impact
                             </span>
-                            <span className="text-xs text-gray-500 capitalize">{milestone.category}</span>
+                            <span className="text-xs text-gray-500 capitalize">
+                              {milestone.category}
+                            </span>
                             {milestone.celebrated && (
                               <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
                                 Celebrated
@@ -691,9 +808,11 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-4">
                   <h3 className="text-lg font-medium text-gray-900">Skills & Interests</h3>
-                  
+
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Volunteer Skills</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Volunteer Skills
+                    </label>
                     <div className="flex flex-wrap gap-2">
                       {parseSkills(member.volunteerSkills).length > 0 ? (
                         parseSkills(member.volunteerSkills).map((skill, index) => (
@@ -709,9 +828,11 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
                       )}
                     </div>
                   </div>
-                  
+
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Interests</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Interests
+                    </label>
                     <div className="flex flex-wrap gap-2">
                       {parseInterests(member.interests).length > 0 ? (
                         parseInterests(member.interests).map((interest, index) => (
@@ -728,7 +849,7 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
                     </div>
                   </div>
                 </div>
-                
+
                 <div className="space-y-4">
                   <h3 className="text-lg font-medium text-gray-900">Notes</h3>
                   <div className="bg-gray-50 p-4 rounded-lg">
@@ -738,7 +859,7 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
                   </div>
                 </div>
               </div>
-              
+
               {member.memberNotes && member.memberNotes.length > 0 && (
                 <div className="border-t border-gray-200 pt-6">
                   <h3 className="text-lg font-medium text-gray-900 mb-4">Staff Notes</h3>
@@ -749,7 +870,9 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
                           <h4 className="text-sm font-medium text-gray-900">
                             {note.title || 'Note'}
                           </h4>
-                          <span className="text-xs text-gray-500">{formatDateTime(note.createdAt)}</span>
+                          <span className="text-xs text-gray-500">
+                            {formatDateTime(note.createdAt)}
+                          </span>
                         </div>
                         <p className="text-sm text-gray-600">{note.content}</p>
                         <div className="flex items-center space-x-2 mt-2">
@@ -770,7 +893,7 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
                   </div>
                 </div>
               )}
-              
+
               <div className="border-t border-gray-200 pt-6">
                 <h3 className="text-lg font-medium text-gray-900 mb-4">Account Information</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">

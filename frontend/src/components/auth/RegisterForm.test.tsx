@@ -4,10 +4,16 @@ import RegisterForm from '@/components/auth/RegisterForm';
 import { ApiError } from '@/lib/api/client';
 import { render, settle } from '@/test/render';
 
-const authApi = vi.hoisted(() => ({ me: vi.fn(), login: vi.fn(), logout: vi.fn(), register: vi.fn() }));
+const authApi = vi.hoisted(() => ({
+  me: vi.fn(),
+  login: vi.fn(),
+  logout: vi.fn(),
+  register: vi.fn(),
+}));
 vi.mock('@/lib/api/auth', () => authApi);
 
-const PENDING = 'Registration received. An administrator will review your account before you can sign in.';
+const PENDING =
+  'Registration received. An administrator will review your account before you can sign in.';
 
 function fill(name: string, email: string, password: string) {
   fireEvent.change(screen.getByLabelText('Full name'), { target: { value: name } });

@@ -18,7 +18,10 @@ function matchesEmailLocalPart(password: string, email: string): boolean {
 }
 
 // Refinement for bodies that carry both `email` and `password` (register, staff create).
-export function passwordNotEmail(body: { email: string; password: string }, ctx: z.RefinementCtx): void {
+export function passwordNotEmail(
+  body: { email: string; password: string },
+  ctx: z.RefinementCtx,
+): void {
   if (matchesEmailLocalPart(body.password, body.email)) {
     ctx.addIssue({ code: 'custom', path: ['password'], message: MATCHES_EMAIL });
   }

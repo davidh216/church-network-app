@@ -13,10 +13,10 @@ interface VideoPlayerProps {
   onSelect?: (index: number) => void;
 }
 
-export default function VideoPlayer({ 
-  media, 
-  onClose, 
-  playlist = [], 
+export default function VideoPlayer({
+  media,
+  onClose,
+  playlist = [],
   currentIndex = 0,
   onPlayNext,
   onPlayPrevious,
@@ -32,9 +32,9 @@ export default function VideoPlayer({
   const getEmbedUrl = useCallback((url: string): string => {
     const patterns = [
       /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
-      /youtube\.com\/watch\?.*v=([^&\n?#]+)/
+      /youtube\.com\/watch\?.*v=([^&\n?#]+)/,
     ];
-    
+
     for (const pattern of patterns) {
       const match = url.match(pattern);
       if (match) {
@@ -44,12 +44,12 @@ export default function VideoPlayer({
           modestbranding: '1',
           playsinline: '1',
           enablejsapi: '1',
-          origin: window.location.origin
+          origin: window.location.origin,
         });
         return `https://www.youtube.com/embed/${match[1]}?${params.toString()}`;
       }
     }
-    
+
     return url;
   }, []);
 
@@ -59,41 +59,44 @@ export default function VideoPlayer({
     }
   };
 
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    switch (e.key) {
-      case 'Escape':
-        if (isFullscreen) {
-          exitFullscreen();
-        } else {
-          onClose();
-        }
-        break;
-      case 'f':
-      case 'F':
-        toggleFullscreen();
-        break;
-      case ' ':
-        e.preventDefault();
-        togglePlayPause();
-        break;
-      case 'ArrowRight':
-        if (onPlayNext && currentIndex < playlist.length - 1) {
-          onPlayNext();
-        }
-        break;
-      case 'ArrowLeft':
-        if (onPlayPrevious && currentIndex > 0) {
-          onPlayPrevious();
-        }
-        break;
-    }
-  }, [isFullscreen, onClose, onPlayNext, onPlayPrevious, currentIndex, playlist.length]);
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      switch (e.key) {
+        case 'Escape':
+          if (isFullscreen) {
+            exitFullscreen();
+          } else {
+            onClose();
+          }
+          break;
+        case 'f':
+        case 'F':
+          toggleFullscreen();
+          break;
+        case ' ':
+          e.preventDefault();
+          togglePlayPause();
+          break;
+        case 'ArrowRight':
+          if (onPlayNext && currentIndex < playlist.length - 1) {
+            onPlayNext();
+          }
+          break;
+        case 'ArrowLeft':
+          if (onPlayPrevious && currentIndex > 0) {
+            onPlayPrevious();
+          }
+          break;
+      }
+    },
+    [isFullscreen, onClose, onPlayNext, onPlayPrevious, currentIndex, playlist.length],
+  );
 
   const togglePlayPause = () => {
     if (iframeRef.current) {
       iframeRef.current.contentWindow?.postMessage(
         '{"event":"command","func":"pauseVideo","args":""}',
-        '*'
+        '*',
       );
     }
   };
@@ -128,7 +131,7 @@ export default function VideoPlayer({
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
-      day: 'numeric'
+      day: 'numeric',
     });
   };
 
@@ -142,13 +145,13 @@ export default function VideoPlayer({
 
   useEffect(() => {
     document.addEventListener('keydown', handleKeyDown);
-    
+
     const handleFullscreenChange = () => {
       setIsFullscreen(!!document.fullscreenElement);
     };
-    
+
     document.addEventListener('fullscreenchange', handleFullscreenChange);
-    
+
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
@@ -162,7 +165,7 @@ export default function VideoPlayer({
   if (!media) return null;
 
   return (
-    <div 
+    <div
       ref={playerRef}
       className={`fixed inset-0 bg-black z-50 flex items-center justify-center video-player-modal ${
         isFullscreen ? 'p-0' : 'p-4'
@@ -170,37 +173,35 @@ export default function VideoPlayer({
       onClick={handleBackdropClick}
       onMouseMove={handleMouseMove}
     >
-      <div className={`bg-black relative w-full h-full flex ${
-        isFullscreen ? '' : 'max-w-7xl max-h-[90vh] rounded-lg overflow-hidden'
-      }`}>
-        
+      <div
+        className={`bg-black relative w-full h-full flex ${
+          isFullscreen ? '' : 'max-w-7xl max-h-[90vh] rounded-lg overflow-hidden'
+        }`}
+      >
         {/* Main Video Area */}
         <div className="flex-1 relative">
           {/* Custom Controls Overlay */}
-          <div className={`absolute inset-0 z-10 transition-opacity duration-300 ${
-            showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
-          }`}>
-            
+          <div
+            className={`absolute inset-0 z-10 transition-opacity duration-300 ${
+              showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
+            }`}
+          >
             {/* Top Bar */}
             <div className="absolute top-0 left-0 right-0 bg-gradient-to-b from-black/70 to-transparent p-4">
               <div className="flex justify-between items-start">
                 <div className="flex-1 mr-4">
-                  <h2 className="text-white text-lg font-semibold mb-1 truncate">
-                    {media.title}
-                  </h2>
+                  <h2 className="text-white text-lg font-semibold mb-1 truncate">{media.title}</h2>
                   <div className="flex items-center space-x-4 text-sm text-gray-300">
-                    {media.uploadedBy && (
-                      <span>By {media.uploadedBy.name}</span>
-                    )}
-                    {media.createdAt && (
-                      <span>{formatDate(media.createdAt)}</span>
-                    )}
+                    {media.uploadedBy && <span>By {media.uploadedBy.name}</span>}
+                    {media.createdAt && <span>{formatDate(media.createdAt)}</span>}
                     {playlist.length > 1 && (
-                      <span>{currentIndex + 1} of {playlist.length}</span>
+                      <span>
+                        {currentIndex + 1} of {playlist.length}
+                      </span>
                     )}
                   </div>
                 </div>
-                
+
                 <div className="flex items-center space-x-2">
                   {/* Playlist Toggle */}
                   {playlist.length > 1 && (
@@ -210,12 +211,12 @@ export default function VideoPlayer({
                       title="Toggle Playlist"
                     >
                       <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h6a1 1 0 110 2H4a1 1 0 01-1-1zM3 16a1 1 0 011-1h6a1 1 0 110 2H4a1 1 0 01-1-1z"/>
-                        <path d="M13 8.5a.5.5 0 01.5-.5h3a.5.5 0 01.5.5v7a.5.5 0 01-.5.5h-3a.5.5 0 01-.5-.5v-7z"/>
+                        <path d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h6a1 1 0 110 2H4a1 1 0 01-1-1zM3 16a1 1 0 011-1h6a1 1 0 110 2H4a1 1 0 01-1-1z" />
+                        <path d="M13 8.5a.5.5 0 01.5-.5h3a.5.5 0 01.5.5v7a.5.5 0 01-.5.5h-3a.5.5 0 01-.5-.5v-7z" />
                       </svg>
                     </button>
                   )}
-                  
+
                   {/* Fullscreen Toggle */}
                   <button
                     onClick={toggleFullscreen}
@@ -224,13 +225,13 @@ export default function VideoPlayer({
                   >
                     <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                       {isFullscreen ? (
-                        <path d="M3 4a1 1 0 011-1h4a1 1 0 110 2H6.414l2.293 2.293a1 1 0 11-1.414 1.414L5 6.414V8a1 1 0 11-2 0V4zM15 4a1 1 0 10-2 0v1.586l-2.293 2.293a1 1 0 101.414 1.414L14.586 7H16a1 1 0 100-2h-1zM5 12a1 1 0 011 1v1.586l2.293-2.293a1 1 0 111.414 1.414L7.414 16H9a1 1 0 110 2H5a1 1 0 01-1-1v-4a1 1 0 011-1zM15 12a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 110-2h1.586l-2.293-2.293a1 1 0 111.414-1.414L13.586 15V13a1 1 0 011-1z"/>
+                        <path d="M3 4a1 1 0 011-1h4a1 1 0 110 2H6.414l2.293 2.293a1 1 0 11-1.414 1.414L5 6.414V8a1 1 0 11-2 0V4zM15 4a1 1 0 10-2 0v1.586l-2.293 2.293a1 1 0 101.414 1.414L14.586 7H16a1 1 0 100-2h-1zM5 12a1 1 0 011 1v1.586l2.293-2.293a1 1 0 111.414 1.414L7.414 16H9a1 1 0 110 2H5a1 1 0 01-1-1v-4a1 1 0 011-1zM15 12a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 110-2h1.586l-2.293-2.293a1 1 0 111.414-1.414L13.586 15V13a1 1 0 011-1z" />
                       ) : (
-                        <path d="M3 4a1 1 0 000 2h1.586l2.293 2.293a1 1 0 001.414-1.414L6 4.586V6a1 1 0 01-2 0V4h2zM13 4a1 1 0 011 1v1.586l2.293-2.293a1 1 0 111.414 1.414L15.414 8H17a1 1 0 110 2h-4a1 1 0 01-1-1V4zM3 12a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H3a1 1 0 01-1-1v-4zm2 1v2h2v-2H5zM13 12a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4a1 1 0 011-1h4z"/>
+                        <path d="M3 4a1 1 0 000 2h1.586l2.293 2.293a1 1 0 001.414-1.414L6 4.586V6a1 1 0 01-2 0V4h2zM13 4a1 1 0 011 1v1.586l2.293-2.293a1 1 0 111.414 1.414L15.414 8H17a1 1 0 110 2h-4a1 1 0 01-1-1V4zM3 12a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H3a1 1 0 01-1-1v-4zm2 1v2h2v-2H5zM13 12a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4a1 1 0 011-1h4z" />
                       )}
                     </svg>
                   </button>
-                  
+
                   {/* Close Button */}
                   <button
                     onClick={onClose}
@@ -238,7 +239,12 @@ export default function VideoPlayer({
                     title="Close (Esc)"
                   >
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M6 18L18 6M6 6l12 12"
+                      />
                     </svg>
                   </button>
                 </div>
@@ -260,10 +266,10 @@ export default function VideoPlayer({
                         title="Previous (←)"
                       >
                         <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                          <path d="M8.445 14.832A1 1 0 0010 14v-2.798l5.445 3.63A1 1 0 0017 14V6a1 1 0 00-1.555-.832L10 8.798V6a1 1 0 00-1.555-.832l-6 4a1 1 0 000 1.664l6 4z"/>
+                          <path d="M8.445 14.832A1 1 0 0010 14v-2.798l5.445 3.63A1 1 0 0017 14V6a1 1 0 00-1.555-.832L10 8.798V6a1 1 0 00-1.555-.832l-6 4a1 1 0 000 1.664l6 4z" />
                         </svg>
                       </button>
-                      
+
                       <button
                         onClick={onPlayNext}
                         disabled={currentIndex === playlist.length - 1}
@@ -271,7 +277,7 @@ export default function VideoPlayer({
                         title="Next (→)"
                       >
                         <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                          <path d="M4.555 5.168A1 1 0 003 6v8a1 1 0 001.555.832L10 11.202V14a1 1 0 001.555.832l6-4a1 1 0 000-1.664l-6-4A1 1 0 0010 6v2.798L4.555 5.168z"/>
+                          <path d="M4.555 5.168A1 1 0 003 6v8a1 1 0 001.555.832L10 11.202V14a1 1 0 001.555.832l6-4a1 1 0 000-1.664l-6-4A1 1 0 0010 6v2.798L4.555 5.168z" />
                         </svg>
                       </button>
                     </>
@@ -289,8 +295,8 @@ export default function VideoPlayer({
                     title="Watch on YouTube"
                   >
                     <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                      <path d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z"/>
-                      <path d="M5 5a2 2 0 00-2 2v6a2 2 0 002 2h6a2 2 0 002-2v-2a1 1 0 10-2 0v2H5V7h2a1 1 0 000-2H5z"/>
+                      <path d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z" />
+                      <path d="M5 5a2 2 0 00-2 2v6a2 2 0 002 2h6a2 2 0 002-2v-2a1 1 0 10-2 0v2H5V7h2a1 1 0 000-2H5z" />
                     </svg>
                   </a>
                 </div>
@@ -310,12 +316,7 @@ export default function VideoPlayer({
               loading="eager"
             />
           ) : (
-            <video 
-              controls 
-              className="w-full h-full object-contain"
-              preload="metadata"
-              autoPlay
-            >
+            <video controls className="w-full h-full object-contain" preload="metadata" autoPlay>
               <source src={media.url} />
               Your browser does not support the video tag.
             </video>
@@ -324,9 +325,11 @@ export default function VideoPlayer({
 
         {/* Playlist Sidebar */}
         {showPlaylist && playlist.length > 1 && (
-          <div className={`bg-gray-900 text-white overflow-y-auto playlist-scrollbar ${
-            isFullscreen ? 'w-80' : 'w-72'
-          }`}>
+          <div
+            className={`bg-gray-900 text-white overflow-y-auto playlist-scrollbar ${
+              isFullscreen ? 'w-80' : 'w-72'
+            }`}
+          >
             <div className="p-4 border-b border-gray-700">
               <div className="flex justify-between items-center">
                 <h3 className="font-semibold">Playlist ({playlist.length})</h3>
@@ -335,7 +338,12 @@ export default function VideoPlayer({
                   className="p-1 hover:bg-gray-700 rounded"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
                   </svg>
                 </button>
               </div>
@@ -356,32 +364,34 @@ export default function VideoPlayer({
                   <div className="flex items-start space-x-3">
                     <div className="text-sm text-gray-400 mt-1 w-6">
                       {index === currentIndex ? (
-                        <svg className="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 20 20">
-                          <path d="M8 5v10l8-5-8-5z"/>
+                        <svg
+                          className="w-4 h-4 text-red-500"
+                          fill="currentColor"
+                          viewBox="0 0 20 20"
+                        >
+                          <path d="M8 5v10l8-5-8-5z" />
                         </svg>
                       ) : (
                         <span>{index + 1}</span>
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-white truncate">
-                        {item.title}
-                      </p>
+                      <p className="text-sm font-medium text-white truncate">{item.title}</p>
                       {item.uploadedBy && (
-                        <p className="text-xs text-gray-400 mt-1">
-                          {item.uploadedBy.name}
-                        </p>
+                        <p className="text-xs text-gray-400 mt-1">{item.uploadedBy.name}</p>
                       )}
                       {item.tags && (
                         <div className="flex flex-wrap gap-1 mt-2">
-                          {parseTags(item.tags).slice(0, 2).map((tag, tagIndex) => (
-                            <span
-                              key={tagIndex}
-                              className="text-xs bg-gray-700 text-gray-300 px-2 py-1 rounded"
-                            >
-                              {tag}
-                            </span>
-                          ))}
+                          {parseTags(item.tags)
+                            .slice(0, 2)
+                            .map((tag, tagIndex) => (
+                              <span
+                                key={tagIndex}
+                                className="text-xs bg-gray-700 text-gray-300 px-2 py-1 rounded"
+                              >
+                                {tag}
+                              </span>
+                            ))}
                         </div>
                       )}
                     </div>

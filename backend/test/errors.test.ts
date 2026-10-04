@@ -13,7 +13,8 @@ import { requestLogger } from '../src/lib/request-logger';
 import { errorHandler } from '../src/middleware/error-handler';
 import { notFound } from '../src/middleware/not-found';
 
-const known = (code: string) => new Prisma.PrismaClientKnownRequestError(`prisma ${code}`, { code, clientVersion: 'test' });
+const known = (code: string) =>
+  new Prisma.PrismaClientKnownRequestError(`prisma ${code}`, { code, clientVersion: 'test' });
 
 // A minimal app whose only route throws the given error, wired like createApp().
 function throwing(error: unknown) {
@@ -29,12 +30,27 @@ function throwing(error: unknown) {
 
 describe('error handler', () => {
   it.each([
-    ['HttpError', new HttpError(403, 'Nope', 'FORBIDDEN'), 403, { error: 'Nope', code: 'FORBIDDEN' }],
+    [
+      'HttpError',
+      new HttpError(403, 'Nope', 'FORBIDDEN'),
+      403,
+      { error: 'Nope', code: 'FORBIDDEN' },
+    ],
     ['P2025 (record not found)', known('P2025'), 404, { error: 'Not found' }],
     ['P2002 (unique conflict)', known('P2002'), 409, { error: 'Already exists' }],
     ['P2003 (foreign key)', known('P2003'), 400, { error: 'Referenced record does not exist' }],
-    ['JsonWebTokenError', new jwt.JsonWebTokenError('jwt malformed'), 401, { error: 'Invalid token' }],
-    ['TokenExpiredError', new jwt.TokenExpiredError('jwt expired', new Date()), 401, { error: 'Invalid token' }],
+    [
+      'JsonWebTokenError',
+      new jwt.JsonWebTokenError('jwt malformed'),
+      401,
+      { error: 'Invalid token' },
+    ],
+    [
+      'TokenExpiredError',
+      new jwt.TokenExpiredError('jwt expired', new Date()),
+      401,
+      { error: 'Invalid token' },
+    ],
   ])('maps %s', async (_name, error, status, body) => {
     const res = await request(throwing(error)).get('/boom');
     expect(res.status).toBe(status);
@@ -66,7 +82,9 @@ describe('error handler', () => {
     await resetDatabase();
     await createUser({ email: 'errors-admin@errors.test.local', role: 'admin' });
     const token = await login('errors-admin@errors.test.local');
-    const res = await request(app).get('/api/analytics/members/cjld2cjxh0000qzrmn831i7rn/engagement').set(bearer(token));
+    const res = await request(app)
+      .get('/api/analytics/members/cjld2cjxh0000qzrmn831i7rn/engagement')
+      .set(bearer(token));
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: 'Not found' });
     const media = await request(app).get('/api/media/cjld2cjxh0000qzrmn831i7rn').set(bearer(token));
@@ -103,7 +121,9 @@ describe('logger', () => {
     });
     const log = pino({ ...loggerOptions, level: 'info', transport: undefined }, sink);
     log.info({
-      req: { headers: { authorization: 'Bearer SECRET-TOKEN', cookie: 'embrace_session=SECRET-COOKIE' } },
+      req: {
+        headers: { authorization: 'Bearer SECRET-TOKEN', cookie: 'embrace_session=SECRET-COOKIE' },
+      },
       password: 'SECRET-PASSWORD',
       body: { password: 'NESTED-SECRET' },
     });

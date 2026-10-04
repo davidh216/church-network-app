@@ -3,7 +3,14 @@ import { isAdmin, isStaff, requireRole, STAFF } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
 import { HttpError } from '../../lib/http-error';
 import savedSearchRoutes from '../saved-searches/router';
-import { createUserBody, exportQuery, idParams, listUsersQuery, resetPasswordBody, updateUserBody } from './schemas';
+import {
+  createUserBody,
+  exportQuery,
+  idParams,
+  listUsersQuery,
+  resetPasswordBody,
+  updateUserBody,
+} from './schemas';
 import * as users from './service';
 
 const router = express.Router();
@@ -42,9 +49,12 @@ router.get('/:id', validate({ params: idParams }), async (req, res) => {
 router.put('/:id', validate({ params: idParams, body: updateUserBody }), async (req, res) => {
   const requester = req.user!;
   const staff = isStaff(requester);
-  if (!staff && requester.id !== req.params.id) throw new HttpError(403, 'Can only update your own profile');
-  if (req.body.isActive !== undefined && !staff) throw new HttpError(403, 'Only staff can change account status');
-  if (req.body.roleIds !== undefined && !isAdmin(requester)) throw new HttpError(403, 'Only an admin can change roles');
+  if (!staff && requester.id !== req.params.id)
+    throw new HttpError(403, 'Can only update your own profile');
+  if (req.body.isActive !== undefined && !staff)
+    throw new HttpError(403, 'Only staff can change account status');
+  if (req.body.roleIds !== undefined && !isAdmin(requester))
+    throw new HttpError(403, 'Only an admin can change roles');
   res.json({ success: true, user: await users.updateUser(requester, req.params.id, req.body) });
 });
 

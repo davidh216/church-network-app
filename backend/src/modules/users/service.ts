@@ -88,7 +88,10 @@ export function toCsv(rows: ExportRow[]): string {
 
 // Resolves requested role ids (defaulting to `member`). Staff may create members,
 // but only an admin may grant any role other than `member`.
-async function resolveRoleIds(roleIds: string[] | undefined, requesterIsAdmin: boolean): Promise<string[]> {
+async function resolveRoleIds(
+  roleIds: string[] | undefined,
+  requesterIsAdmin: boolean,
+): Promise<string[]> {
   if (!roleIds || roleIds.length === 0) {
     const member = await prisma.role.findUnique({ where: { name: 'member' } });
     return member ? [member.id] : [];
@@ -102,7 +105,10 @@ async function resolveRoleIds(roleIds: string[] | undefined, requesterIsAdmin: b
 }
 
 // Staff create members directly (active by default, roles assigned).
-export async function createUser(requester: AuthenticatedUser, body: z.output<typeof createUserBody>) {
+export async function createUser(
+  requester: AuthenticatedUser,
+  body: z.output<typeof createUserBody>,
+) {
   const email = body.email.toLowerCase();
   if (await prisma.user.findUnique({ where: { email }, select: { id: true } })) {
     throw new HttpError(409, 'A user with this email already exists');
@@ -125,7 +131,10 @@ export async function createUser(requester: AuthenticatedUser, body: z.output<ty
 // `full` (staff or the user themself) returns the staff projection; others get the
 // directory projection, and inactive accounts are hidden from them.
 export async function getUser(id: string, full: boolean) {
-  const user = await prisma.user.findUnique({ where: { id }, select: full ? staffSelect : directorySelect });
+  const user = await prisma.user.findUnique({
+    where: { id },
+    select: full ? staffSelect : directorySelect,
+  });
   if (!user || (!full && !user.isActive)) throw new HttpError(404, 'User not found');
   return user;
 }
@@ -137,7 +146,11 @@ function adminRoleId(user: AuthenticatedUser): string | undefined {
 // The rules that depend on the target account: only admins modify other staff accounts,
 // and an admin cannot deactivate themself or drop their own admin role. The router has
 // already checked who may edit whom and which fields.
-export async function updateUser(requester: AuthenticatedUser, id: string, body: z.output<typeof updateUserBody>) {
+export async function updateUser(
+  requester: AuthenticatedUser,
+  id: string,
+  body: z.output<typeof updateUserBody>,
+) {
   const admin = isAdmin(requester);
   const self = requester.id === id;
 
@@ -149,7 +162,8 @@ export async function updateUser(requester: AuthenticatedUser, id: string, body:
   if (!admin && !self && target.roles.some((ur) => STAFF_ROLE_NAMES.includes(ur.role.name))) {
     throw new HttpError(403, 'Only an admin can modify staff accounts');
   }
-  if (admin && self && body.isActive === false) throw new HttpError(403, 'You cannot lock yourself out');
+  if (admin && self && body.isActive === false)
+    throw new HttpError(403, 'You cannot lock yourself out');
 
   let roleIds: string[] | undefined;
   if (body.roleIds !== undefined) {
@@ -167,7 +181,9 @@ export async function updateUser(requester: AuthenticatedUser, id: string, body:
       phone: body.phone,
       bio: body.bio,
       isActive: body.isActive,
-      roles: roleIds ? { deleteMany: {}, create: roleIds.map((roleId) => ({ roleId })) } : undefined,
+      roles: roleIds
+        ? { deleteMany: {}, create: roleIds.map((roleId) => ({ roleId })) }
+        : undefined,
     },
     select: staffSelect,
   });
@@ -177,5 +193,8 @@ export async function resetPassword(id: string, newPassword: string): Promise<vo
   const user = await prisma.user.findUnique({ where: { id }, select: { email: true } });
   if (!user) throw new HttpError(404, 'User not found');
   assertPasswordNotEmail(newPassword, user.email, 'newPassword');
-  await prisma.user.update({ where: { id }, data: { password: await bcrypt.hash(newPassword, 10) } });
+  await prisma.user.update({
+    where: { id },
+    data: { password: await bcrypt.hash(newPassword, 10) },
+  });
 }

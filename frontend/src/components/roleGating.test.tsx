@@ -11,7 +11,12 @@ import type { Member } from '@/types/domain';
 const router = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn() }));
 vi.mock('next/navigation', () => ({ useRouter: () => router }));
 
-const authApi = vi.hoisted(() => ({ me: vi.fn(), login: vi.fn(), logout: vi.fn(), register: vi.fn() }));
+const authApi = vi.hoisted(() => ({
+  me: vi.fn(),
+  login: vi.fn(),
+  logout: vi.fn(),
+  register: vi.fn(),
+}));
 vi.mock('@/lib/api/auth', () => authApi);
 
 const usersApi = vi.hoisted(() => ({ listUsers: vi.fn(), exportUsers: vi.fn() }));
@@ -21,8 +26,20 @@ const mediaApi = vi.hoisted(() => ({ listMedia: vi.fn(), createMedia: vi.fn() })
 vi.mock('@/lib/api/media', () => mediaApi);
 
 const directory: Member[] = [
-  { id: 'm1', name: 'Ann Example', isActive: true, createdAt: '2026-01-01T00:00:00.000Z', roles: [] },
-  { id: 'm2', name: 'Bob Example', isActive: true, createdAt: '2026-01-02T00:00:00.000Z', roles: [] },
+  {
+    id: 'm1',
+    name: 'Ann Example',
+    isActive: true,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    roles: [],
+  },
+  {
+    id: 'm2',
+    name: 'Bob Example',
+    isActive: true,
+    createdAt: '2026-01-02T00:00:00.000Z',
+    roles: [],
+  },
 ];
 
 async function renderAs(roleNames: string[], ui: React.ReactNode) {
@@ -36,7 +53,6 @@ beforeEach(() => {
   usersApi.listUsers.mockResolvedValue(directory);
   mediaApi.listMedia.mockResolvedValue([]);
 });
-
 
 const noop = () => undefined;
 
@@ -71,7 +87,9 @@ describe('dashboard shell', () => {
   it('Logout calls the API and routes to /login', async () => {
     authApi.logout.mockResolvedValue(undefined);
     const container = await renderAs(['member'], <Home />);
-    const logout = Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Logout');
+    const logout = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent === 'Logout',
+    );
     await act(async () => logout?.click());
     await settle();
     expect(authApi.logout).toHaveBeenCalledTimes(1);
@@ -102,7 +120,9 @@ describe('LoginForm', () => {
       setValue('#password', 'a long enough password');
     });
     await act(async () => {
-      container.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      container
+        .querySelector('form')!
+        .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     });
     await settle();
     expect(authApi.login).toHaveBeenCalledWith('ann@example.com', 'a long enough password');

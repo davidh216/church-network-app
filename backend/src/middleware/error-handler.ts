@@ -14,18 +14,25 @@ const PRISMA_STATUS: Record<string, { status: number; error: string }> = {
 // A 4xx status carried by an error (body-parser 413/415, http-errors, ...), if any.
 function clientErrorStatus(err: object): number | undefined {
   const { status, statusCode } = err as { status?: unknown; statusCode?: unknown };
-  const code = typeof status === 'number' ? status : typeof statusCode === 'number' ? statusCode : undefined;
+  const code =
+    typeof status === 'number' ? status : typeof statusCode === 'number' ? statusCode : undefined;
   return code !== undefined && code >= 400 && code <= 499 ? code : undefined;
 }
 
 // Every error response follows the shared contract: { error, code?, details? }.
 export const errorHandler: ErrorRequestHandler = (err: unknown, req, res, _next) => {
   if (err instanceof HttpError) {
-    res.status(err.status).json(err.code ? { error: err.message, code: err.code } : { error: err.message });
+    res
+      .status(err.status)
+      .json(err.code ? { error: err.message, code: err.code } : { error: err.message });
     return;
   }
   if (err instanceof z.ZodError) {
-    res.status(400).json({ error: 'Invalid request', code: 'VALIDATION', details: z.flattenError(err).fieldErrors });
+    res.status(400).json({
+      error: 'Invalid request',
+      code: 'VALIDATION',
+      details: z.flattenError(err).fieldErrors,
+    });
     return;
   }
   if (err instanceof Prisma.PrismaClientKnownRequestError) {
@@ -47,7 +54,9 @@ export const errorHandler: ErrorRequestHandler = (err: unknown, req, res, _next)
     const status = clientErrorStatus(err);
     if (status !== undefined) {
       const { expose, message } = err as { expose?: unknown; message?: unknown };
-      res.status(status).json({ error: expose === true && typeof message === 'string' ? message : 'Bad request' });
+      res
+        .status(status)
+        .json({ error: expose === true && typeof message === 'string' ? message : 'Bad request' });
       return;
     }
   }

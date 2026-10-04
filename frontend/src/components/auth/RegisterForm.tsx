@@ -51,7 +51,9 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
     return (
       <div className="max-w-md mx-auto bg-white p-8 rounded-lg shadow-md text-center">
         <h2 className="text-2xl font-bold mb-4">Thanks for registering</h2>
-        <p role="status" className="text-gray-700 mb-6">{submittedMessage}</p>
+        <p role="status" className="text-gray-700 mb-6">
+          {submittedMessage}
+        </p>
         <button type="button" onClick={onSwitchToLogin} className="text-blue-600 font-medium">
           Back to sign in
         </button>
@@ -64,14 +66,19 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
       <h2 className="text-2xl font-bold text-center mb-6">Join Our Church</h2>
 
       {error && (
-        <div role="alert" className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+        <div
+          role="alert"
+          className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded"
+        >
           {error}
         </div>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label htmlFor="register-name" className="sr-only">Full name</label>
+          <label htmlFor="register-name" className="sr-only">
+            Full name
+          </label>
           <input
             id="register-name"
             type="text"
@@ -86,7 +93,9 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
         </div>
 
         <div>
-          <label htmlFor="register-email" className="sr-only">Email</label>
+          <label htmlFor="register-email" className="sr-only">
+            Email
+          </label>
           <input
             id="register-email"
             type="email"
@@ -101,7 +110,9 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
         </div>
 
         <div>
-          <label htmlFor="register-password" className="sr-only">Password</label>
+          <label htmlFor="register-password" className="sr-only">
+            Password
+          </label>
           <input
             id="register-password"
             type="password"

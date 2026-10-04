@@ -3,7 +3,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, UNAUTHENTICATED_EVENT } from '@/lib/api/client';
 import { makeUser } from '@/test/fixtures';
 import { render, settle } from '@/test/render';
-import { AuthProvider, useAuth, useHasRole, useIsStaff, type AuthContextValue } from './AuthProvider';
+import {
+  AuthProvider,
+  useAuth,
+  useHasRole,
+  useIsStaff,
+  type AuthContextValue,
+} from './AuthProvider';
 
 const router = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn() }));
 vi.mock('next/navigation', () => ({ useRouter: () => router }));
@@ -17,7 +23,11 @@ let flags: { staff: boolean; leader: boolean };
 function Probe() {
   auth = useAuth();
   flags = { staff: useIsStaff(), leader: useHasRole('leader') };
-  return <p data-testid="status">{auth.status}:{auth.user?.name ?? 'none'}</p>;
+  return (
+    <p data-testid="status">
+      {auth.status}:{auth.user?.name ?? 'none'}
+    </p>
+  );
 }
 
 async function mount(path = '/') {
@@ -34,7 +44,6 @@ beforeEach(() => {
   vi.resetAllMocks();
   api.logout.mockResolvedValue(undefined);
 });
-
 
 describe('AuthProvider', () => {
   it('starts loading, then becomes authenticated from me()', async () => {

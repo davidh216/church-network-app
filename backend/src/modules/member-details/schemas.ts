@@ -16,8 +16,14 @@ export { idParams };
 export const detailsQuery = z.object({});
 
 export const timelineQuery = z.object({ ...pagination(50) });
-export const interactionsQuery = z.object({ ...pagination(50), category: interactionCategory.optional() });
-export const milestonesQuery = z.object({ ...pagination(20), category: milestoneCategory.optional() });
+export const interactionsQuery = z.object({
+  ...pagination(50),
+  category: interactionCategory.optional(),
+});
+export const milestonesQuery = z.object({
+  ...pagination(20),
+  category: milestoneCategory.optional(),
+});
 export const notesQuery = z.object({ ...pagination(20), noteType: noteType.optional() });
 
 export const addInteractionBody = z.object({

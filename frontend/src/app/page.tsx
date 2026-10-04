@@ -65,9 +65,7 @@ export default function Home() {
                 }}
                 className="text-left hover:opacity-80 transition-opacity"
               >
-                <h1 className="text-3xl font-bold text-gray-900">
-                  Embrace
-                </h1>
+                <h1 className="text-3xl font-bold text-gray-900">Embrace</h1>
               </button>
               <p className="text-gray-600">Welcome back, {user.name}!</p>
             </div>
@@ -76,20 +74,20 @@ export default function Home() {
                 <p className="text-sm font-medium text-gray-900">{user.name}</p>
                 <p className="text-sm text-gray-500">{user.email}</p>
                 <div className="flex flex-wrap gap-1 mt-1">
-                {user.roles && user.roles.length > 0 ? (
-                  user.roles.map((userRole) => (
-                    <span
-                      key={userRole.role.id}
-                      className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
-                    >
-                      {userRole.role.name}
+                  {user.roles && user.roles.length > 0 ? (
+                    user.roles.map((userRole) => (
+                      <span
+                        key={userRole.role.id}
+                        className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+                      >
+                        {userRole.role.name}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                      member
                     </span>
-                  ))
-                ) : (
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                    member
-                  </span>
-                )}
+                  )}
                 </div>
               </div>
               <button
@@ -148,7 +146,7 @@ export default function Home() {
                     >
                       👥 View Members
                     </button>
-                    <button 
+                    <button
                       onClick={() => setShowMedia(true)}
                       className="w-full text-left px-3 py-2 bg-purple-50 hover:bg-purple-100 rounded-md text-sm text-purple-700"
                     >
@@ -168,9 +166,7 @@ export default function Home() {
             </div>
             {/* Welcome Section */}
             <div className="mt-8 bg-white shadow rounded-lg p-6">
-              <h2 className="text-xl font-bold text-gray-900 mb-4">
-                🎉 Welcome to Embrace!
-              </h2>
+              <h2 className="text-xl font-bold text-gray-900 mb-4">🎉 Welcome to Embrace!</h2>
               <p className="text-gray-600 mb-4">
                 You&apos;re successfully logged in! This is your church network platform.
               </p>
@@ -236,7 +232,7 @@ export default function Home() {
               onPlayMedia={(media: MediaItem, playlist: MediaItem[] = []) => {
                 setPlayingMedia(media);
                 setMediaPlaylist(playlist);
-                const index = playlist.findIndex(item => item.id === media.id);
+                const index = playlist.findIndex((item) => item.id === media.id);
                 setCurrentMediaIndex(index >= 0 ? index : 0);
               }}
             />
@@ -292,9 +288,7 @@ export default function Home() {
 
       {/* Member Analytics Dashboard Modal */}
       {canManage && showAnalytics && (
-        <MemberAnalyticsDashboard
-          onClose={() => setShowAnalytics(false)}
-        />
+        <MemberAnalyticsDashboard onClose={() => setShowAnalytics(false)} />
       )}
     </div>
   );

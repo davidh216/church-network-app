@@ -38,7 +38,8 @@ export const authenticate: RequestHandler = async (req, res, next) => {
   // The session cookie first, then `Authorization: Bearer` (tests, scripts, non-browser clients).
   const cookies = req.cookies as Record<string, string | undefined> | undefined;
   const header = req.headers.authorization;
-  const token = cookies?.[SESSION_COOKIE] || (header?.startsWith('Bearer ') ? header.slice(7) : undefined);
+  const token =
+    cookies?.[SESSION_COOKIE] || (header?.startsWith('Bearer ') ? header.slice(7) : undefined);
   if (!token) {
     res.status(401).json({ error: 'Access token required' });
     return;

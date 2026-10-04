@@ -12,7 +12,10 @@ export async function getUser(id: string): Promise<Member> {
 }
 
 export async function createUser(input: CreateUserInput): Promise<Member> {
-  const data = await apiFetch<ApiEnvelope<{ user: Member }>>('/users', { method: 'POST', json: input });
+  const data = await apiFetch<ApiEnvelope<{ user: Member }>>('/users', {
+    method: 'POST',
+    json: input,
+  });
   return data.user;
 }
 

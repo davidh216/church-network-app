@@ -24,7 +24,9 @@ const schema = z.object({
 const parsed = schema.safeParse(process.env);
 if (!parsed.success) {
   // The logger depends on this module, so configuration errors go straight to stderr.
-  process.stderr.write('Invalid environment configuration:\n' + z.prettifyError(parsed.error) + '\n');
+  process.stderr.write(
+    'Invalid environment configuration:\n' + z.prettifyError(parsed.error) + '\n',
+  );
   process.exit(1);
 }
 

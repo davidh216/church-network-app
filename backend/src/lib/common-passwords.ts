@@ -642,7 +642,7 @@ export const COMMON_PASSWORDS: readonly string[] = [
   'ehbyjnthfgbz',
   'drift89094072877',
   'dreamtheater',
-  'don\'tremember',
+  "don'tremember",
   'dnepropetrovsk',
   'dkflbckfdxbr',
   'disksvolumes',

@@ -9,8 +9,11 @@ export async function getAnalytics(): Promise<MemberAnalytics> {
 
 /** Staff only: recomputes engagement scores for every active member. */
 export async function refreshAllEngagement(): Promise<string> {
-  const data = await apiFetch<ApiEnvelope<{ message: string }>>('/analytics/members/engagement/refresh-all', {
-    method: 'POST',
-  });
+  const data = await apiFetch<ApiEnvelope<{ message: string }>>(
+    '/analytics/members/engagement/refresh-all',
+    {
+      method: 'POST',
+    },
+  );
   return data.message;
 }

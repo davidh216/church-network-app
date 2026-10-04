@@ -6,6 +6,11 @@ describe('session cookie in production', () => {
     vi.stubEnv('NODE_ENV', 'production');
     const { sessionCookieOptions, SESSION_COOKIE } = await import('../src/middleware/auth.js');
     expect(SESSION_COOKIE).toBe('embrace_session');
-    expect(sessionCookieOptions()).toEqual({ httpOnly: true, path: '/', sameSite: 'lax', secure: true });
+    expect(sessionCookieOptions()).toEqual({
+      httpOnly: true,
+      path: '/',
+      sameSite: 'lax',
+      secure: true,
+    });
   });
 });

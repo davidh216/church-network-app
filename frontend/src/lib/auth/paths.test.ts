@@ -18,10 +18,17 @@ describe('safeNextPath', () => {
     expect(safeNextPath(input)).toBe(expected);
   });
 
-  it.each([null, undefined, '', 'members', '//evil.example', '/\\evil.example', 'https://evil.example', '/login', '/register?x=1'])(
-    'falls back to / for %s',
-    (input) => {
-      expect(safeNextPath(input)).toBe('/');
-    },
-  );
+  it.each([
+    null,
+    undefined,
+    '',
+    'members',
+    '//evil.example',
+    '/\\evil.example',
+    'https://evil.example',
+    '/login',
+    '/register?x=1',
+  ])('falls back to / for %s', (input) => {
+    expect(safeNextPath(input)).toBe('/');
+  });
 });

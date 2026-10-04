@@ -33,34 +33,47 @@ describe('authentication', () => {
   });
 
   it('self-registration creates an inactive account and returns no token', async () => {
-    const res = await request(app)
-      .post('/api/auth/register')
-      .send({ email: 'New.Person@auth.test.local', password: 'long-enough-pass1', name: 'New Person' });
+    const res = await request(app).post('/api/auth/register').send({
+      email: 'New.Person@auth.test.local',
+      password: 'long-enough-pass1',
+      name: 'New Person',
+    });
     expect(res.status).toBe(201);
     expect(res.body.pendingApproval).toBe(true);
     expect(res.body.token).toBeUndefined();
     expect(res.body.user).toBeUndefined();
     expect(res.headers['set-cookie']).toBeUndefined();
 
-    const stored = await prisma.user.findUnique({ where: { email: 'new.person@auth.test.local' }, include: { roles: { include: { role: true } } } });
+    const stored = await prisma.user.findUnique({
+      where: { email: 'new.person@auth.test.local' },
+      include: { roles: { include: { role: true } } },
+    });
     expect(stored?.isActive).toBe(false);
     expect(stored?.roles.map((r) => r.role.name)).toEqual(['member']);
   });
 
   it('rejects malformed registration bodies', async () => {
-    const res = await request(app).post('/api/auth/register').send({ email: 'not-an-email', password: 'short', name: '' });
+    const res = await request(app)
+      .post('/api/auth/register')
+      .send({ email: 'not-an-email', password: 'short', name: '' });
     expect(res.status).toBe(400);
     expect(res.body.details).toBeDefined();
   });
 
   it('inactive accounts cannot log in', async () => {
-    const res = await request(app).post('/api/auth/login').send({ email: 'new.person@auth.test.local', password: 'long-enough-pass1' });
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({ email: 'new.person@auth.test.local', password: 'long-enough-pass1' });
     expect(res.status).toBe(401);
   });
 
   it('wrong password is rejected with the same message as unknown user', async () => {
-    const bad = await request(app).post('/api/auth/login').send({ email: 'admin@auth.test.local', password: 'nope-nope-nope' });
-    const unknown = await request(app).post('/api/auth/login').send({ email: 'ghost@auth.test.local', password: 'nope-nope-nope' });
+    const bad = await request(app)
+      .post('/api/auth/login')
+      .send({ email: 'admin@auth.test.local', password: 'nope-nope-nope' });
+    const unknown = await request(app)
+      .post('/api/auth/login')
+      .send({ email: 'ghost@auth.test.local', password: 'nope-nope-nope' });
     expect(bad.status).toBe(401);
     expect(unknown.status).toBe(401);
     expect(bad.body.error).toBe(unknown.body.error);
@@ -78,17 +91,28 @@ describe('authentication', () => {
   });
 
   it('login and /me return only the self projection: no password hash, no staff notes', async () => {
-    await prisma.user.update({ where: { email: 'admin@auth.test.local' }, data: { notes: 'STAFF-ONLY pastoral note' } });
-    const loginRes = await request(app).post('/api/auth/login').send({ email: 'admin@auth.test.local', password: 'correct-horse-battery' });
+    await prisma.user.update({
+      where: { email: 'admin@auth.test.local' },
+      data: { notes: 'STAFF-ONLY pastoral note' },
+    });
+    const loginRes = await request(app)
+      .post('/api/auth/login')
+      .send({ email: 'admin@auth.test.local', password: 'correct-horse-battery' });
     expect(loginRes.status).toBe(200);
     expect('password' in loginRes.body.user).toBe(false);
     expect('notes' in loginRes.body.user).toBe(false);
-    const me = await request(app).get('/api/auth/me').set(bearer(sessionToken(loginRes)!));
+    const me = await request(app)
+      .get('/api/auth/me')
+      .set(bearer(sessionToken(loginRes)!));
     expect(me.status).toBe(200);
     expect('password' in me.body.user).toBe(false);
     expect('notes' in me.body.user).toBe(false);
     expect(JSON.stringify(me.body)).not.toContain('STAFF-ONLY');
-    expect(me.body.user).toMatchObject({ email: 'admin@auth.test.local', name: 'admin', isActive: true });
+    expect(me.body.user).toMatchObject({
+      email: 'admin@auth.test.local',
+      name: 'admin',
+      isActive: true,
+    });
     expect(typeof me.body.user.id).toBe('string');
     expect(me.body.user.roles[0].role.name).toBe('admin');
   });

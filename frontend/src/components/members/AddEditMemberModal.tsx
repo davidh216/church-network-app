@@ -14,14 +14,19 @@ interface AddEditMemberModalProps {
   member?: Member | null;
 }
 
-export default function AddEditMemberModal({ isOpen, onClose, onSave, member }: AddEditMemberModalProps) {
+export default function AddEditMemberModal({
+  isOpen,
+  onClose,
+  onSave,
+  member,
+}: AddEditMemberModalProps) {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     phone: '',
     bio: '',
     isActive: true,
-    password: ''
+    password: '',
   });
   const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
@@ -56,9 +61,9 @@ export default function AddEditMemberModal({ isOpen, onClose, onSave, member }: 
           phone: member.phone || '',
           bio: member.bio || '',
           isActive: member.isActive,
-          password: ''
+          password: '',
         });
-        setSelectedRoles(member.roles.map(ur => ur.role.id));
+        setSelectedRoles(member.roles.map((ur) => ur.role.id));
       } else {
         setFormData({
           name: '',
@@ -66,7 +71,7 @@ export default function AddEditMemberModal({ isOpen, onClose, onSave, member }: 
           phone: '',
           bio: '',
           isActive: true,
-          password: ''
+          password: '',
         });
         setSelectedRoles([]);
       }
@@ -116,10 +121,8 @@ export default function AddEditMemberModal({ isOpen, onClose, onSave, member }: 
   };
 
   const handleRoleChange = (roleId: string) => {
-    setSelectedRoles(prev => 
-      prev.includes(roleId)
-        ? prev.filter(id => id !== roleId)
-        : [...prev, roleId]
+    setSelectedRoles((prev) =>
+      prev.includes(roleId) ? prev.filter((id) => id !== roleId) : [...prev, roleId],
     );
   };
 
@@ -148,7 +151,7 @@ export default function AddEditMemberModal({ isOpen, onClose, onSave, member }: 
                 id="member-name"
                 type="text"
                 value={formData.name}
-                onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
                 required
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="John Doe"
@@ -156,14 +159,17 @@ export default function AddEditMemberModal({ isOpen, onClose, onSave, member }: 
             </div>
 
             <div>
-              <label htmlFor="member-email" className="block text-sm font-medium text-gray-700 mb-1">
+              <label
+                htmlFor="member-email"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
                 Email *
               </label>
               <input
                 id="member-email"
                 type="email"
                 value={formData.email}
-                onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+                onChange={(e) => setFormData((prev) => ({ ...prev, email: e.target.value }))}
                 required
                 disabled={isEditing} // Can't change email when editing
                 className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
@@ -175,14 +181,17 @@ export default function AddEditMemberModal({ isOpen, onClose, onSave, member }: 
 
             {!isEditing && (
               <div>
-                <label htmlFor="member-password" className="block text-sm font-medium text-gray-700 mb-1">
+                <label
+                  htmlFor="member-password"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
                   Password *
                 </label>
                 <input
                   id="member-password"
                   type="password"
                   value={formData.password}
-                  onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, password: e.target.value }))}
                   required
                   minLength={12}
                   maxLength={128}
@@ -193,14 +202,17 @@ export default function AddEditMemberModal({ isOpen, onClose, onSave, member }: 
             )}
 
             <div>
-              <label htmlFor="member-phone" className="block text-sm font-medium text-gray-700 mb-1">
+              <label
+                htmlFor="member-phone"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
                 Phone
               </label>
               <input
                 id="member-phone"
                 type="tel"
                 value={formData.phone}
-                onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
+                onChange={(e) => setFormData((prev) => ({ ...prev, phone: e.target.value }))}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="(555) 123-4567"
               />
@@ -213,7 +225,7 @@ export default function AddEditMemberModal({ isOpen, onClose, onSave, member }: 
               <textarea
                 id="member-bio"
                 value={formData.bio}
-                onChange={(e) => setFormData(prev => ({ ...prev, bio: e.target.value }))}
+                onChange={(e) => setFormData((prev) => ({ ...prev, bio: e.target.value }))}
                 rows={3}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="Tell us about this member..."
@@ -221,9 +233,7 @@ export default function AddEditMemberModal({ isOpen, onClose, onSave, member }: 
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Roles
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Roles</label>
               <div className="space-y-2 max-h-32 overflow-y-auto">
                 {roles.map((role) => (
                   <label key={role.id} className="flex items-center">
@@ -249,7 +259,7 @@ export default function AddEditMemberModal({ isOpen, onClose, onSave, member }: 
                 id="member-active"
                 type="checkbox"
                 checked={formData.isActive}
-                onChange={(e) => setFormData(prev => ({ ...prev, isActive: e.target.checked }))}
+                onChange={(e) => setFormData((prev) => ({ ...prev, isActive: e.target.checked }))}
                 className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
               />
               <label htmlFor="member-active" className="ml-2 text-sm text-gray-700">
@@ -270,7 +280,7 @@ export default function AddEditMemberModal({ isOpen, onClose, onSave, member }: 
                 disabled={loading}
                 className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
               >
-                {loading ? 'Saving...' : (isEditing ? 'Update Member' : 'Add Member')}
+                {loading ? 'Saving...' : isEditing ? 'Update Member' : 'Add Member'}
               </button>
             </div>
           </form>

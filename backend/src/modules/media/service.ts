@@ -4,7 +4,9 @@ import { prisma } from '../../lib/prisma';
 import { HttpError } from '../../lib/http-error';
 import type { createMediaBody, listMediaQuery } from './schemas';
 
-const withUploader = { uploadedBy: { select: { id: true, name: true } } } satisfies Prisma.MediaInclude;
+const withUploader = {
+  uploadedBy: { select: { id: true, name: true } },
+} satisfies Prisma.MediaInclude;
 
 // Approved public media, newest first. Text search and the tag filter ignore case.
 export function listMedia(query: z.output<typeof listMediaQuery>) {

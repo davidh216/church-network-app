@@ -32,7 +32,9 @@ const onSave = vi.fn();
 const onClose = vi.fn();
 
 async function open(member?: Member) {
-  return render(<AddEditMemberModal isOpen onClose={onClose} onSave={onSave} member={member ?? null} />);
+  return render(
+    <AddEditMemberModal isOpen onClose={onClose} onSave={onSave} member={member ?? null} />,
+  );
 }
 
 function type(label: string, value: string) {

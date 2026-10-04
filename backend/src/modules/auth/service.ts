@@ -65,7 +65,10 @@ export async function login(body: z.output<typeof loginBody>) {
 
 // The signed-in user changes their own password. Sessions are stateless JWTs, so existing
 // sessions stay valid until they expire.
-export async function changePassword(userId: string, body: z.output<typeof changePasswordBody>): Promise<void> {
+export async function changePassword(
+  userId: string,
+  body: z.output<typeof changePasswordBody>,
+): Promise<void> {
   const user = await prisma.user.findUniqueOrThrow({
     where: { id: userId },
     select: { email: true, password: true },
@@ -74,5 +77,8 @@ export async function changePassword(userId: string, body: z.output<typeof chang
     throw fieldError('currentPassword', 'Current password is incorrect');
   }
   assertPasswordNotEmail(body.newPassword, user.email, 'newPassword');
-  await prisma.user.update({ where: { id: userId }, data: { password: await bcrypt.hash(body.newPassword, 10) } });
+  await prisma.user.update({
+    where: { id: userId },
+    data: { password: await bcrypt.hash(body.newPassword, 10) },
+  });
 }

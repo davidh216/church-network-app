@@ -9,7 +9,12 @@ import type { Member } from '@/types/domain';
 const router = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn() }));
 vi.mock('next/navigation', () => ({ useRouter: () => router }));
 
-const authApi = vi.hoisted(() => ({ me: vi.fn(), login: vi.fn(), logout: vi.fn(), register: vi.fn() }));
+const authApi = vi.hoisted(() => ({
+  me: vi.fn(),
+  login: vi.fn(),
+  logout: vi.fn(),
+  register: vi.fn(),
+}));
 vi.mock('@/lib/api/auth', () => authApi);
 
 const usersApi = vi.hoisted(() => ({ listUsers: vi.fn(), exportUsers: vi.fn() }));
@@ -36,7 +41,11 @@ const directory: Member[] = [
 const staffRows: Member[] = [
   member('m1', 'Carol Example', 'member', { email: 'carol@example.com', engagement: null }),
   member('m2', 'Ann Example', 'leader', { email: 'ann@example.com', engagement: null }),
-  member('m3', 'Bob Example', 'member', { email: 'bob@example.com', isActive: false, engagement: null }),
+  member('m3', 'Bob Example', 'member', {
+    email: 'bob@example.com',
+    isActive: false,
+    engagement: null,
+  }),
 ];
 
 const noop = () => undefined;
