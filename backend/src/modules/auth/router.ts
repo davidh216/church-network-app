@@ -1,7 +1,11 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import { authenticate, SESSION_COOKIE, sessionCookieOptions } from '../../middleware/auth';
-import { authRateLimit } from '../../middleware/rate-limit';
+import {
+  loginAccountRateLimit,
+  loginIpRateLimit,
+  registerRateLimit,
+} from '../../middleware/rate-limit';
 import { validate } from '../../middleware/validate';
 import { changePasswordBody, loginBody, registerBody } from './schemas';
 import * as auth from './service';
@@ -9,7 +13,7 @@ import * as auth from './service';
 const router = express.Router();
 
 // The same 201 body whether the email was new or already registered (no email enumeration).
-router.post('/register', authRateLimit, validate({ body: registerBody }), async (req, res) => {
+router.post('/register', registerRateLimit, validate({ body: registerBody }), async (req, res) => {
   await auth.register(req.body);
   res.status(201).json({
     success: true,
@@ -19,16 +23,22 @@ router.post('/register', authRateLimit, validate({ body: registerBody }), async 
 });
 
 // Sets the session cookie; the token itself is never put in the response body.
-router.post('/login', authRateLimit, validate({ body: loginBody }), async (req, res) => {
-  const { user, token } = await auth.login(req.body);
-  // The cookie lives exactly as long as the token (JWT_EXPIRES_IN).
-  const { exp, iat } = jwt.decode(token) as jwt.JwtPayload;
-  res.cookie(SESSION_COOKIE, token, {
-    ...sessionCookieOptions(),
-    maxAge: ((exp ?? 0) - (iat ?? 0)) * 1000,
-  });
-  res.json({ success: true, user });
-});
+router.post(
+  '/login',
+  loginIpRateLimit,
+  loginAccountRateLimit,
+  validate({ body: loginBody }),
+  async (req, res) => {
+    const { user, token } = await auth.login(req.body);
+    // The cookie lives exactly as long as the token (JWT_EXPIRES_IN).
+    const { exp, iat } = jwt.decode(token) as jwt.JwtPayload;
+    res.cookie(SESSION_COOKIE, token, {
+      ...sessionCookieOptions(),
+      maxAge: ((exp ?? 0) - (iat ?? 0)) * 1000,
+    });
+    res.json({ success: true, user });
+  },
+);
 
 router.post('/logout', (_req, res) => {
   res.clearCookie(SESSION_COOKIE, sessionCookieOptions());

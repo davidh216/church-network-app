@@ -4,7 +4,7 @@ import express from 'express';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import helmet from 'helmet';
-import { corsOrigins } from './config/env';
+import { corsOrigins, trustProxy } from './config/env';
 import { prisma } from './lib/prisma';
 import { requestLogger } from './lib/request-logger';
 import { authenticate, requireRole, STAFF } from './middleware/auth';
@@ -26,6 +26,8 @@ export function createApp() {
   const app = express();
 
   app.disable('x-powered-by');
+  // req.ip comes from X-Forwarded-For only when the connection is from a trusted proxy (TRUST_PROXY).
+  app.set('trust proxy', trustProxy);
   app.use(requestLogger);
   app.use(helmet());
   // Content-Disposition is exposed so the browser can read the export's filename.

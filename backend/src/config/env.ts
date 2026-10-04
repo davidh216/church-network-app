@@ -15,10 +15,14 @@ const schema = z.object({
   JWT_EXPIRES_IN: z.string().default('7d'),
   CORS_ORIGIN: z.string().default('http://localhost:3000'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
-  // Login and registration attempts allowed per IP per window. Left unset, the limit is 10 and
-  // it is off when NODE_ENV=test; setting it turns the limit on in tests too.
+  // Attempts allowed per window: login per IP and email (with a coarse per-IP guard of five
+  // times this), registration per IP. Left unset, the limit is 10 and it is off when
+  // NODE_ENV=test; setting it turns the limits on in tests too.
   RATE_LIMIT_AUTH_MAX: z.coerce.number().int().min(1).optional(),
   RATE_LIMIT_AUTH_WINDOW_MINUTES: z.coerce.number().int().min(1).default(15),
+  // Express `trust proxy`: which upstream addresses may set X-Forwarded-For. The Next.js rewrite
+  // (and any reverse proxy in front of it) must be covered, or every client shares one IP.
+  TRUST_PROXY: z.string().trim().min(1).default('loopback, uniquelocal'),
 });
 
 const parsed = schema.safeParse(process.env);
@@ -34,3 +38,17 @@ export const env = parsed.data;
 export const corsOrigins = env.CORS_ORIGIN.split(',')
   .map((origin) => origin.trim())
   .filter(Boolean);
+
+/**
+ * The value for `app.set('trust proxy', ...)`: a hop count when TRUST_PROXY is an integer,
+ * true/false for those words, otherwise the comma-separated address/subnet list as given.
+ */
+export function parseTrustProxy(value: string): number | boolean | string {
+  const trimmed = value.trim();
+  if (/^\d+$/.test(trimmed)) return Number(trimmed);
+  if (trimmed === 'true') return true;
+  if (trimmed === 'false') return false;
+  return trimmed;
+}
+
+export const trustProxy = parseTrustProxy(env.TRUST_PROXY);
