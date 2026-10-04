@@ -21,3 +21,6 @@ export const exportQuery = z.object({
     )
     .pipe(z.array(cuid).max(1000).optional()),
 });
+
+// GET /api/users/summary takes no input; unknown query params are stripped.
+export const summaryQuery = z.object({});

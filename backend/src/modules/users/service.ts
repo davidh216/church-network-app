@@ -56,6 +56,37 @@ export function searchUsers(query: z.output<typeof searchQuery>) {
   );
 }
 
+// Dashboard counts. Members get the counts of the directory they can see (active accounts only),
+// so `total` and `active` are equal for them and nothing about inactive accounts is revealed.
+// Staff also get accounts awaiting approval (inactive and never signed in: a registration, or a
+// staff-created inactive account) and accounts created since the start of the current UTC month.
+export type MemberSummary = { total: number; active: number };
+export type StaffSummary = MemberSummary & { pendingApproval: number; newThisMonth: number };
+
+export function startOfUtcMonth(now: Date): Date {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+}
+
+export async function summary(staff: false, now?: Date): Promise<MemberSummary>;
+export async function summary(staff: true, now?: Date): Promise<StaffSummary>;
+export async function summary(staff: boolean, now?: Date): Promise<MemberSummary | StaffSummary>;
+export async function summary(
+  staff: boolean,
+  now: Date = new Date(),
+): Promise<MemberSummary | StaffSummary> {
+  if (!staff) {
+    const active = await prisma.user.count({ where: { isActive: true } });
+    return { total: active, active };
+  }
+  const [total, active, pendingApproval, newThisMonth] = await prisma.$transaction([
+    prisma.user.count(),
+    prisma.user.count({ where: { isActive: true } }),
+    prisma.user.count({ where: { isActive: false, lastLoginAt: null } }),
+    prisma.user.count({ where: { createdAt: { gte: startOfUtcMonth(now) } } }),
+  ]);
+  return { total, active, pendingApproval, newThisMonth };
+}
+
 // Column order of the export. The CSV header always lists every column, even when no rows match.
 export const EXPORT_COLUMNS = [
   'Name',

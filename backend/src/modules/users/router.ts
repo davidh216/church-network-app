@@ -11,7 +11,7 @@ import { isAdmin, isStaff, requireRole, STAFF } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
 import { HttpError } from '../../lib/http-error';
 import savedSearchRoutes from '../saved-searches/router';
-import { exportQuery, idParams } from './schemas';
+import { exportQuery, idParams, summaryQuery } from './schemas';
 import * as users from './service';
 
 const router = express.Router();
@@ -35,6 +35,13 @@ router.get('/', validate({ query: listUsersQuery }), async (req, res) => {
 // The advanced member search. The body is a searchQuery; unknown fields or operators are a 400.
 router.post('/search', requireRole(...STAFF), validate({ body: searchQuery }), async (req, res) => {
   res.json({ success: true, ...(await users.searchUsers(req.body)) });
+});
+
+// Dashboard counts. Any signed-in user; members get { total, active } over the active directory,
+// staff also get pendingApproval and newThisMonth. Registered before /:id.
+router.get('/summary', validate({ query: summaryQuery }), async (req, res) => {
+  const counts = await users.summary(isStaff(req.user!));
+  res.json({ success: true, ...counts });
 });
 
 router.get('/export', requireRole(...STAFF), validate({ query: exportQuery }), async (req, res) => {

@@ -119,6 +119,13 @@ const ROUTES: Route[] = [
     status: 200,
   },
   {
+    route: 'GET /api/users/summary',
+    access: 'auth',
+    as: 'member',
+    url: () => '/api/users/summary',
+    status: 200,
+  },
+  {
     route: 'POST /api/users/search',
     access: 'staff',
     as: 'leader',
