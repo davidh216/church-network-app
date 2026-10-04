@@ -24,8 +24,10 @@ const schema = z.object({
   // NODE_ENV=test; setting it turns the limits on in tests too.
   RATE_LIMIT_AUTH_MAX: z.coerce.number().int().min(1).optional(),
   RATE_LIMIT_AUTH_WINDOW_MINUTES: z.coerce.number().int().min(1).default(15),
-  // Express `trust proxy`: which upstream addresses may set X-Forwarded-For. The Next.js rewrite
-  // (and any reverse proxy in front of it) must be covered, or every client shares one IP.
+  // Express `trust proxy`: which upstream addresses may set X-Forwarded-For. The Next.js server
+  // must be covered. Its rewrite adds no X-Forwarded-For of its own and passes a client-sent one
+  // through unchanged, so client addresses are real only when a reverse proxy in front of Next
+  // sets the header and Next is not reachable directly (see .env.example).
   TRUST_PROXY: z.string().trim().min(1).default('loopback, uniquelocal'),
   // Overrides the session cookie's Secure flag (default: on in production only). For a production
   // build served over plain HTTP, such as the local compose stack; leave unset behind TLS.
