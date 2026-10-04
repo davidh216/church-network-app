@@ -91,7 +91,7 @@ A comprehensive church management platform built with modern web technologies, d
 ## 🚦 Getting Started
 
 ### **Prerequisites**
-- Node.js 18+ and npm
+- Node.js 22 (see `.nvmrc`) and npm 10
 - Git for version control
 
 ### **Installation**
@@ -115,6 +115,7 @@ A comprehensive church management platform built with modern web technologies, d
 3. **Frontend Setup**
    ```bash
    cd ../frontend
+   cp .env.example .env.local   # NEXT_PUBLIC_API_URL, defaults to http://localhost:5000/api
    npm ci
    npm run dev
    ```
@@ -127,13 +128,14 @@ A comprehensive church management platform built with modern web technologies, d
 ### **Accounts and Roles**
 - Self-registration creates an **inactive** account. An admin or leader activates it (edit the member and tick Active) before the person can sign in.
 - The first admin comes from the seed (`SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD`, 12+ characters). Change that password after first login.
-- `admin` and `leader` can see member contact details, CRM notes, analytics and exports and can create members. `member` sees a name-only directory and their own profile.
+- `admin` and `leader` can see member contact details, CRM notes, analytics and exports and can create members. Only `admin` can grant the `leader` or `admin` role, change roles, or edit another staff account. `member` sees a name-only directory and their own profile.
+- Emails are stored lowercase; the `20251004120000_lowercase_emails` migration normalises existing rows (it fails if two accounts differ only by case; merge those by hand first).
 
 ### **Quality checks**
 ```bash
 # backend
 npm run typecheck && npm test
-# frontend
+# frontend (lint fails on any warning)
 npm run typecheck && npm run lint && npm run build
 ```
 
@@ -141,24 +143,33 @@ npm run typecheck && npm run lint && npm run build
 
 ```
 church-network-app/
-├── backend/                    # Express.js API server
-│   ├── prisma/                # Database schema and migrations
-│   │   ├── schema.prisma      # Prisma database schema
-│   │   └── migrations/        # Database migration files
-│   ├── src/                   # Source code
-│   │   ├── server.ts          # Main server file
-│   │   └── routes/            # API route handlers
-│   └── package.json           # Backend dependencies
-├── frontend/                  # Next.js React application
-│   ├── src/                   # Source code
-│   │   ├── app/               # Next.js app directory
-│   │   ├── components/        # React components
-│   │   │   ├── auth/          # Authentication components
-│   │   │   ├── members/       # Member management components
-│   │   │   └── media/         # Media library components
-│   │   └── lib/               # Utility libraries
-│   └── package.json           # Frontend dependencies
-└── README.md                  # This file
+├── backend/                    # Express 5 API
+│   ├── prisma/
+│   │   ├── schema.prisma       # Prisma schema (SQLite today, Postgres in Phase 1)
+│   │   ├── migrations/         # Migration history
+│   │   └── seed.ts             # Roles and optional first admin (npm run db:seed)
+│   ├── src/
+│   │   ├── app.ts              # Express app: middleware, routers, 404/error handlers
+│   │   ├── server.ts           # Listen and graceful shutdown
+│   │   ├── config/env.ts       # zod-validated environment
+│   │   ├── lib/                # prisma singleton, user projections, validation helpers
+│   │   ├── middleware/auth.ts  # authenticate, requireRole
+│   │   ├── routes/             # auth, users, saved-searches, roles, media, analytics, member-details
+│   │   ├── services/           # memberAnalytics
+│   │   └── types/              # AuthenticatedUser, Express Request augmentation
+│   ├── test/                   # vitest + supertest
+│   └── .env.example
+├── frontend/                   # Next.js App Router
+│   ├── src/
+│   │   ├── app/                # layout and the dashboard page
+│   │   ├── components/         # auth, members, media, analytics
+│   │   ├── lib/                # auth client, error helpers
+│   │   └── types/domain.ts     # shared domain types
+│   └── .env.example
+├── docs/
+│   ├── MODERNIZATION_GAMEPLAN.md
+│   └── PHASE1_SPECS.md
+└── README.md
 ```
 
 ## 🔧 API Endpoints
@@ -181,7 +192,7 @@ All routes except `/health`, `POST /api/auth/register` and `POST /api/auth/login
 
 ### **Media Management**
 - `GET /api/media` - Get media library content
-- `POST /api/media` - Add new media
+- `POST /api/media` - Add new media *(staff)*
 - `GET /api/media/:id` - Get specific media item
 
 ### **Role Management**
