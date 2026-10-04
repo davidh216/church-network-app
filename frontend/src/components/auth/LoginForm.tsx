@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { login } from '@/lib/api/auth';
+import { useAuth } from '@/lib/auth/AuthProvider';
 import { getErrorMessage } from '@/lib/errors';
 import type { User } from '@/types/domain';
 
@@ -11,6 +11,7 @@ interface LoginFormProps {
 }
 
 export default function LoginForm({ onSuccess, onSwitchToRegister }: LoginFormProps) {
+  const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);

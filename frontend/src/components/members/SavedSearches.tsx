@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import * as savedSearchesApi from '../../lib/api/savedSearches';
+import { useIsStaff } from '../../lib/auth/AuthProvider';
 import { getErrorMessage } from '../../lib/errors';
 import type { SavedSearch, SearchQuery } from '../../types/domain';
 
@@ -12,6 +13,7 @@ interface SavedSearchesProps {
 }
 
 export default function SavedSearches({ onLoadSearch, onClose, currentQuery }: SavedSearchesProps) {
+  const canManage = useIsStaff();
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -131,7 +133,7 @@ export default function SavedSearches({ onLoadSearch, onClose, currentQuery }: S
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-medium text-gray-900">Saved Searches</h3>
         <div className="flex items-center space-x-2">
-          {currentQuery && (
+          {canManage && currentQuery && (
             <button
               onClick={() => setShowSaveForm(!showSaveForm)}
               className="text-sm text-blue-600 hover:text-blue-800"
@@ -156,7 +158,7 @@ export default function SavedSearches({ onLoadSearch, onClose, currentQuery }: S
         </div>
       )}
 
-      {showSaveForm && (
+      {canManage && showSaveForm && (
         <div className="mb-6 p-4 bg-blue-50 rounded-lg">
           <h4 className="text-sm font-medium text-gray-900 mb-3">Save Current Search</h4>
           <div className="space-y-3">

@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { createMedia, listMedia } from '../../lib/api/media';
+import { useIsStaff } from '../../lib/auth/AuthProvider';
 import { getErrorMessage } from '../../lib/errors';
 import type { MediaItem } from '../../types/domain';
 
@@ -11,6 +12,7 @@ interface SimpleMediaLibraryProps {
 }
 
 export default function SimpleMediaLibrary({ onPlayMedia }: SimpleMediaLibraryProps) {
+  const canManage = useIsStaff();
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -122,15 +124,17 @@ export default function SimpleMediaLibrary({ onPlayMedia }: SimpleMediaLibraryPr
               </button>
             </div>
             
-            <button
-              onClick={() => setShowAddForm(true)}
-              className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 flex items-center space-x-2"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              <span>Add Video</span>
-            </button>
+            {canManage && (
+              <button
+                onClick={() => setShowAddForm(true)}
+                className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 flex items-center space-x-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                <span>Add Video</span>
+              </button>
+            )}
           </div>
         </div>
         
@@ -326,21 +330,27 @@ export default function SimpleMediaLibrary({ onPlayMedia }: SimpleMediaLibraryPr
         <div className="px-6 py-12 text-center">
           <div className="max-w-md mx-auto">
             <h3 className="text-lg font-medium text-gray-900 mb-2">Welcome to Embrace Media!</h3>
-            <p className="text-gray-500 mb-6">
-              Start building your church&apos;s media library by adding videos from your YouTube channel.
-            </p>
-            <button
-              onClick={() => setShowAddForm(true)}
-              className="bg-red-600 text-white px-6 py-3 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500"
-            >
-              Add Your First Video
-            </button>
+            {canManage ? (
+              <>
+                <p className="text-gray-500 mb-6">
+                  Start building your church&apos;s media library by adding videos from your YouTube channel.
+                </p>
+                <button
+                  onClick={() => setShowAddForm(true)}
+                  className="bg-red-600 text-white px-6 py-3 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500"
+                >
+                  Add Your First Video
+                </button>
+              </>
+            ) : (
+              <p className="text-gray-500">No videos have been added yet.</p>
+            )}
           </div>
         </div>
       )}
 
       {/* Add Video Form Modal */}
-      {showAddForm && (
+      {canManage && showAddForm && (
         <AddVideoModal
           onClose={() => setShowAddForm(false)}
           onSave={() => {

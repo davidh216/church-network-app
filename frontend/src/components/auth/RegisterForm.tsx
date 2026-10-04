@@ -8,7 +8,8 @@ interface RegisterFormProps {
   onSwitchToLogin: () => void;
 }
 
-const MIN_PASSWORD_LENGTH = 8;
+// Matches the API's password policy (Phase 1 item 1.6: 12 to 128 characters).
+const MIN_PASSWORD_LENGTH = 12;
 
 export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
   const [name, setName] = useState('');

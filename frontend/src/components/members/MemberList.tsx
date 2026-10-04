@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { exportUsers, listUsers } from '../../lib/api/users';
+import { useIsStaff } from '../../lib/auth/AuthProvider';
 import MemberProfile from './MemberProfile';
 import AdvancedSearchBuilder from './AdvancedSearchBuilder';
 import SavedSearches from './SavedSearches';
@@ -40,6 +41,8 @@ interface MemberListProps {
 }
 
 export default function MemberList({ onEditMember, onAddMember, refreshTrigger }: MemberListProps) {
+  // Selection, export, profiles and editing are staff-only; members get the directory.
+  const canManage = useIsStaff();
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -252,15 +255,17 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
               </button>
             </div>
             
-            <button
-              onClick={onAddMember}
-              className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center space-x-2"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              <span>Add Member</span>
-            </button>
+            {canManage && (
+              <button
+                onClick={onAddMember}
+                className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center space-x-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                <span>Add Member</span>
+              </button>
+            )}
           </div>
         </div>
         
@@ -304,7 +309,7 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
                 Saved Searches
               </button>
               
-              {selectedMembers.size > 0 && (
+              {canManage && selectedMembers.size > 0 && (
                 <button
                   onClick={() => exportMembers()}
                   className="px-4 py-2 text-sm font-medium bg-green-100 text-green-700 hover:bg-green-200 rounded-md transition-colors"
@@ -447,7 +452,7 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
       )}
 
       {/* Bulk Actions Toolbar */}
-      {selectedMembers.size > 0 && (
+      {canManage && selectedMembers.size > 0 && (
         <BulkActionsToolbar
           selectedCount={selectedMembers.size}
           onExport={() => exportMembers()}
@@ -482,14 +487,16 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
           <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-6 py-3 w-12">
-                <input
-                  type="checkbox"
-                  checked={selectedMembers.size === paginatedMembers.length && paginatedMembers.length > 0}
-                  onChange={toggleSelectAll}
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                />
-              </th>
+              {canManage && (
+                <th className="px-6 py-3 w-12">
+                  <input
+                    type="checkbox"
+                    checked={selectedMembers.size === paginatedMembers.length && paginatedMembers.length > 0}
+                    onChange={toggleSelectAll}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                </th>
+              )}
               <th 
                 className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                 onClick={() => handleSort('name')}
@@ -561,9 +568,11 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
                   )}
                 </div>
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Actions
-              </th>
+              {canManage && (
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Actions
+                </th>
+              )}
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
@@ -571,14 +580,16 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
               <tr key={member.id} className={`hover:bg-gray-50 ${
                 selectedMembers.has(member.id) ? 'bg-blue-50' : ''
               }`}>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <input
-                    type="checkbox"
-                    checked={selectedMembers.has(member.id)}
-                    onChange={() => toggleSelectMember(member.id)}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                  />
-                </td>
+                {canManage && (
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <input
+                      type="checkbox"
+                      checked={selectedMembers.has(member.id)}
+                      onChange={() => toggleSelectMember(member.id)}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                  </td>
+                )}
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="flex items-center space-x-3">
                     <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center flex-shrink-0">
@@ -682,24 +693,26 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
                     </div>
                   )}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                  <div className="flex space-x-2">
-                    <button
-                      onClick={() => setSelectedMember(member.id)}
-                      className="text-green-600 hover:text-green-900"
-                      title="View Profile"
-                    >
-                      View
-                    </button>
-                    <button
-                      onClick={() => onEditMember(member)}
-                      className="text-blue-600 hover:text-blue-900"
-                      title="Edit Member"
-                    >
-                      Edit
-                    </button>
-                  </div>
-                </td>
+                {canManage && (
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={() => setSelectedMember(member.id)}
+                        className="text-green-600 hover:text-green-900"
+                        title="View Profile"
+                      >
+                        View
+                      </button>
+                      <button
+                        onClick={() => onEditMember(member)}
+                        className="text-blue-600 hover:text-blue-900"
+                        title="Edit Member"
+                      >
+                        Edit
+                      </button>
+                    </div>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -715,14 +728,16 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
               selectedMembers.has(member.id) ? 'ring-2 ring-blue-500 border-blue-300' : ''
             }`}>
               {/* Selection checkbox */}
-              <div className="absolute top-4 right-4">
-                <input
-                  type="checkbox"
-                  checked={selectedMembers.has(member.id)}
-                  onChange={() => toggleSelectMember(member.id)}
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                />
-              </div>
+              {canManage && (
+                <div className="absolute top-4 right-4">
+                  <input
+                    type="checkbox"
+                    checked={selectedMembers.has(member.id)}
+                    onChange={() => toggleSelectMember(member.id)}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                </div>
+              )}
               
               <div className="flex items-start space-x-4">
                 <div className="w-12 h-12 bg-gray-300 rounded-full flex items-center justify-center flex-shrink-0">
@@ -774,20 +789,22 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
                     <span className="text-xs text-gray-500">
                       Joined {new Date(member.createdAt).toLocaleDateString()}
                     </span>
-                    <div className="flex space-x-2">
-                      <button
-                        onClick={() => setSelectedMember(member.id)}
-                        className="text-green-600 hover:text-green-900 text-sm font-medium"
-                      >
-                        View
-                      </button>
-                      <button
-                        onClick={() => onEditMember(member)}
-                        className="text-blue-600 hover:text-blue-900 text-sm font-medium"
-                      >
-                        Edit
-                      </button>
-                    </div>
+                    {canManage && (
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => setSelectedMember(member.id)}
+                          className="text-green-600 hover:text-green-900 text-sm font-medium"
+                        >
+                          View
+                        </button>
+                        <button
+                          onClick={() => onEditMember(member)}
+                          className="text-blue-600 hover:text-blue-900 text-sm font-medium"
+                        >
+                          Edit
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -892,7 +909,7 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
       )}
 
       {/* Member Profile Modal */}
-      {selectedMember && (
+      {canManage && selectedMember && (
         <MemberProfile
           memberId={selectedMember}
           onClose={() => setSelectedMember(null)}

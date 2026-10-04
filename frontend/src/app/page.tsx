@@ -1,10 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { logout, me } from '../lib/api/auth';
-import type { User } from '../types/domain';
-import LoginForm from '../components/auth/LoginForm';
-import RegisterForm from '../components/auth/RegisterForm';
+import { useState } from 'react';
+import Link from 'next/link';
+import { useAuth, useIsStaff } from '../lib/auth/AuthProvider';
 import MemberList from '../components/members/MemberList';
 import AddEditMemberModal from '../components/members/AddEditMemberModal';
 import SimpleMediaLibrary from '../components/media/SimpleMediaLibrary';
@@ -12,10 +10,11 @@ import VideoPlayer from '../components/media/VideoPlayer';
 import MemberAnalyticsDashboard from '../components/analytics/MemberAnalyticsDashboard';
 import type { Member, MediaItem } from '../types/domain';
 
+// The authenticated shell. The middleware sends visitors without a session cookie
+// to /login; if the API rejects the cookie, the AuthProvider routes there instead.
 export default function Home() {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [showRegister, setShowRegister] = useState(false);
+  const { user, status, logout } = useAuth();
+  const canManage = useIsStaff();
   const [showMembers, setShowMembers] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<Member | null>(null);
@@ -26,57 +25,27 @@ export default function Home() {
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
   const [showAnalytics, setShowAnalytics] = useState(false);
 
-  useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        setUser(await me());
-      } catch {
-        // No session (401) or API unreachable: show the sign-in form.
-        setUser(null);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    checkAuth();
-  }, []);
-
-  const handleLogout = async () => {
-    try {
-      await logout();
-    } catch {
-      // The session is dropped locally either way; the cookie expires on its own.
-    }
-    setUser(null);
-  };
-
-  const handleAuthSuccess = (user: User) => {
-    setUser(user);
-  };
-
-  if (loading) {
+  // A 401 from the API makes the AuthProvider clear the cookie and route to /login;
+  // this covers the rarer case of the API being unreachable.
+  if (status === 'anonymous') {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
-        </div>
+        <p className="text-gray-600">
+          You are signed out.{' '}
+          <Link href="/login" className="text-blue-600 font-medium">
+            Sign in
+          </Link>
+        </p>
       </div>
     );
   }
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4">
-        <div>
-          {showRegister ? (
-            <RegisterForm onSwitchToLogin={() => setShowRegister(false)} />
-          ) : (
-            <LoginForm
-              onSuccess={handleAuthSuccess}
-              onSwitchToRegister={() => setShowRegister(true)}
-            />
-          )}
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
         </div>
       </div>
     );
@@ -124,7 +93,7 @@ export default function Home() {
                 </div>
               </div>
               <button
-                onClick={handleLogout}
+                onClick={() => void logout()}
                 className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500"
               >
                 Logout
@@ -188,12 +157,14 @@ export default function Home() {
                     >
                       🎵 Media Library
                     </button>
-                    <button 
-                      onClick={() => setShowAnalytics(true)}
-                      className="w-full text-left px-3 py-2 bg-indigo-50 hover:bg-indigo-100 rounded-md text-sm text-indigo-700"
-                    >
-                      📊 Member Analytics
-                    </button>
+                    {canManage && (
+                      <button
+                        onClick={() => setShowAnalytics(true)}
+                        className="w-full text-left px-3 py-2 bg-indigo-50 hover:bg-indigo-100 rounded-md text-sm text-indigo-700"
+                      >
+                        📊 Member Analytics
+                      </button>
+                    )}
                     <button className="w-full text-left px-3 py-2 bg-yellow-50 hover:bg-yellow-100 rounded-md text-sm text-yellow-700">
                       💬 Slack Workspace
                     </button>
@@ -351,7 +322,7 @@ export default function Home() {
       )}
 
       {/* Member Analytics Dashboard Modal */}
-      {showAnalytics && (
+      {canManage && showAnalytics && (
         <MemberAnalyticsDashboard
           onClose={() => setShowAnalytics(false)}
         />
