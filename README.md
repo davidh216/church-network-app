@@ -49,7 +49,7 @@ A comprehensive church management platform built with modern web technologies, d
 - **JWT in an httpOnly cookie** (`embrace_session`): the browser talks to the API through a same-origin Next.js rewrite; `Authorization: Bearer` is also accepted for scripts and tests
 - **bcryptjs**: Password hashing and security
 - **CORS**: Cross-Origin Resource Sharing configuration
-- **Helmet**, rate limiting on auth routes, zod request validation, pino logging
+- **Helmet**, zod request validation, pino logging, and three login rate limits (per client IP, per account, per client IP and account); client IPs are read from `X-Forwarded-For` according to `TRUST_PROXY`, so production must run behind a reverse proxy that sets that header and must not expose the web app directly
 
 ## 📋 Database Schema
 
@@ -123,21 +123,22 @@ A comprehensive church management platform built with modern web technologies, d
    - Health Check: http://localhost:5000/health
 
 ### **Containers**
-`docker compose up --build` starts `db`, `api` (runs `prisma migrate deploy` then the compiled server) and `web` (standalone Next.js build). The api service reads `backend/.env` for `JWT_SECRET`. Seed the first admin from the host with `npm run -w backend db:seed` pointed at the compose database.
+`docker compose up --build` starts `db`, `api` (runs `prisma migrate deploy`, the idempotent seed, then the compiled server) and `web` (standalone Next.js build). Ports are published on 127.0.0.1 only. The api service reads `backend/.env` for `JWT_SECRET` and the `SEED_ADMIN_*` values, and runs with `COOKIE_SECURE=false` because the stack is plain http; a real deployment sits behind TLS, leaves `COOKIE_SECURE` unset, and runs behind a reverse proxy that sets `X-Forwarded-For` (see `TRUST_PROXY` in `backend/.env.example`).
 
 ### **Accounts and Roles**
 - Self-registration creates an **inactive** account. An admin or leader activates it (edit the member and tick Active) before the person can sign in.
 - The first admin comes from the seed (`SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD`). Passwords must be at least 12 characters and not a common password. Signed-in users change theirs with `POST /api/auth/change-password`; admins reset others with `POST /api/users/:id/reset-password`.
 - `admin` and `leader` can see member contact details, CRM notes, analytics and exports and can create members. Only `admin` can grant the `leader` or `admin` role, change roles, or edit another staff account. `member` sees a name-only directory and their own profile.
-- Emails are stored lowercase; the `20251004120000_lowercase_emails` migration normalises existing rows (it fails if two accounts differ only by case; merge those by hand first).
+- Emails are stored lowercase. The Postgres baseline migration starts from an empty database, so data imported from the old SQLite deployment must be lowercased on import.
 
 ### **Quality checks**
 ```bash
 npm run typecheck && npm run lint && npm test && npm run build   # both workspaces, from the root
 npm run format:check                                             # prettier
-E2E_WEB_PORT=3111 E2E_API_PORT=5111 npm run -w frontend test:e2e # Playwright smoke; starts both dev servers
+npx -w frontend playwright install chromium                     # once; CI does this itself
+E2E_WEB_PORT=3111 E2E_API_PORT=5111 npm run -w frontend test:e2e # Playwright smoke; starts both dev servers and needs SEED_ADMIN_* in backend/.env
 ```
-A husky pre-commit hook runs lint-staged (eslint --fix and prettier on staged files). CI (`.github/workflows/ci.yml`) runs typecheck, lint, tests against a Postgres service, builds, a migration drift check and the Playwright smoke on every push and pull request.
+A husky pre-commit hook runs lint-staged (eslint --fix and prettier on staged files). CI (`.github/workflows/ci.yml`) runs typecheck, lint, format check, tests against a Postgres service, builds, the compiled seed, a migration drift check and the Playwright smoke on pull requests and on pushes to `main` and `modernize/**`.
 
 ## 📁 Project Structure
 
@@ -189,7 +190,7 @@ All routes except `/health`, `POST /api/auth/register`, `POST /api/auth/login` a
 - `POST /api/auth/register` - Register (account stays inactive until approved)
 - `POST /api/auth/login` - User login
 - `GET /api/auth/me` - Get current user profile
-- `POST /api/auth/logout` - Clear the session cookie
+- `POST /api/auth/logout` - Clear the session cookie (refused with 403 `CROSS_SITE` for cross-site requests)
 - `POST /api/auth/change-password` - Change own password
 - `POST /api/users/:id/reset-password` - Reset a member's password *(admin)*
 
