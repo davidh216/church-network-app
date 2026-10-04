@@ -1,0 +1,13 @@
+# Allowlist for backend/Dockerfile (build context: repository root).
+*
+!package.json
+!package-lock.json
+!tsconfig.base.json
+!backend/package.json
+!backend/tsconfig.json
+!backend/tsconfig.build.json
+!backend/prisma.config.ts
+!backend/prisma/schema.prisma
+!backend/prisma/migrations/
+!backend/src/
+!frontend/package.json

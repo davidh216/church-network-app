@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # No git hooks in CI.
+  HUSKY: '0'
+
+jobs:
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: church
+          POSTGRES_PASSWORD: church
+          POSTGRES_DB: church_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U church -d church_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run -w backend typecheck
+      - run: npm run -w backend lint
+      # vitest.config.mts points DATABASE_URL at church_test on localhost:5432.
+      - run: npm run -w backend test
+      - run: npm run -w backend build
+      - name: Migrations match schema.prisma
+        run: >-
+          npx -w backend prisma migrate diff
+          --from-migrations prisma/migrations
+          --to-schema-datamodel prisma/schema.prisma
+          --shadow-database-url postgresql://church:church@localhost:5432/church_test
+          --exit-code
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run -w frontend typecheck
+      - run: npm run -w frontend lint
+      - run: npm run -w frontend test
+      - run: npm run -w frontend build
