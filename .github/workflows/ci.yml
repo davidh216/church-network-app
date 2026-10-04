@@ -2,6 +2,7 @@ name: CI
 
 on:
   push:
+    branches: [main, 'modernize/**']
   pull_request:
 
 permissions:
@@ -19,6 +20,7 @@ jobs:
   backend:
     name: Backend
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     services:
       postgres:
         image: postgres:16-alpine
@@ -61,6 +63,7 @@ jobs:
   frontend:
     name: Frontend
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -68,6 +71,8 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      # Prettier over the whole repository (backend included).
+      - run: npm run format:check
       - run: npm run -w frontend typecheck
       - run: npm run -w frontend lint
       - run: npm run -w frontend test
@@ -77,6 +82,7 @@ jobs:
     name: E2E smoke
     needs: [backend, frontend]
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     services:
       postgres:
         image: postgres:16-alpine
