@@ -51,7 +51,7 @@ describe('cookie sessions', () => {
     expect((await agent.get('/api/users')).status).toBe(200);
   });
 
-  it('logout clears the cookie with 204, after which the agent is anonymous', async () => {
+  it('logout (no Sec-Fetch-Site, like curl) clears the cookie with 204; the agent is anonymous', async () => {
     const agent = request.agent(app);
     await agent
       .post('/api/auth/login')
@@ -63,6 +63,31 @@ describe('cookie sessions', () => {
     expect(cleared).toMatch(/^embrace_session=;/);
     expect(cleared).toMatch(/Expires=Thu, 01 Jan 1970/);
     expect((await agent.get('/api/auth/me')).status).toBe(401);
+  });
+
+  it('logout with Sec-Fetch-Site: same-origin clears the cookie with 204', async () => {
+    const agent = request.agent(app);
+    await agent
+      .post('/api/auth/login')
+      .send({ email: 'cookie-member@sessions.test.local', password: PASSWORD })
+      .expect(200);
+    const out = await agent.post('/api/auth/logout').set('Sec-Fetch-Site', 'same-origin');
+    expect(out.status).toBe(204);
+    expect(setCookie(out)).toMatch(/^embrace_session=;/);
+    expect((await agent.get('/api/auth/me')).status).toBe(401);
+  });
+
+  it('logout from a cross-site page is rejected with 403 CROSS_SITE and keeps the cookie', async () => {
+    const agent = request.agent(app);
+    await agent
+      .post('/api/auth/login')
+      .send({ email: 'cookie-member@sessions.test.local', password: PASSWORD })
+      .expect(200);
+    const out = await agent.post('/api/auth/logout').set('Sec-Fetch-Site', 'cross-site');
+    expect(out.status).toBe(403);
+    expect(out.body).toEqual({ error: 'Forbidden', code: 'CROSS_SITE' });
+    expect(out.headers['set-cookie']).toBeUndefined();
+    expect((await agent.get('/api/auth/me')).status).toBe(200);
   });
 
   it('an invalid session cookie is rejected with 401', async () => {

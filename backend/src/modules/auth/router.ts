@@ -40,7 +40,14 @@ router.post(
   },
 );
 
-router.post('/logout', (_req, res) => {
+// Logout CSRF: a cross-site form post does not carry the SameSite=Lax cookie, but the browser
+// would still apply the clearing Set-Cookie. Browsers send Sec-Fetch-Site; requests without it
+// (curl, scripts, older browsers) are allowed.
+router.post('/logout', (req, res) => {
+  if (req.headers['sec-fetch-site'] === 'cross-site') {
+    res.status(403).json({ error: 'Forbidden', code: 'CROSS_SITE' });
+    return;
+  }
   res.clearCookie(SESSION_COOKIE, sessionCookieOptions());
   res.status(204).end();
 });
