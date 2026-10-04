@@ -40,3 +40,39 @@ describe('.env loading', () => {
     expect(env.RATE_LIMIT_AUTH_MAX).toBe(2);
   });
 });
+
+// The generated Prisma client loads backend/.env into process.env when it is required and again
+// when a client is constructed (only where backend/.env existed at `prisma generate`).
+describe('.env loading by the Prisma client', () => {
+  afterEach(() => {
+    vi.doUnmock('@prisma/client');
+    delete process.env.RATE_LIMIT_AUTH_MAX;
+  });
+
+  it('happened in test/setup-env.mts, which removed what it added', async () => {
+    const before = { ...process.env };
+    await import('@prisma/client');
+    expect({ ...process.env }).toEqual(before);
+  });
+
+  it('comes after config/env.ts has parsed the environment', async () => {
+    vi.resetModules();
+    // Stand-in for the client's dotenv load, on require and on construction.
+    vi.doMock('@prisma/client', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('@prisma/client')>();
+      process.env.RATE_LIMIT_AUTH_MAX = '2';
+      class PrismaClient extends actual.PrismaClient {
+        constructor(...args: ConstructorParameters<typeof actual.PrismaClient>) {
+          process.env.RATE_LIMIT_AUTH_MAX = '2';
+          super(...args);
+        }
+      }
+      return { ...actual, PrismaClient };
+    });
+    // test/helpers.ts imports src/lib/prisma before src/app.
+    await import('../src/lib/prisma.js');
+    const { env } = await import('../src/config/env.js');
+    expect(process.env.RATE_LIMIT_AUTH_MAX).toBe('2');
+    expect(env.RATE_LIMIT_AUTH_MAX).toBeUndefined();
+  });
+});
