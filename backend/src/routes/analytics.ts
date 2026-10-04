@@ -1,10 +1,11 @@
 import express from 'express';
+import { prisma } from '../lib/prisma';
 import { memberAnalyticsService } from '../services/memberAnalytics';
 
 const router = express.Router();
 
 // Get overall member analytics for dashboard
-router.get('/members', async (req: any, res) => {
+router.get('/members', async (req, res) => {
   try {
     const analytics = await memberAnalyticsService.getMemberAnalytics();
     res.json({ success: true, analytics });
@@ -15,7 +16,7 @@ router.get('/members', async (req: any, res) => {
 });
 
 // Get engagement score for a specific member
-router.get('/members/:id/engagement', async (req: any, res) => {
+router.get('/members/:id/engagement', async (req, res) => {
   try {
     const { id } = req.params;
     const engagement = await memberAnalyticsService.calculateMemberEngagement(id);
@@ -27,7 +28,7 @@ router.get('/members/:id/engagement', async (req: any, res) => {
 });
 
 // Update engagement score for a specific member
-router.post('/members/:id/engagement/refresh', async (req: any, res) => {
+router.post('/members/:id/engagement/refresh', async (req, res) => {
   try {
     const { id } = req.params;
     await memberAnalyticsService.updateMemberEngagement(id);
@@ -39,7 +40,7 @@ router.post('/members/:id/engagement/refresh', async (req: any, res) => {
 });
 
 // Get engagement trends for a member
-router.get('/members/:id/trends', async (req: any, res) => {
+router.get('/members/:id/trends', async (req, res) => {
   try {
     const { id } = req.params;
     const { months } = req.query;
@@ -55,7 +56,7 @@ router.get('/members/:id/trends', async (req: any, res) => {
 });
 
 // Record a member activity
-router.post('/members/:id/activities', async (req: any, res) => {
+router.post('/members/:id/activities', async (req, res) => {
   try {
     const { id } = req.params;
     const { activityType, description, metadata, points } = req.body;
@@ -76,7 +77,7 @@ router.post('/members/:id/activities', async (req: any, res) => {
 });
 
 // Record a member interaction
-router.post('/members/:id/interactions', async (req: any, res) => {
+router.post('/members/:id/interactions', async (req, res) => {
   try {
     const { id } = req.params;
     const { interactionType, channel, subject, content, metadata } = req.body;
@@ -99,12 +100,8 @@ router.post('/members/:id/interactions', async (req: any, res) => {
 });
 
 // Bulk update engagement scores for all members
-router.post('/members/engagement/refresh-all', async (req: any, res) => {
+router.post('/members/engagement/refresh-all', async (req, res) => {
   try {
-    // Get all active members
-    const { PrismaClient } = require('@prisma/client');
-    const prisma = new PrismaClient();
-    
     const members = await prisma.user.findMany({
       where: { isActive: true },
       select: { id: true }

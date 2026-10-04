@@ -63,10 +63,6 @@ Thumbs.db
 tmp/
 temp/
 
-# Lock files (keep one, ignore others)
-package-lock.json
-yarn.lock
-
 # TypeScript
 *.tsbuildinfo
 
@@ -120,4 +116,5 @@ yarn.lock
 .dynamodb/
 
 # Prisma
-backend/prisma/migrations/migration_lock.toml
+backend/prisma/test.db
+backend/prisma/test.db-journal

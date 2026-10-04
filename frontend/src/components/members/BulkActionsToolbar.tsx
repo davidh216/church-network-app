@@ -16,7 +16,6 @@ export default function BulkActionsToolbar({
   onBulkUpdate 
 }: BulkActionsToolbarProps) {
   const [showActions, setShowActions] = useState(false);
-  const [showExportOptions, setShowExportOptions] = useState(false);
 
   const handleBulkAction = (action: string) => {
     switch (action) {
@@ -33,7 +32,6 @@ export default function BulkActionsToolbar({
         break;
     }
     setShowActions(false);
-    setShowExportOptions(false);
   };
 
   return (

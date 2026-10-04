@@ -1,22 +1,22 @@
-// File: backend/src/routes/simple-media.ts - Simple Media Routes (No YouTube API)
 import express from 'express';
-import { PrismaClient } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { prisma } from '../lib/prisma';
+import { requireRole, STAFF } from '../middleware/auth';
 
 const router = express.Router();
-const prisma = new PrismaClient();
 
 // Get all media with filtering
 router.get('/', async (req, res) => {
   try {
     const { type, tag, search, limit = '20' } = req.query;
     
-    const whereClause: any = {
+    const whereClause: Prisma.MediaWhereInput = {
       isPublic: true,
       isApproved: true,
     };
 
     if (type) {
-      whereClause.type = type;
+      whereClause.type = String(type);
     }
 
     if (search) {
@@ -49,11 +49,9 @@ router.get('/', async (req, res) => {
 });
 
 // Add media manually
-router.post('/', async (req: any, res) => {
+router.post('/', requireRole(...STAFF), async (req, res) => {
   try {
-    if (!req.user) {
-      return res.status(401).json({ success: false, error: 'Authentication required' });
-    }
+    const user = req.user!;
 
     const { title, description, type, url, tags = [] } = req.body;
 
@@ -84,7 +82,7 @@ router.post('/', async (req: any, res) => {
         tags: JSON.stringify(tags),
         isApproved: true,
         isPublic: true,
-        uploadedById: req.user.id,
+        uploadedById: user.id,
       },
       include: {
         uploadedBy: {

@@ -1,12 +1,10 @@
-// Enhanced Prisma Schema - Replace your current schema.prisma with this
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "sqlite"
-  url      = "file:./dev.db"
+  url      = env("DATABASE_URL")
 }
 
 model User {

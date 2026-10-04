@@ -8,29 +8,24 @@ import AdvancedSearchBuilder from './AdvancedSearchBuilder';
 import SavedSearches from './SavedSearches';
 import BulkActionsToolbar from './BulkActionsToolbar';
 
-interface Member {
-  id: string;
-  name: string;
-  email: string;
-  phone?: string;
-  bio?: string;
-  isActive: boolean;
-  createdAt: string;
-  membershipDate?: string;
-  lastLoginAt?: string;
-  avatar?: string;
-  roles: Array<{
-    role: {
-      id: string;
-      name: string;
+import type { Member, SearchQuery } from '../../types/domain';
+
+// Pure helpers live at module scope so they are initialised before render uses them.
+// The advanced-query evaluator is intentionally a stub until Phase 2; the UI hides
+// advanced search until then.
+function evaluateAdvancedQuery(member: Member, query: SearchQuery): boolean {
+  void member;
+  void query;
+  return true;
+}
+
+function getNestedValue(obj: unknown, path: string): unknown {
+  return path.split('.').reduce<unknown>((current, key) => {
+    if (current && typeof current === 'object') {
+      return (current as Record<string, unknown>)[key];
     }
-  }>;
-  engagement?: {
-    engagementScore: number;
-    membershipStage: string;
-    riskLevel: string;
-    lastActivity?: string;
-  };
+    return undefined;
+  }, obj);
 }
 
 interface MemberListProps {
@@ -58,7 +53,7 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(25);
   const [error, setError] = useState('');
-  const [advancedQuery, setAdvancedQuery] = useState<any>(null);
+  const [advancedQuery, setAdvancedQuery] = useState<SearchQuery | null>(null);
 
   const fetchMembers = async () => {
     try {
@@ -90,7 +85,7 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
     }
     
     const matchesSearch = member.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         member.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         (member.email ?? '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                          (member.phone && member.phone.toLowerCase().includes(searchTerm.toLowerCase())) ||
                          (member.bio && member.bio.toLowerCase().includes(searchTerm.toLowerCase()));
     
@@ -135,7 +130,7 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
         if (aValue instanceof Date && bValue instanceof Date) {
           return (aValue.getTime() - bValue.getTime()) * direction;
         }
-        return (aValue > bValue ? 1 : -1) * direction;
+        return String(aValue ?? '').localeCompare(String(bValue ?? '')) * direction;
       }
     }
     return 0;
@@ -148,17 +143,6 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
     currentPage * itemsPerPage
   );
 
-  // Helper functions
-  const evaluateAdvancedQuery = (member: Member, query: any): boolean => {
-    // This would implement the advanced query logic
-    // For now, basic implementation
-    return true;
-  };
-  
-  const getNestedValue = (obj: any, path: string): any => {
-    return path.split('.').reduce((current, key) => current?.[key], obj);
-  };
-  
   const handleSort = (key: string) => {
     setSortConfig(prev => {
       const existing = prev.find(s => s.key === key);

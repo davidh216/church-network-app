@@ -43,7 +43,7 @@ A comprehensive church management platform built with modern web technologies, d
 - **Express.js**: Fast, unopinionated web framework
 - **TypeScript**: Type-safe server-side development
 - **Prisma**: Next-generation ORM with type safety
-- **SQLite**: Lightweight, serverless database (easily upgradeable to PostgreSQL)
+- **SQLite**: current datastore; the move to PostgreSQL is scheduled in `docs/MODERNIZATION_GAMEPLAN.md`
 
 ### **Security & Authentication**
 - **JWT**: JSON Web Tokens for stateless authentication
@@ -98,23 +98,24 @@ A comprehensive church management platform built with modern web technologies, d
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/church-network-app.git
+   git clone https://github.com/davidh216/church-network-app.git
    cd church-network-app
    ```
 
 2. **Backend Setup**
    ```bash
    cd backend
-   npm install
-   npx prisma migrate dev
-   npx prisma generate
+   cp .env.example .env        # then set JWT_SECRET (32+ random chars) and the SEED_ADMIN_* values
+   npm ci
+   npm run db:migrate          # applies prisma/migrations
+   npm run db:seed             # creates the roles and, if SEED_ADMIN_* are set, the first admin
    npm run dev
    ```
 
 3. **Frontend Setup**
    ```bash
    cd ../frontend
-   npm install
+   npm ci
    npm run dev
    ```
 
@@ -123,8 +124,18 @@ A comprehensive church management platform built with modern web technologies, d
    - Backend API: http://localhost:5000
    - Health Check: http://localhost:5000/health
 
-### **Default Setup**
-The application automatically creates default roles (Admin, Leader, Member) on first startup. Register your first user to begin managing your church community.
+### **Accounts and Roles**
+- Self-registration creates an **inactive** account. An admin or leader activates it (edit the member and tick Active) before the person can sign in.
+- The first admin comes from the seed (`SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD`, 12+ characters). Change that password after first login.
+- `admin` and `leader` can see member contact details, CRM notes, analytics and exports and can create members. `member` sees a name-only directory and their own profile.
+
+### **Quality checks**
+```bash
+# backend
+npm run typecheck && npm test
+# frontend
+npm run typecheck && npm run lint && npm run build
+```
 
 ## 📁 Project Structure
 
@@ -152,15 +163,21 @@ church-network-app/
 
 ## 🔧 API Endpoints
 
+All routes except `/health`, `POST /api/auth/register` and `POST /api/auth/login` require a bearer token. Routes marked *staff* require the `admin` or `leader` role.
+
 ### **Authentication**
-- `POST /api/auth/register` - Register new user
+- `POST /api/auth/register` - Register (account stays inactive until approved)
 - `POST /api/auth/login` - User login
 - `GET /api/auth/me` - Get current user profile
 
 ### **User Management**
-- `GET /api/users` - Get all users (members)
-- `GET /api/users/:id` - Get specific user
-- `PUT /api/users/:id` - Update user profile
+- `GET /api/users` - Member directory (full details for staff, name-only for members)
+- `POST /api/users` - Create a member *(staff)*
+- `GET /api/users/:id` - Get a user (full details for staff or self)
+- `PUT /api/users/:id` - Update profile; staff may set `isActive`, admins may set `roleIds`
+- `GET /api/users/export` - CSV export *(staff)*
+- `GET|POST|DELETE /api/users/saved-searches` - Saved searches
+- `GET /api/analytics/...` and `GET /api/member-details/...` - CRM and analytics *(staff)*
 
 ### **Media Management**
 - `GET /api/media` - Get media library content

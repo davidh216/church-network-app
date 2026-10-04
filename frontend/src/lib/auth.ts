@@ -1,29 +1,37 @@
-const API_BASE = 'http://localhost:5000/api';
+import type { User } from '../types/domain';
+import { getErrorMessage } from './errors';
 
-interface User {
-  id: string;
-  email: string;
-  name: string;
-  phone?: string;
-  avatar?: string;
-  bio?: string;
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
-  roles: Array<{
-    role: {
-      id: string;
-      name: string;
-      description?: string;
-      permissions: string;
-    }
-  }>;
-}
+export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:5000/api';
 
-interface AuthResponse {
+export interface AuthResponse {
   success: boolean;
   user: User;
   token: string;
+}
+
+export interface RegisterResponse {
+  success: boolean;
+  pendingApproval: boolean;
+  message: string;
+  user: Pick<User, 'id' | 'email' | 'name' | 'isActive' | 'createdAt'>;
+}
+
+interface ApiErrorBody {
+  error?: string;
+  details?: Record<string, string[]>;
+}
+
+async function readError(response: Response, fallback: string): Promise<string> {
+  try {
+    const body = (await response.json()) as ApiErrorBody;
+    if (body.details) {
+      const first = Object.entries(body.details)[0];
+      if (first) return `${first[0]}: ${first[1][0]}`;
+    }
+    return body.error || fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 class AuthService {
@@ -35,70 +43,50 @@ class AuthService {
     }
   }
 
-  async register(email: string, password: string, name: string, phone?: string): Promise<AuthResponse> {
+  /** Creates an account that an administrator must approve. Does not sign in. */
+  async register(email: string, password: string, name: string, phone?: string): Promise<RegisterResponse> {
     const response = await fetch(`${API_BASE}/auth/register`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password, name, phone }),
     });
-
-    const data = await response.json();
-
     if (!response.ok) {
-      throw new Error(data.error || 'Registration failed');
+      throw new Error(await readError(response, 'Registration failed'));
     }
-
-    this.token = data.token;
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('token', data.token);
-    }
-
-    return data;
+    return (await response.json()) as RegisterResponse;
   }
 
   async login(email: string, password: string): Promise<AuthResponse> {
     const response = await fetch(`${API_BASE}/auth/login`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
     });
-
-    const data = await response.json();
-
     if (!response.ok) {
-      throw new Error(data.error || 'Login failed');
+      throw new Error(await readError(response, 'Login failed'));
     }
-
+    const data = (await response.json()) as AuthResponse;
     this.token = data.token;
     if (typeof window !== 'undefined') {
       localStorage.setItem('token', data.token);
     }
-
     return data;
   }
 
   async getCurrentUser(): Promise<User | null> {
     if (!this.token) return null;
-
     try {
       const response = await fetch(`${API_BASE}/auth/me`, {
-        headers: {
-          'Authorization': `Bearer ${this.token}`,
-        },
+        headers: { Authorization: `Bearer ${this.token}` },
       });
-
       if (!response.ok) {
         this.logout();
         return null;
       }
-
-      const data = await response.json();
+      const data = (await response.json()) as { user: User };
       return data.user;
-    } catch (error) {
+    } catch (err) {
+      console.error('Auth check failed:', getErrorMessage(err));
       this.logout();
       return null;
     }
@@ -123,12 +111,11 @@ class AuthService {
     if (!this.token) {
       throw new Error('Not authenticated');
     }
-  
     return fetch(url, {
       ...options,
       headers: {
         ...options.headers,
-        'Authorization': `Bearer ${this.token}`,
+        Authorization: `Bearer ${this.token}`,
         'Content-Type': 'application/json',
       },
     });
@@ -136,4 +123,4 @@ class AuthService {
 }
 
 export const authService = new AuthService();
-export type { User, AuthResponse };
+export type { User };

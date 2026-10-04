@@ -3,19 +3,12 @@
 import { useState, useEffect } from 'react';
 import { authService } from '../../lib/auth';
 
-interface SavedSearch {
-  id: string;
-  name: string;
-  description: string;
-  query: any;
-  createdAt: string;
-  isPublic: boolean;
-}
+import type { SavedSearch, SearchQuery } from '../../types/domain';
 
 interface SavedSearchesProps {
-  onLoadSearch: (query: any) => void;
+  onLoadSearch: (query: SearchQuery) => void;
   onClose: () => void;
-  currentQuery: any;
+  currentQuery: SearchQuery | null;
 }
 
 export default function SavedSearches({ onLoadSearch, onClose, currentQuery }: SavedSearchesProps) {
