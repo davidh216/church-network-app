@@ -45,6 +45,11 @@ jobs:
       # vitest.config.mts points DATABASE_URL at church_test on localhost:5432.
       - run: npm run -w backend test
       - run: npm run -w backend build
+      # The container entrypoint runs the compiled seed before the server.
+      - name: Compiled seed runs
+        run: node backend/dist/prisma/seed.js
+        env:
+          DATABASE_URL: postgresql://church:church@localhost:5432/church_test?schema=public
       - name: Migrations match schema.prisma
         run: >-
           npx -w backend prisma migrate diff

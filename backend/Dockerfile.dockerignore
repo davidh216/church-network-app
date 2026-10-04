@@ -6,8 +6,10 @@
 !backend/package.json
 !backend/tsconfig.json
 !backend/tsconfig.build.json
+!backend/tsconfig.seed.json
 !backend/prisma.config.ts
 !backend/prisma/schema.prisma
+!backend/prisma/seed.ts
 !backend/prisma/migrations/
 !backend/src/
 !frontend/package.json

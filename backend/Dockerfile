@@ -14,7 +14,7 @@ COPY backend/prisma.config.ts backend/
 COPY backend/prisma backend/prisma
 RUN npm ci -w backend
 COPY backend backend
-# prisma generate && tsc -p tsconfig.build.json
+# prisma generate, then tsc for src/ (dist/) and prisma/seed.ts (dist/prisma/seed.js)
 RUN npm run -w backend build
 
 FROM node:22-alpine AS runtime
@@ -36,4 +36,6 @@ COPY --from=build /app/backend/dist backend/dist
 WORKDIR /app/backend
 USER node
 EXPOSE 5000
-ENTRYPOINT ["sh", "-c", "npx prisma migrate deploy && node dist/server.js"]
+# Migrate, seed, serve. The seed is idempotent: it upserts the roles and creates the first admin
+# only when SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD are set and that account does not exist yet.
+ENTRYPOINT ["sh", "-c", "npx prisma migrate deploy && node dist/prisma/seed.js && node dist/server.js"]
