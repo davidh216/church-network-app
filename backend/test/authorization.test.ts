@@ -59,7 +59,10 @@ describe('authorization', () => {
       expect((await request(app).post('/api/users').set(bearer(memberToken)).send({ name: 'x', email: 'x@test.local', password: 'longenough1' })).status).toBe(403);
       expect((await request(app).put(`/api/users/${otherMemberId}`).set(bearer(memberToken)).send({ name: 'Hacked' })).status).toBe(403);
       expect((await request(app).put(`/api/users/${memberId}`).set(bearer(memberToken)).send({ isActive: false })).status).toBe(403);
-      expect((await request(app).put(`/api/users/${memberId}`).set(bearer(memberToken)).send({ roleIds: ['x'] })).status).toBe(403);
+      const leaderRoleId = await roleId(memberToken, 'leader');
+      expect((await request(app).put(`/api/users/${memberId}`).set(bearer(memberToken)).send({ roleIds: [leaderRoleId] })).status).toBe(403);
+      // Input is validated before authorization: a malformed role id is a 400, not a 403.
+      expect((await request(app).put(`/api/users/${memberId}`).set(bearer(memberToken)).send({ roleIds: ['x'] })).status).toBe(400);
     });
 
     it('sees only a reduced directory without emails, phones or engagement', async () => {
@@ -143,7 +146,7 @@ describe('authorization', () => {
       expect(lines).toHaveLength(1);
       expect(lines[0]).toMatch(/^"Name","Email","Phone","Bio","Status","Roles",/);
       expect(lines[0]).toMatch(/"Last Login"$/);
-      expect(lines[0].split(',')).toHaveLength(18);
+      expect(lines[0]!.split(',')).toHaveLength(18);
     });
 
     it('can create members but cannot grant the admin or leader role', async () => {

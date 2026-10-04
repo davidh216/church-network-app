@@ -1,8 +1,8 @@
 import type { Prisma } from '@prisma/client';
 
-// User projections shared by the routes and the auth middleware. They live here
-// rather than in routes/users.ts so middleware/auth.ts can use them without an
-// import cycle (routes/users.ts imports the middleware at load time).
+// User projections: the single source of truth for what each audience sees of a user.
+// This file imports nothing from the app, so middleware/auth.ts can load selfSelect
+// without an import cycle through the users router.
 
 // What every authenticated member may see about other members.
 export const directorySelect = {

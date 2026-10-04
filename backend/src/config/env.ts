@@ -14,12 +14,13 @@ const schema = z.object({
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
   JWT_EXPIRES_IN: z.string().default('7d'),
   CORS_ORIGIN: z.string().default('http://localhost:3000'),
-  LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
+  LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
 });
 
 const parsed = schema.safeParse(process.env);
 if (!parsed.success) {
-  console.error('Invalid environment configuration:\n' + z.prettifyError(parsed.error));
+  // The logger depends on this module, so configuration errors go straight to stderr.
+  process.stderr.write('Invalid environment configuration:\n' + z.prettifyError(parsed.error) + '\n');
   process.exit(1);
 }
 

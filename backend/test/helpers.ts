@@ -27,7 +27,7 @@ export async function createUser(opts: { email: string; role: RoleName; password
   return prisma.user.create({
     data: {
       email: opts.email,
-      name: opts.name ?? opts.email.split('@')[0],
+      name: opts.name ?? opts.email.split('@')[0]!,
       password: await bcrypt.hash(opts.password ?? 'correct-horse-battery', 4),
       isActive: opts.isActive ?? true,
       roles: { create: [{ roleId: role.id }] },

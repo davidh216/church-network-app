@@ -12,6 +12,7 @@ export default defineConfig({
       JWT_SECRET: 'test-only-secret-that-is-at-least-32-characters-long',
       CORS_ORIGIN: 'http://localhost:3000',
       JWT_EXPIRES_IN: '1h',
+      LOG_LEVEL: 'silent',
     },
   },
 });

@@ -2,7 +2,7 @@ import type { RequestHandler } from 'express';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env';
 import { prisma } from '../lib/prisma';
-import { selfSelect } from '../lib/user-selects';
+import { selfSelect } from '../modules/users/selects';
 import type { AuthenticatedUser, RoleName } from '../types/auth';
 
 export const STAFF: RoleName[] = ['admin', 'leader'];

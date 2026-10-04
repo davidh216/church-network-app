@@ -1,19 +1,19 @@
 import { env } from './config/env';
+import { logger } from './lib/logger';
 import { prisma } from './lib/prisma';
 import { createApp } from './app';
 
 const app = createApp();
 const server = app.listen(env.PORT, () => {
-  console.log(`Server listening on http://localhost:${env.PORT} (${env.NODE_ENV})`);
+  logger.info({ port: env.PORT, nodeEnv: env.NODE_ENV }, 'server listening');
 });
 
-async function shutdown(signal: string) {
-  console.log(`${signal} received, shutting down`);
-  server.close(async () => {
-    await prisma.$disconnect();
-    process.exit(0);
+function shutdown(signal: string) {
+  logger.info({ signal }, 'shutting down');
+  server.close(() => {
+    void prisma.$disconnect().finally(() => process.exit(0));
   });
 }
 
-process.on('SIGINT', () => void shutdown('SIGINT'));
-process.on('SIGTERM', () => void shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
