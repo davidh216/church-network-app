@@ -128,9 +128,11 @@ describe('authorization', () => {
 
     it('can export CSV, with cells escaped', async () => {
       await prisma.user.update({ where: { id: otherMemberId }, data: { bio: '=HYPERLINK("x"), "quoted"' } });
-      const res = await request(app).get('/api/users/export?format=csv').set(bearer(leaderToken));
+      const res = await request(app).get('/api/users/export?format=csv').set(bearer(leaderToken)).set('Origin', 'http://localhost:3000');
       expect(res.status).toBe(200);
       expect(res.headers['content-type']).toContain('text/csv');
+      expect(res.headers['content-disposition']).toBe('attachment; filename="members.csv"');
+      expect(res.headers['access-control-expose-headers']).toContain('Content-Disposition');
       expect(res.text).toContain('"\'=HYPERLINK(""x""), ""quoted"""');
     });
 

@@ -24,7 +24,8 @@ export function createApp() {
 
   app.disable('x-powered-by');
   app.use(helmet());
-  app.use(cors({ origin: corsOrigins, credentials: true }));
+  // Content-Disposition is exposed so the browser can read the export's filename.
+  app.use(cors({ origin: corsOrigins, credentials: true, exposedHeaders: ['Content-Disposition'] }));
   app.use(express.json({ limit: '100kb' }));
 
   app.get('/health', async (_req, res) => {
