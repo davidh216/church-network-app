@@ -269,6 +269,7 @@ New product features beyond the README's current claims; mobile apps; Slack, ema
 
 ## 9. How we will work
 
+- Model assignment (owner instruction, 2026-10-04): planning, specification and review by Claude Fable 5.1; implementation agents run Claude Opus 5.5 at medium effort. Each Phase 1 item is specified in writing before an implementation agent starts it, and every agent's output is verified (typecheck, lint, tests, build) and reviewed before it is pushed.
 - One branch and one pull request per phase, with Phase 0 and Phase 1 split into two PRs each if they grow past roughly 1,500 changed lines. Base branch `main`.
 - Before every push: `npm run lint`, `npm run typecheck`, `npm test`, `npm run build` for both packages (from Phase 1 these are the root scripts and CI runs the same).
 - Each PR description lists the finding ids it closes and the acceptance checks run, with command output.
