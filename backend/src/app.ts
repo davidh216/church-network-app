@@ -11,6 +11,14 @@ import mediaRoutes from './routes/simple-media';
 import analyticsRoutes from './routes/analytics';
 import memberDetailsRoutes from './routes/member-details';
 
+// A 4xx status carried by an error (body-parser 413/415, http-errors, ...), if any.
+function clientErrorStatus(err: unknown): number | undefined {
+  if (!err || typeof err !== 'object') return undefined;
+  const { status, statusCode } = err as { status?: unknown; statusCode?: unknown };
+  const code = typeof status === 'number' ? status : typeof statusCode === 'number' ? statusCode : undefined;
+  return code !== undefined && code >= 400 && code <= 499 ? code : undefined;
+}
+
 export function createApp() {
   const app = express();
 
@@ -43,6 +51,12 @@ export function createApp() {
   const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
     if (err && typeof err === 'object' && 'type' in err && err.type === 'entity.parse.failed') {
       res.status(400).json({ error: 'Malformed JSON body' });
+      return;
+    }
+    const status = clientErrorStatus(err);
+    if (status !== undefined) {
+      const { expose, message } = err as { expose?: unknown; message?: unknown };
+      res.status(status).json({ error: expose === true && typeof message === 'string' ? message : 'Bad request' });
       return;
     }
     console.error(err);

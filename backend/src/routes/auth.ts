@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { authenticate, signToken } from '../middleware/auth';
 import { parseOr400 } from '../lib/validation';
+import { selfSelect } from '../lib/user-selects';
 
 const router = express.Router();
 
@@ -58,10 +59,10 @@ router.post('/login', async (req, res) => {
   const body = parseOr400(loginSchema, req.body, res);
   if (!body) return;
 
+  // The password hash is omitted globally; select it back in for the comparison only.
   const user = await prisma.user.findUnique({
     where: { email: body.email.toLowerCase() },
-    omit: { password: false },
-    include: { roles: { include: { role: true } } },
+    select: { ...selfSelect, password: true },
   });
 
   if (!user || !(await bcrypt.compare(body.password, user.password))) {
@@ -79,6 +80,7 @@ router.post('/login', async (req, res) => {
   res.json({ success: true, user: safeUser, token: signToken(user.id) });
 });
 
+// req.user is loaded with selfSelect by `authenticate`.
 router.get('/me', authenticate, (req, res) => {
   res.json({ success: true, user: req.user });
 });

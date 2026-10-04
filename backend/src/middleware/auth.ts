@@ -2,6 +2,7 @@ import type { RequestHandler } from 'express';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env';
 import { prisma } from '../lib/prisma';
+import { selfSelect } from '../lib/user-selects';
 import type { AuthenticatedUser, RoleName } from '../types/auth';
 
 export const STAFF: RoleName[] = ['admin', 'leader'];
@@ -47,7 +48,7 @@ export const authenticate: RequestHandler = async (req, res, next) => {
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    include: { roles: { include: { role: true } } },
+    select: selfSelect,
   });
 
   if (!user || !user.isActive) {

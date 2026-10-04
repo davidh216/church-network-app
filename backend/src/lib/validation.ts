@@ -11,4 +11,5 @@ export function parseOr400<T extends z.ZodType>(schema: T, data: unknown, res: R
   return result.data;
 }
 
-export const cuidParam = z.object({ id: z.string().min(1).max(64) });
+// Every primary key in the schema is a Prisma cuid().
+export const idParam = z.object({ id: z.string().cuid() });

@@ -6,8 +6,15 @@ import { prisma } from '../src/lib/prisma';
 let adminToken: string;
 let leaderToken: string;
 let memberToken: string;
+let adminId: string;
+let leaderId: string;
 let memberId: string;
 let otherMemberId: string;
+
+async function roleId(token: string, name: string): Promise<string> {
+  const roles = (await request(app).get('/api/roles').set(bearer(token))).body.roles as { id: string; name: string }[];
+  return roles.find((r) => r.name === name)!.id;
+}
 
 describe('authorization', () => {
   beforeAll(async () => {
@@ -16,6 +23,8 @@ describe('authorization', () => {
     const leader = await createUser({ email: 'leader@test.local', role: 'leader' });
     const member = await createUser({ email: 'member@test.local', role: 'member' });
     const other = await createUser({ email: 'other@test.local', role: 'member', name: 'Other Person' });
+    adminId = admin.id;
+    leaderId = leader.id;
     memberId = member.id;
     otherMemberId = other.id;
     await prisma.memberNote.createMany({
@@ -77,6 +86,22 @@ describe('authorization', () => {
       expect(upd.body.user.name).toBe('Renamed Member');
       expect(upd.body.user.phone).toBeNull();
     });
+
+    it('stores a whitespace-only phone or bio as null', async () => {
+      await prisma.user.update({ where: { id: memberId }, data: { phone: '555-0100', bio: 'Old bio' } });
+      const upd = await request(app).put(`/api/users/${memberId}`).set(bearer(memberToken)).send({ phone: '   ', bio: ' \t ' });
+      expect(upd.status).toBe(200);
+      expect(upd.body.user.phone).toBeNull();
+      const stored = await prisma.user.findUniqueOrThrow({ where: { id: memberId } });
+      expect(stored.phone).toBeNull();
+      expect(stored.bio).toBeNull();
+    });
+
+    it('gets 400 for a user id that is not a cuid', async () => {
+      const res = await request(app).get('/api/users/not-a-cuid').set(bearer(memberToken));
+      expect(res.status).toBe(400);
+      expect(res.body.details.id).toBeDefined();
+    });
   });
 
   describe('a leader', () => {
@@ -109,11 +134,26 @@ describe('authorization', () => {
       expect(res.text).toContain('"\'=HYPERLINK(""x""), ""quoted"""');
     });
 
-    it('can create members but cannot grant the admin role', async () => {
-      const roles = (await request(app).get('/api/roles').set(bearer(leaderToken))).body.roles as { id: string; name: string }[];
-      const adminRole = roles.find((r) => r.name === 'admin')!;
-      const denied = await request(app).post('/api/users').set(bearer(leaderToken)).send({ name: 'Sneaky', email: 'sneaky@test.local', password: 'longenough1', roleIds: [adminRole.id] });
-      expect(denied.status).toBe(403);
+    it('gets the full CSV header even when no member matches the export', async () => {
+      const res = await request(app).get('/api/users/export?format=csv&members=cnonexistent0000000000000').set(bearer(leaderToken));
+      expect(res.status).toBe(200);
+      const lines = res.text.split('\n');
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).toMatch(/^"Name","Email","Phone","Bio","Status","Roles",/);
+      expect(lines[0]).toMatch(/"Last Login"$/);
+      expect(lines[0].split(',')).toHaveLength(18);
+    });
+
+    it('can create members but cannot grant the admin or leader role', async () => {
+      for (const name of ['admin', 'leader']) {
+        const denied = await request(app)
+          .post('/api/users')
+          .set(bearer(leaderToken))
+          .send({ name: 'Sneaky', email: `sneaky-${name}@test.local`, password: 'longenough1', roleIds: [await roleId(leaderToken, name)] });
+        expect(denied.status).toBe(403);
+        expect(denied.body.error).toBe('Only an admin can grant staff roles');
+      }
+      expect(await prisma.user.count({ where: { email: { startsWith: 'sneaky' } } })).toBe(0);
       const ok = await request(app).post('/api/users').set(bearer(leaderToken)).send({ name: 'Created By Leader', email: 'Created@test.local', password: 'longenough1' });
       expect(ok.status).toBe(201);
       expect(ok.body.user.email).toBe('created@test.local');
@@ -129,6 +169,37 @@ describe('authorization', () => {
       expect(approve.status).toBe(200);
       expect((await request(app).post('/api/auth/login').send({ email: 'pending@test.local', password: 'longenough1' })).status).toBe(200);
     });
+
+    it('cannot change roles, even to member', async () => {
+      const res = await request(app).put(`/api/users/${memberId}`).set(bearer(leaderToken)).send({ roleIds: [await roleId(leaderToken, 'member')] });
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe('Only an admin can change roles');
+    });
+
+    it('cannot deactivate the admin', async () => {
+      const res = await request(app).put(`/api/users/${adminId}`).set(bearer(leaderToken)).send({ isActive: false });
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe('Only an admin can modify staff accounts');
+      expect((await prisma.user.findUniqueOrThrow({ where: { id: adminId } })).isActive).toBe(true);
+      expect(await login('admin@test.local')).toBeTruthy();
+    });
+
+    it('cannot edit another leader', async () => {
+      const otherLeader = await createUser({ email: 'leader2@test.local', role: 'leader', name: 'Second Leader' });
+      const res = await request(app).put(`/api/users/${otherLeader.id}`).set(bearer(leaderToken)).send({ name: 'x' });
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe('Only an admin can modify staff accounts');
+      expect((await prisma.user.findUniqueOrThrow({ where: { id: otherLeader.id } })).name).toBe('Second Leader');
+    });
+
+    it('can still edit a plain member and their own profile', async () => {
+      const member = await request(app).put(`/api/users/${memberId}`).set(bearer(leaderToken)).send({ name: 'Edited By Leader' });
+      expect(member.status).toBe(200);
+      expect(member.body.user.name).toBe('Edited By Leader');
+      const self = await request(app).put(`/api/users/${leaderId}`).set(bearer(leaderToken)).send({ name: 'Leader Renamed' });
+      expect(self.status).toBe(200);
+      expect(self.body.user.name).toBe('Leader Renamed');
+    });
   });
 
   describe('an admin', () => {
@@ -143,6 +214,27 @@ describe('authorization', () => {
       const res = await request(app).put(`/api/users/${otherMemberId}`).set(bearer(adminToken)).send({ roleIds: [leaderRole.id] });
       expect(res.status).toBe(200);
       expect(res.body.user.roles.map((r: { role: { name: string } }) => r.role.name)).toEqual(['leader']);
+    });
+
+    it('can modify a leader account', async () => {
+      const res = await request(app).put(`/api/users/${leaderId}`).set(bearer(adminToken)).send({ name: 'Leader By Admin' });
+      expect(res.status).toBe(200);
+      expect(res.body.user.name).toBe('Leader By Admin');
+    });
+
+    it('cannot deactivate themself', async () => {
+      const res = await request(app).put(`/api/users/${adminId}`).set(bearer(adminToken)).send({ isActive: false });
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe('You cannot lock yourself out');
+      expect((await prisma.user.findUniqueOrThrow({ where: { id: adminId } })).isActive).toBe(true);
+    });
+
+    it('cannot drop their own admin role', async () => {
+      const res = await request(app).put(`/api/users/${adminId}`).set(bearer(adminToken)).send({ roleIds: [await roleId(adminToken, 'member')] });
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe('You cannot lock yourself out');
+      const stored = await prisma.user.findUniqueOrThrow({ where: { id: adminId }, include: { roles: { include: { role: true } } } });
+      expect(stored.roles.map((r) => r.role.name)).toEqual(['admin']);
     });
   });
 });

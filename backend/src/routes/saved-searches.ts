@@ -2,7 +2,7 @@ import express from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { isAdmin } from '../middleware/auth';
-import { parseOr400, cuidParam } from '../lib/validation';
+import { parseOr400, idParam } from '../lib/validation';
 
 const router = express.Router();
 
@@ -70,7 +70,7 @@ router.post('/', async (req, res) => {
 });
 
 router.delete('/:id', async (req, res) => {
-  const params = parseOr400(cuidParam, req.params, res);
+  const params = parseOr400(idParam, req.params, res);
   if (!params) return;
   const user = req.user!;
   const search = await prisma.savedSearch.findUnique({ where: { id: params.id } });
@@ -87,7 +87,7 @@ router.delete('/:id', async (req, res) => {
 });
 
 router.post('/:id/use', async (req, res) => {
-  const params = parseOr400(cuidParam, req.params, res);
+  const params = parseOr400(idParam, req.params, res);
   if (!params) return;
   const user = req.user!;
   const search = await prisma.savedSearch.findUnique({ where: { id: params.id } });

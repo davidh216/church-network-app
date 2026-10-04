@@ -3,6 +3,21 @@ import request from 'supertest';
 import { app, bearer, createUser, login, resetDatabase } from './helpers';
 import { prisma } from '../src/lib/prisma';
 
+// Every route mounted behind `authenticate` in app.ts; none may answer an anonymous caller.
+const SOME_ID = 'cjld2cjxh0000qzrmn831i7rn';
+const GATED_ROUTES: { method: 'get' | 'post'; path: string }[] = [
+  { method: 'get', path: '/api/users' },
+  { method: 'post', path: '/api/users' },
+  { method: 'get', path: '/api/users/export' },
+  { method: 'get', path: '/api/users/saved-searches' },
+  { method: 'get', path: '/api/roles' },
+  { method: 'get', path: '/api/media' },
+  { method: 'post', path: '/api/media' },
+  { method: 'get', path: '/api/analytics/members' },
+  { method: 'get', path: `/api/member-details/${SOME_ID}` },
+  { method: 'post', path: `/api/member-details/${SOME_ID}/notes` },
+];
+
 describe('authentication', () => {
   beforeAll(async () => {
     await resetDatabase();
@@ -59,10 +74,39 @@ describe('authentication', () => {
     expect(stored?.lastLoginAt).toBeInstanceOf(Date);
   });
 
+  it('login and /me return only the self projection: no password hash, no staff notes', async () => {
+    await prisma.user.update({ where: { email: 'admin@test.local' }, data: { notes: 'STAFF-ONLY pastoral note' } });
+    const loginRes = await request(app).post('/api/auth/login').send({ email: 'admin@test.local', password: 'correct-horse-battery' });
+    expect(loginRes.status).toBe(200);
+    expect('password' in loginRes.body.user).toBe(false);
+    expect('notes' in loginRes.body.user).toBe(false);
+    const me = await request(app).get('/api/auth/me').set(bearer(loginRes.body.token));
+    expect(me.status).toBe(200);
+    expect('password' in me.body.user).toBe(false);
+    expect('notes' in me.body.user).toBe(false);
+    expect(JSON.stringify(me.body)).not.toContain('STAFF-ONLY');
+    expect(me.body.user).toMatchObject({ email: 'admin@test.local', name: 'admin', isActive: true });
+    expect(typeof me.body.user.id).toBe('string');
+    expect(me.body.user.roles[0].role.name).toBe('admin');
+  });
+
+  it('rejects an oversized JSON body with 413', async () => {
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({ email: 'admin@test.local', password: 'x'.repeat(200 * 1024) });
+    expect(res.status).toBe(413);
+    expect(typeof res.body.error).toBe('string');
+  });
+
   it('protected routes reject missing and invalid tokens with 401', async () => {
     expect((await request(app).get('/api/users')).status).toBe(401);
     expect((await request(app).get('/api/users').set(bearer('garbage'))).status).toBe(401);
     expect((await request(app).get('/api/member-details/x')).status).toBe(401);
+  });
+
+  it.each(GATED_ROUTES)('$method $path without a token -> 401', async ({ method, path }) => {
+    const res = await request(app)[method](path);
+    expect(res.status).toBe(401);
   });
 
   it('unknown routes return a JSON 404', async () => {
