@@ -11,8 +11,11 @@ export const STAFF: RoleName[] = ['admin', 'leader'];
 // bearer client sends.
 export const SESSION_COOKIE = 'embrace_session';
 
+// Secure in production unless COOKIE_SECURE says otherwise (plain-HTTP production builds).
 export function sessionCookieOptions(): CookieOptions {
-  return { httpOnly: true, path: '/', sameSite: 'lax', secure: env.NODE_ENV === 'production' };
+  const secure =
+    env.COOKIE_SECURE !== undefined ? env.COOKIE_SECURE === 'true' : env.NODE_ENV === 'production';
+  return { httpOnly: true, path: '/', sameSite: 'lax', secure };
 }
 
 export function signToken(userId: string): string {

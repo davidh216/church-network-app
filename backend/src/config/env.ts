@@ -27,6 +27,9 @@ const schema = z.object({
   // Express `trust proxy`: which upstream addresses may set X-Forwarded-For. The Next.js rewrite
   // (and any reverse proxy in front of it) must be covered, or every client shares one IP.
   TRUST_PROXY: z.string().trim().min(1).default('loopback, uniquelocal'),
+  // Overrides the session cookie's Secure flag (default: on in production only). For a production
+  // build served over plain HTTP, such as the local compose stack; leave unset behind TLS.
+  COOKIE_SECURE: z.enum(['true', 'false']).optional(),
 });
 
 const parsed = schema.safeParse(process.env);
