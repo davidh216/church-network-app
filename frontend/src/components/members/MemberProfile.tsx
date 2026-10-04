@@ -145,7 +145,7 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
 
   if (loading) {
     return (
-      <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+      <div className="fixed inset-0 bg-gray-600/50 overflow-y-auto h-full w-full z-50">
         <div className="relative top-20 mx-auto p-5 border max-w-4xl shadow-lg rounded-md bg-white">
           <div className="flex justify-center items-center h-64">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -157,7 +157,7 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
 
   if (error || !member) {
     return (
-      <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+      <div className="fixed inset-0 bg-gray-600/50 overflow-y-auto h-full w-full z-50">
         <div className="relative top-20 mx-auto p-5 border max-w-4xl shadow-lg rounded-md bg-white">
           <div className="text-center">
             <div className="text-red-600 mb-4">{error || 'Member not found'}</div>
@@ -185,7 +185,7 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
   ];
 
   return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+    <div className="fixed inset-0 bg-gray-600/50 overflow-y-auto h-full w-full z-50">
       <div className="relative top-10 mx-auto p-5 border max-w-7xl shadow-lg rounded-md bg-white mb-10">
         {/* Header */}
         <div className="flex justify-between items-start border-b border-gray-200 pb-4 mb-6">
@@ -485,7 +485,7 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
                 <div className="space-y-4">
                   {member.timelineActivities.map((activity) => (
                     <div key={activity.id} className="flex items-start space-x-4 p-4 bg-gray-50 rounded-lg">
-                      <div className="flex-shrink-0">
+                      <div className="shrink-0">
                         <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
                           <span className="text-sm font-medium text-blue-600">
                             {activity.activityType.charAt(0).toUpperCase()}

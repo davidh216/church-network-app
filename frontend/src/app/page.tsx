@@ -107,7 +107,7 @@ export default function Home() {
         {/* Dashboard Section */}
         {!showMembers && !showMedia && !showAnalytics && (
           <div className="px-4 py-6 sm:px-0">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Profile Card */}
               <div className="bg-white overflow-hidden shadow rounded-lg">
                 <div className="p-5">
@@ -148,9 +148,6 @@ export default function Home() {
                     >
                       👥 View Members
                     </button>
-                    <button className="w-full text-left px-3 py-2 bg-green-50 hover:bg-green-100 rounded-md text-sm text-green-700">
-                      📅 Upcoming Events
-                    </button>
                     <button 
                       onClick={() => setShowMedia(true)}
                       className="w-full text-left px-3 py-2 bg-purple-50 hover:bg-purple-100 rounded-md text-sm text-purple-700"
@@ -165,33 +162,6 @@ export default function Home() {
                         📊 Member Analytics
                       </button>
                     )}
-                    <button className="w-full text-left px-3 py-2 bg-yellow-50 hover:bg-yellow-100 rounded-md text-sm text-yellow-700">
-                      💬 Slack Workspace
-                    </button>
-                  </div>
-                </div>
-              </div>
-              {/* Membership Stats Card */}
-              <div className="bg-white overflow-hidden shadow rounded-lg">
-                <div className="p-5">
-                  <h3 className="text-lg font-medium text-gray-900">Membership Overview</h3>
-                  <div className="mt-4 space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-sm text-gray-600">Total Members:</span>
-                      <span className="text-sm font-medium text-green-600">Active System</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-gray-600">Member Profiles:</span>
-                      <span className="text-sm font-medium text-blue-600">Enhanced</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-gray-600">Search & Filter:</span>
-                      <span className="text-sm font-medium text-purple-600">Advanced</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-gray-600">View Modes:</span>
-                      <span className="text-sm font-medium text-indigo-600">Table & Cards</span>
-                    </div>
                   </div>
                 </div>
               </div>
@@ -204,13 +174,6 @@ export default function Home() {
               <p className="text-gray-600 mb-4">
                 You&apos;re successfully logged in! This is your church network platform.
               </p>
-              <div className="mt-6 p-4 bg-green-50 rounded-md">
-                <p className="text-sm text-green-800">
-                  <strong>🎉 Latest Updates:</strong> Enhanced membership management system with detailed profiles, 
-                  advanced search & filtering, and modern video player are now live! 
-                  Ready for member communication tools and family management.
-                </p>
-              </div>
             </div>
           </div>
         )}
@@ -310,6 +273,12 @@ export default function Home() {
               setCurrentMediaIndex(nextIndex);
               setPlayingMedia(mediaPlaylist[nextIndex]);
             }
+          }}
+          onSelect={(index) => {
+            const item = mediaPlaylist[index];
+            if (!item) return;
+            setCurrentMediaIndex(index);
+            setPlayingMedia(item);
           }}
           onPlayPrevious={() => {
             if (currentMediaIndex > 0) {

@@ -175,7 +175,7 @@ export default function SimpleMediaLibrary({ onPlayMedia }: SimpleMediaLibraryPr
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 p-6">
           {media.map((item) => (
             <div key={item.id} className="bg-gray-50 rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-all duration-200 hover:scale-105">
-              <div className="relative group">
+              <div className="relative group bg-gray-200">
                 <img
                   src={getHighResThumbnailUrl(item.url)}
                   alt={item.title}
@@ -183,12 +183,13 @@ export default function SimpleMediaLibrary({ onPlayMedia }: SimpleMediaLibraryPr
                   onError={(e) => {
                     const target = e.target as HTMLImageElement;
                     target.src = getThumbnailUrl(item.url);
+                    // Last resort: hide the broken image and let the grey frame show.
                     target.onerror = () => {
-                      target.src = 'https://via.placeholder.com/480x360/f3f4f6/6b7280?text=Video+Thumbnail';
+                      target.style.visibility = 'hidden';
                     };
                   }}
                 />
-                <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-opacity duration-200" />
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors duration-200" />
                 <button
                   onClick={() => onPlayMedia(item, media)}
                   className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200"
@@ -199,14 +200,7 @@ export default function SimpleMediaLibrary({ onPlayMedia }: SimpleMediaLibraryPr
                     </svg>
                   </div>
                 </button>
-                
-                {/* Video Duration Overlay */}
-                <div className="absolute bottom-2 right-2 bg-black bg-opacity-75 text-white text-xs px-2 py-1 rounded">
-                  {/* This would be filled with actual duration from YouTube API */}
-                  <svg className="w-3 h-3 inline mr-1" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M8 5v10l8-5-8-5z"/>
-                  </svg>
-                </div>
+
               </div>
               
               <div className="p-4">
@@ -246,19 +240,19 @@ export default function SimpleMediaLibrary({ onPlayMedia }: SimpleMediaLibraryPr
           {media.map((item) => (
             <div key={item.id} className="p-6 hover:bg-gray-50 transition-colors">
               <div className="flex items-start space-x-4">
-                <div className="relative flex-shrink-0 group">
+                <div className="relative shrink-0 group bg-gray-200 rounded-lg">
                   <img
                     src={getThumbnailUrl(item.url)}
                     alt={item.title}
                     className="w-32 h-20 object-cover rounded-lg"
                     onError={(e) => {
                       const target = e.target as HTMLImageElement;
-                      target.src = 'https://via.placeholder.com/320x180/f3f4f6/6b7280?text=Video';
+                      target.style.visibility = 'hidden';
                     }}
                   />
                   <button
                     onClick={() => onPlayMedia(item, media)}
-                    className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-opacity rounded-lg"
+                    className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/50 transition-colors rounded-lg"
                   >
                     <div className="bg-red-600 rounded-full p-2 opacity-0 group-hover:opacity-100 transition-opacity">
                       <svg className="w-4 h-4 text-white ml-0.5" fill="currentColor" viewBox="0 0 20 20">
@@ -443,7 +437,7 @@ function AddVideoModal({ onClose, onSave }: AddVideoModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+    <div className="fixed inset-0 bg-gray-600/50 overflow-y-auto h-full w-full z-50">
       <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
         <div className="mt-3">
           <h3 className="text-lg font-medium text-gray-900 mb-4">

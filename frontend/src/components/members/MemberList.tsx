@@ -15,8 +15,10 @@ import type { Member, SearchQuery } from '../../types/domain';
 // Pure helpers live at module scope so they are initialised before render uses them.
 // The advanced-query evaluator is a stub that matches every member, so the Advanced
 // Search button and builder are not rendered while ADVANCED_SEARCH_ENABLED is false.
-// A query loaded from Saved Searches still goes through the stub (matches everyone).
+// Saved Searches only load such queries, so their button is hidden behind the same flag.
 const ADVANCED_SEARCH_ENABLED = false; // hidden until the evaluator exists (gameplan 2.4 / F038)
+
+const TOAST_TIMEOUT_MS = 6000;
 
 function evaluateAdvancedQuery(member: Member, query: SearchQuery): boolean {
   void member;
@@ -33,7 +35,6 @@ function getNestedValue(obj: unknown, path: string): unknown {
   }, obj);
 }
 
-// Download name from the export's Content-Disposition header (exposed by the API's CORS config).
 interface MemberListProps {
   onEditMember: (member: Member) => void;
   onAddMember: () => void;
@@ -61,6 +62,7 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(25);
   const [error, setError] = useState('');
+  const [toast, setToast] = useState('');
   const [advancedQuery, setAdvancedQuery] = useState<SearchQuery | null>(null);
 
   const fetchMembers = async () => {
@@ -77,6 +79,12 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
   useEffect(() => {
     fetchMembers();
   }, [refreshTrigger]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(''), TOAST_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [toast]);
 
   const filteredMembers = useMemo(() => members.filter(member => {
     // Advanced query takes precedence over basic filters
@@ -203,7 +211,7 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
     } catch (err) {
-      setError(getErrorMessage(err, 'Export failed'));
+      setToast(getErrorMessage(err, 'Export failed'));
     }
   };
   
@@ -302,12 +310,14 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
                 </button>
               )}
               
-              <button
-                onClick={() => setShowSavedSearches(!showSavedSearches)}
-                className="px-4 py-2 text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-md transition-colors"
-              >
-                Saved Searches
-              </button>
+              {ADVANCED_SEARCH_ENABLED && (
+                <button
+                  onClick={() => setShowSavedSearches(!showSavedSearches)}
+                  className="px-4 py-2 text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-md transition-colors"
+                >
+                  Saved Searches
+                </button>
+              )}
               
               {canManage && selectedMembers.size > 0 && (
                 <button
@@ -333,53 +343,58 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
               <option value="member">Member</option>
             </select>
             
-            <select
-              value={membershipStageFilter}
-              onChange={(e) => setMembershipStageFilter(e.target.value)}
-              className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">All Stages</option>
-              <option value="leader">Leader</option>
-              <option value="core_member">Core Member</option>
-              <option value="active_member">Active Member</option>
-              <option value="new_member">New Member</option>
-              <option value="visitor">Visitor</option>
-              <option value="at_risk">At Risk</option>
-              <option value="inactive">Inactive</option>
-            </select>
+            {/* Engagement and status are staff-only fields; the member directory has neither. */}
+            {canManage && (
+              <>
+                <select
+                  value={membershipStageFilter}
+                  onChange={(e) => setMembershipStageFilter(e.target.value)}
+                  className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="all">All Stages</option>
+                  <option value="leader">Leader</option>
+                  <option value="core_member">Core Member</option>
+                  <option value="active_member">Active Member</option>
+                  <option value="new_member">New Member</option>
+                  <option value="visitor">Visitor</option>
+                  <option value="at_risk">At Risk</option>
+                  <option value="inactive">Inactive</option>
+                </select>
             
-            <select
-              value={engagementFilter}
-              onChange={(e) => setEngagementFilter(e.target.value)}
-              className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">All Engagement</option>
-              <option value="high">High (80%+)</option>
-              <option value="medium">Medium (50-79%)</option>
-              <option value="low">Low (&lt;50%)</option>
-            </select>
+                <select
+                  value={engagementFilter}
+                  onChange={(e) => setEngagementFilter(e.target.value)}
+                  className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="all">All Engagement</option>
+                  <option value="high">High (80%+)</option>
+                  <option value="medium">Medium (50-79%)</option>
+                  <option value="low">Low (&lt;50%)</option>
+                </select>
             
-            <select
-              value={riskLevelFilter}
-              onChange={(e) => setRiskLevelFilter(e.target.value)}
-              className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">All Risk Levels</option>
-              <option value="low">Low Risk</option>
-              <option value="medium">Medium Risk</option>
-              <option value="high">High Risk</option>
-            </select>
+                <select
+                  value={riskLevelFilter}
+                  onChange={(e) => setRiskLevelFilter(e.target.value)}
+                  className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="all">All Risk Levels</option>
+                  <option value="low">Low Risk</option>
+                  <option value="medium">Medium Risk</option>
+                  <option value="high">High Risk</option>
+                </select>
             
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">All Status</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-            </select>
-            
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="all">All Status</option>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </>
+            )}
+
             <input
               type="date"
               placeholder="Start Date"
@@ -455,9 +470,8 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
       {canManage && selectedMembers.size > 0 && (
         <BulkActionsToolbar
           selectedCount={selectedMembers.size}
-          onExport={() => exportMembers()}
+          onExport={() => void exportMembers()}
           onClearSelection={() => setSelectedMembers(new Set())}
-          onBulkUpdate={() => {/* Implement bulk update */}}
         />
       )}
       
@@ -470,7 +484,7 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
       )}
       
       {/* Saved Searches */}
-      {showSavedSearches && (
+      {ADVANCED_SEARCH_ENABLED && showSavedSearches && (
         <SavedSearches
           onLoadSearch={(query) => {
             setAdvancedQuery(query);
@@ -510,51 +524,57 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
                   )}
                 </div>
               </th>
-              <th 
-                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                onClick={() => handleSort('email')}
-              >
-                <div className="flex items-center space-x-1">
-                  <span>Contact</span>
-                  {sortConfig.find(s => s.key === 'email') && (
-                    <span className="text-blue-500">
-                      {sortConfig.find(s => s.key === 'email')?.direction === 'asc' ? '↑' : '↓'}
-                    </span>
-                  )}
-                </div>
-              </th>
+              {canManage && (
+                <th 
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('email')}
+                >
+                  <div className="flex items-center space-x-1">
+                    <span>Contact</span>
+                    {sortConfig.find(s => s.key === 'email') && (
+                      <span className="text-blue-500">
+                        {sortConfig.find(s => s.key === 'email')?.direction === 'asc' ? '↑' : '↓'}
+                      </span>
+                    )}
+                  </div>
+                </th>
+              )}
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Role
               </th>
-              <th 
-                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                onClick={() => handleSort('engagement.engagementScore')}
-              >
-                <div className="flex items-center space-x-1">
-                  <span>Engagement</span>
-                  {sortConfig.find(s => s.key === 'engagement.engagementScore') && (
-                    <span className="text-blue-500">
-                      {sortConfig.find(s => s.key === 'engagement.engagementScore')?.direction === 'asc' ? '↑' : '↓'}
-                    </span>
-                  )}
-                </div>
-              </th>
-              <th 
-                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                onClick={() => handleSort('engagement.membershipStage')}
-              >
-                <div className="flex items-center space-x-1">
-                  <span>Stage</span>
-                  {sortConfig.find(s => s.key === 'engagement.membershipStage') && (
-                    <span className="text-blue-500">
-                      {sortConfig.find(s => s.key === 'engagement.membershipStage')?.direction === 'asc' ? '↑' : '↓'}
-                    </span>
-                  )}
-                </div>
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Status
-              </th>
+              {canManage && (
+                <>
+                  <th 
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('engagement.engagementScore')}
+                  >
+                    <div className="flex items-center space-x-1">
+                      <span>Engagement</span>
+                      {sortConfig.find(s => s.key === 'engagement.engagementScore') && (
+                        <span className="text-blue-500">
+                          {sortConfig.find(s => s.key === 'engagement.engagementScore')?.direction === 'asc' ? '↑' : '↓'}
+                        </span>
+                      )}
+                    </div>
+                  </th>
+                  <th 
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('engagement.membershipStage')}
+                  >
+                    <div className="flex items-center space-x-1">
+                      <span>Stage</span>
+                      {sortConfig.find(s => s.key === 'engagement.membershipStage') && (
+                        <span className="text-blue-500">
+                          {sortConfig.find(s => s.key === 'engagement.membershipStage')?.direction === 'asc' ? '↑' : '↓'}
+                        </span>
+                      )}
+                    </div>
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Status
+                  </th>
+                </>
+              )}
               <th 
                 className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                 onClick={() => handleSort('createdAt')}
@@ -592,7 +612,7 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
                 )}
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center flex-shrink-0">
+                    <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center shrink-0">
                       {member.avatar ? (
                         <img src={member.avatar} alt={member.name} className="w-10 h-10 rounded-full object-cover" />
                       ) : (
@@ -609,17 +629,19 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
                     </div>
                   </div>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm text-gray-900">{member.email}</div>
-                  {member.phone && (
-                    <div className="text-sm text-gray-500">{member.phone}</div>
-                  )}
-                  {member.lastLoginAt && (
-                    <div className="text-xs text-gray-400">
-                      Last login: {new Date(member.lastLoginAt).toLocaleDateString()}
-                    </div>
-                  )}
-                </td>
+                {canManage && (
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-900">{member.email}</div>
+                    {member.phone && (
+                      <div className="text-sm text-gray-500">{member.phone}</div>
+                    )}
+                    {member.lastLoginAt && (
+                      <div className="text-xs text-gray-400">
+                        Last login: {new Date(member.lastLoginAt).toLocaleDateString()}
+                      </div>
+                    )}
+                  </td>
+                )}
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="flex flex-wrap gap-1">
                     {member.roles && member.roles.length > 0 ? (
@@ -638,53 +660,57 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
                     )}
                   </div>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  {member.engagement ? (
-                    <div className="flex items-center space-x-2">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium ${
-                        member.engagement.engagementScore >= 80 ? 'bg-green-100 text-green-800' :
-                        member.engagement.engagementScore >= 50 ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-red-100 text-red-800'
+                {canManage && (
+                  <>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {member.engagement ? (
+                        <div className="flex items-center space-x-2">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium ${
+                            member.engagement.engagementScore >= 80 ? 'bg-green-100 text-green-800' :
+                            member.engagement.engagementScore >= 50 ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-red-100 text-red-800'
+                          }`}>
+                            {member.engagement.engagementScore}%
+                          </div>
+                          <div className={`w-2 h-2 rounded-full ${
+                            member.engagement.riskLevel === 'low' ? 'bg-green-400' :
+                            member.engagement.riskLevel === 'medium' ? 'bg-yellow-400' :
+                            'bg-red-400'
+                          }`} title={`${member.engagement.riskLevel} risk`}>
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-gray-400">-</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {member.engagement?.membershipStage ? (
+                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                          member.engagement.membershipStage === 'leader' ? 'bg-purple-100 text-purple-800' :
+                          member.engagement.membershipStage === 'core_member' ? 'bg-blue-100 text-blue-800' :
+                          member.engagement.membershipStage === 'active_member' ? 'bg-green-100 text-green-800' :
+                          member.engagement.membershipStage === 'new_member' ? 'bg-yellow-100 text-yellow-800' :
+                          member.engagement.membershipStage === 'visitor' ? 'bg-gray-100 text-gray-800' :
+                          member.engagement.membershipStage === 'at_risk' ? 'bg-orange-100 text-orange-800' :
+                          'bg-red-100 text-red-800'
+                        }`}>
+                          {member.engagement.membershipStage.replace('_', ' ')}
+                        </span>
+                      ) : (
+                        <span className="text-sm text-gray-400">Unknown</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        member.isActive 
+                          ? 'bg-green-100 text-green-800' 
+                          : 'bg-red-100 text-red-800'
                       }`}>
-                        {member.engagement.engagementScore}%
-                      </div>
-                      <div className={`w-2 h-2 rounded-full ${
-                        member.engagement.riskLevel === 'low' ? 'bg-green-400' :
-                        member.engagement.riskLevel === 'medium' ? 'bg-yellow-400' :
-                        'bg-red-400'
-                      }`} title={`${member.engagement.riskLevel} risk`}>
-                      </div>
-                    </div>
-                  ) : (
-                    <span className="text-sm text-gray-400">-</span>
-                  )}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  {member.engagement?.membershipStage ? (
-                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                      member.engagement.membershipStage === 'leader' ? 'bg-purple-100 text-purple-800' :
-                      member.engagement.membershipStage === 'core_member' ? 'bg-blue-100 text-blue-800' :
-                      member.engagement.membershipStage === 'active_member' ? 'bg-green-100 text-green-800' :
-                      member.engagement.membershipStage === 'new_member' ? 'bg-yellow-100 text-yellow-800' :
-                      member.engagement.membershipStage === 'visitor' ? 'bg-gray-100 text-gray-800' :
-                      member.engagement.membershipStage === 'at_risk' ? 'bg-orange-100 text-orange-800' :
-                      'bg-red-100 text-red-800'
-                    }`}>
-                      {member.engagement.membershipStage.replace('_', ' ')}
-                    </span>
-                  ) : (
-                    <span className="text-sm text-gray-400">Unknown</span>
-                  )}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                    member.isActive 
-                      ? 'bg-green-100 text-green-800' 
-                      : 'bg-red-100 text-red-800'
-                  }`}>
-                    {member.isActive ? 'Active' : 'Inactive'}
-                  </span>
-                </td>
+                        {member.isActive ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+                  </>
+                )}
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                   <div>{new Date(member.createdAt).toLocaleDateString()}</div>
                   {member.membershipDate && member.membershipDate !== member.createdAt && (
@@ -740,7 +766,7 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
               )}
               
               <div className="flex items-start space-x-4">
-                <div className="w-12 h-12 bg-gray-300 rounded-full flex items-center justify-center flex-shrink-0">
+                <div className="w-12 h-12 bg-gray-300 rounded-full flex items-center justify-center shrink-0">
                   {member.avatar ? (
                     <img src={member.avatar} alt={member.name} className="w-12 h-12 rounded-full object-cover" />
                   ) : (
@@ -751,7 +777,9 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
                 </div>
                 <div className="flex-1 min-w-0">
                   <h3 className="text-lg font-medium text-gray-900 truncate">{member.name}</h3>
-                  <p className="text-sm text-gray-500 truncate">{member.email}</p>
+                  {member.email && (
+                    <p className="text-sm text-gray-500 truncate">{member.email}</p>
+                  )}
                   {member.phone && (
                     <p className="text-sm text-gray-500">{member.phone}</p>
                   )}
@@ -771,14 +799,16 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
                         member
                       </span>
                     )}
-                    
-                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                      member.isActive 
-                        ? 'bg-green-100 text-green-800' 
-                        : 'bg-red-100 text-red-800'
-                    }`}>
-                      {member.isActive ? 'Active' : 'Inactive'}
-                    </span>
+
+                    {canManage && (
+                      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                        member.isActive
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-red-100 text-red-800'
+                      }`}>
+                        {member.isActive ? 'Active' : 'Inactive'}
+                      </span>
+                    )}
                   </div>
                   
                   {member.bio && (
@@ -905,6 +935,24 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Error toast (export failures) */}
+      {toast && (
+        <div
+          role="alert"
+          className="fixed bottom-4 right-4 z-50 flex items-start gap-3 max-w-sm rounded-md bg-red-600 px-4 py-3 text-sm text-white shadow-lg"
+        >
+          <span className="flex-1">{toast}</span>
+          <button
+            type="button"
+            onClick={() => setToast('')}
+            className="text-white/80 hover:text-white"
+            aria-label="Dismiss"
+          >
+            ×
+          </button>
         </div>
       )}
 

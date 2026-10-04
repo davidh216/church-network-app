@@ -6,6 +6,9 @@ import { useIsStaff } from '../../lib/auth/AuthProvider';
 import { getErrorMessage } from '../../lib/errors';
 import type { SavedSearch, SearchQuery } from '../../types/domain';
 
+// The quick searches need the advanced-query evaluator; hidden until it exists (gameplan 2.4 / F038).
+const PREDEFINED_SEARCHES_ENABLED = false;
+
 interface SavedSearchesProps {
   onLoadSearch: (query: SearchQuery) => void;
   onClose: () => void;
@@ -205,21 +208,23 @@ export default function SavedSearches({ onLoadSearch, onClose, currentQuery }: S
       )}
 
       {/* Predefined Searches */}
-      <div className="mb-6">
-        <h4 className="text-sm font-medium text-gray-900 mb-3">Quick Searches</h4>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {predefinedSearches.map((search, index) => (
-            <div
-              key={index}
-              className="p-3 border border-gray-200 rounded-lg hover:border-blue-300 cursor-pointer transition-colors"
-              onClick={() => onLoadSearch(search.query)}
-            >
-              <h5 className="text-sm font-medium text-gray-900">{search.name}</h5>
-              <p className="text-xs text-gray-500 mt-1">{search.description}</p>
-            </div>
-          ))}
+      {PREDEFINED_SEARCHES_ENABLED && (
+        <div className="mb-6">
+          <h4 className="text-sm font-medium text-gray-900 mb-3">Quick Searches</h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {predefinedSearches.map((search, index) => (
+              <div
+                key={index}
+                className="p-3 border border-gray-200 rounded-lg hover:border-blue-300 cursor-pointer transition-colors"
+                onClick={() => onLoadSearch(search.query)}
+              >
+                <h5 className="text-sm font-medium text-gray-900">{search.name}</h5>
+                <p className="text-xs text-gray-500 mt-1">{search.description}</p>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* User's Saved Searches */}
       <div>

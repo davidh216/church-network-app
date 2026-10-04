@@ -10,6 +10,7 @@ interface VideoPlayerProps {
   currentIndex?: number;
   onPlayNext?: () => void;
   onPlayPrevious?: () => void;
+  onSelect?: (index: number) => void;
 }
 
 export default function VideoPlayer({ 
@@ -18,7 +19,8 @@ export default function VideoPlayer({
   playlist = [], 
   currentIndex = 0,
   onPlayNext,
-  onPlayPrevious 
+  onPlayPrevious,
+  onSelect,
 }: VideoPlayerProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
@@ -340,17 +342,15 @@ export default function VideoPlayer({
             </div>
             <div className="p-2">
               {playlist.map((item, index) => (
-                <div
+                <button
+                  type="button"
                   key={item.id}
-                  className={`p-3 rounded cursor-pointer hover:bg-gray-800 transition-colors mb-2 ${
+                  aria-current={index === currentIndex ? 'true' : undefined}
+                  className={`block w-full text-left p-3 rounded cursor-pointer hover:bg-gray-800 transition-colors mb-2 ${
                     index === currentIndex ? 'bg-gray-700 border-l-4 border-red-500' : ''
                   }`}
                   onClick={() => {
-                    // Handle playlist item selection
-                    if (index !== currentIndex) {
-                      // This would trigger playlist navigation
-                      console.log('Navigate to playlist item:', index);
-                    }
+                    if (index !== currentIndex) onSelect?.(index);
                   }}
                 >
                   <div className="flex items-start space-x-3">
@@ -386,7 +386,7 @@ export default function VideoPlayer({
                       )}
                     </div>
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           </div>
