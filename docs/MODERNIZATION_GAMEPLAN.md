@@ -216,17 +216,17 @@ Adversarial review of the Phase 1 diff (29 agents: 4 reviewers, 25 verifiers): 2
 
 Risks: 1.3 is the largest change and must be done behind the route tests from 1.13 (write the tests against the current routes first, then refactor); the cookie session (1.7) requires the frontend and API on the same site or a proxy, which the Next rewrite provides; moving `settings.local.json` changes the owner's Claude permissions.
 
-### Phase 2: frontend structure and feature truth (about 8 to 10 days)
+### Phase 2: frontend structure and feature truth (about 2.5 to 3 weeks)
 
-Goal: a navigable App Router application whose promised features work.
+Goal: a navigable App Router application whose promised features work. Detailed item specifications, contracts and decisions are in `PHASE2_SPECS.md` (status: DRAFT, awaiting owner approval). Two streams run in sequence: shared schemas and backend search first, then the frontend.
 
-- [ ] 2.1 (L) Routes and layouts: `(auth)` and `(app)` groups, `/members`, `/members/[id]`, `/media`, `/analytics`; `loading.tsx`, `error.tsx`, `not-found.tsx`; server components for shells and read-only views. F028, F074, F075, F078, F123, F124.
-- [ ] 2.2 (M) Server state with TanStack Query; remove `refreshTrigger`; debounce and cancel media search; reset pagination on filter change; fix select-all and date-range edge cases. F033, F076, F084, F086, F127, F128, F130, F132.
-- [ ] 2.3 (L) Split MemberList and MemberProfile into focused components under 300 lines; shared Modal with dialog semantics, focus trap and Escape; labelled form controls; keyboard-operable rows and play buttons. F080, F082, F083, F087, F089, F125.
-- [ ] 2.4 (M) Implement advanced search for real (server-side filtering on validated query schema), apply saved searches including quick filters, record usage. F038, F085, F097, F129.
-- [ ] 2.5 (S) Shared `packages/shared` with zod schemas used by both backend validation and frontend types; dark-mode and line-clamp cleanup; display fixes. F039 (shared step), F121, F122, F131.
+- [ ] 2.1 (L) Routes and layouts: `(auth)` and `(app)` groups, `/members`, `/members/[id]`, `/media`, `/analytics`; `loading.tsx`, `error.tsx`, `not-found.tsx`; dashboard with real counts; member profile as a route; `RequireStaff` guard. F028, F074, F075, F078, F123, F124. Spec F1.
+- [ ] 2.2 (L) Server state with TanStack Query; debounced, focus-preserving search; server-side pagination; page reset on filter change; honest select-all; inclusive date range; hook-level loading and error states. F033, F076, F084, F086, F127, F128, F130, F132. Spec F2.
+- [ ] 2.3 (L) Component split to under 300 lines each, enforced by lint; shared accessible `Dialog`; labelled controls, semantic tables, keyboard-operable actions, `next/image` for thumbnails; `eslint-plugin-jsx-a11y`; axe checks in Playwright on six routes. F080, F082, F083, F087, F089, F125. Spec F3, F4.
+- [ ] 2.4 (M) Advanced search for real: validated `searchQuery` schema, `POST /api/users/search` and filterable `GET /api/users` on the server, rebuilt builder and saved searches (apply, save with quick filters, record usage, stale rows marked invalid), predefined searches restored; strict YouTube validation and paginated media. F038, F085, F088, F097, F129, F086. Spec S2, S3, F5.
+- [ ] 2.5 (M) `@embrace/shared` workspace package with zod schemas and inferred types used by both backend validation and frontend forms; dark-mode and line-clamp cleanup; display fixes; `noUncheckedIndexedAccess` on the frontend. F039 (shared step), F121, F122, F131. Spec S1, F6, F7.
 
-Exit criteria: Lighthouse accessibility score at or above 90 on members and media pages; Playwright covers navigation between all routes; no component over 300 lines.
+Exit criteria: axe reports zero serious or critical violations on `/login`, `/`, `/members`, `/members/[id]`, `/media`, `/analytics`; Playwright covers navigation between all routes and an advanced search round trip; no component over 300 lines (lint-enforced); all root checks green; Phase 2 PR stacked on Phase 1.
 
 ### Phase 3: data model and analytics correctness (about 5 to 7 days)
 
