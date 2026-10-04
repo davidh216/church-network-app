@@ -67,3 +67,54 @@ jobs:
       - run: npm run -w frontend lint
       - run: npm run -w frontend test
       - run: npm run -w frontend build
+
+  e2e:
+    name: E2E smoke
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: church
+          POSTGRES_PASSWORD: church
+          POSTGRES_DB: church_dev
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U church -d church_dev"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://church:church@localhost:5432/church_dev?schema=public
+      SEED_ADMIN_EMAIL: e2e-admin@example.com
+      SEED_ADMIN_NAME: E2E Admin
+      LOG_LEVEL: warn
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Throwaway JWT secret and admin password
+        run: |
+          jwt_secret="$(openssl rand -hex 32)"
+          admin_password="$(openssl rand -hex 16)"
+          echo "::add-mask::$jwt_secret"
+          echo "::add-mask::$admin_password"
+          {
+            echo "JWT_SECRET=$jwt_secret"
+            echo "SEED_ADMIN_PASSWORD=$admin_password"
+          } >> "$GITHUB_ENV"
+      - run: npx -w frontend playwright install --with-deps chromium
+      - run: npm run -w backend db:migrate
+      # Seeds the admin (global setup), starts both dev servers and runs e2e/smoke.spec.ts.
+      - run: npm run -w frontend test:e2e
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          retention-days: 7
