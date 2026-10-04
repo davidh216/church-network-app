@@ -18,6 +18,8 @@ const eslintConfig = [
     rules: {
       "@typescript-eslint/no-explicit-any": "error",
       "react-hooks/rules-of-hooks": "error",
+      // Phase 2 (gameplan 2.3): replace <img> with next/image
+      "@next/next/no-img-element": "off",
     },
   },
 ];

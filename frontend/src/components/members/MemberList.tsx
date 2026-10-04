@@ -1,8 +1,8 @@
 // File: frontend/src/components/members/MemberList.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
-import { authService } from '../../lib/auth';
+import { useState, useEffect, useMemo } from 'react';
+import { API_BASE, authService } from '../../lib/auth';
 import MemberProfile from './MemberProfile';
 import AdvancedSearchBuilder from './AdvancedSearchBuilder';
 import SavedSearches from './SavedSearches';
@@ -11,8 +11,11 @@ import BulkActionsToolbar from './BulkActionsToolbar';
 import type { Member, SearchQuery } from '../../types/domain';
 
 // Pure helpers live at module scope so they are initialised before render uses them.
-// The advanced-query evaluator is intentionally a stub until Phase 2; the UI hides
-// advanced search until then.
+// The advanced-query evaluator is a stub that matches every member, so the Advanced
+// Search button and builder are not rendered while ADVANCED_SEARCH_ENABLED is false.
+// A query loaded from Saved Searches still goes through the stub (matches everyone).
+const ADVANCED_SEARCH_ENABLED = false; // hidden until the evaluator exists (gameplan 2.4 / F038)
+
 function evaluateAdvancedQuery(member: Member, query: SearchQuery): boolean {
   void member;
   void query;
@@ -26,6 +29,12 @@ function getNestedValue(obj: unknown, path: string): unknown {
     }
     return undefined;
   }, obj);
+}
+
+// Download name from the export's Content-Disposition header (exposed by the API's CORS config).
+function filenameFromDisposition(header: string | null, fallback = 'members.csv'): string {
+  const match = header?.match(/filename="?([^";]+)"?/i);
+  return match?.[1] ?? fallback;
 }
 
 interface MemberListProps {
@@ -58,7 +67,7 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
   const fetchMembers = async () => {
     try {
       setLoading(true);
-      const response = await authService.fetchWithAuth('http://localhost:5000/api/users');
+      const response = await authService.fetchWithAuth(`${API_BASE}/users`);
       const data = await response.json();
       
       if (data.success) {
@@ -78,7 +87,7 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
     fetchMembers();
   }, [refreshTrigger]);
 
-  const filteredMembers = members.filter(member => {
+  const filteredMembers = useMemo(() => members.filter(member => {
     // Advanced query takes precedence over basic filters
     if (advancedQuery) {
       return evaluateAdvancedQuery(member, advancedQuery);
@@ -111,10 +120,10 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
                             (!dateRangeFilter.end || new Date(member.createdAt) <= new Date(dateRangeFilter.end));
     
     return matchesSearch && matchesRole && matchesStatus && matchesMembershipStage && matchesEngagement && matchesRiskLevel && matchesDateRange;
-  });
+  }), [members, advancedQuery, searchTerm, roleFilter, statusFilter, membershipStageFilter, engagementFilter, riskLevelFilter, dateRangeFilter]);
   
   // Apply sorting
-  const sortedMembers = [...filteredMembers].sort((a, b) => {
+  const sortedMembers = useMemo(() => [...filteredMembers].sort((a, b) => {
     for (const sort of sortConfig) {
       const aValue = getNestedValue(a, sort.key);
       const bValue = getNestedValue(b, sort.key);
@@ -134,13 +143,13 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
       }
     }
     return 0;
-  });
+  }), [filteredMembers, sortConfig]);
   
   // Apply pagination
   const totalPages = Math.ceil(sortedMembers.length / itemsPerPage);
-  const paginatedMembers = sortedMembers.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
+  const paginatedMembers = useMemo(
+    () => sortedMembers.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage),
+    [sortedMembers, currentPage, itemsPerPage]
   );
 
   const handleSort = (key: string) => {
@@ -191,25 +200,26 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
     setCurrentPage(1);
   };
   
-  const exportMembers = async (format: 'csv' | 'excel') => {
+  const exportMembers = async (format: 'csv') => {
     try {
-      const response = await authService.fetchWithAuth(
-        `http://localhost:5000/api/users/export?format=${format}&members=${Array.from(selectedMembers).join(',')}`
-      );
-      
-      if (response.ok) {
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `members.${format}`;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
+      const params = new URLSearchParams({ format, members: Array.from(selectedMembers).join(',') });
+      const response = await authService.fetchWithAuth(`${API_BASE}/users/export?${params.toString()}`);
+      if (!response.ok) {
+        setError('Export failed');
+        return;
       }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filenameFromDisposition(response.headers.get('Content-Disposition'));
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
     } catch (err) {
       console.error('Export failed:', err);
+      setError('Export failed');
     }
   };
   
@@ -293,16 +303,18 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
             </div>
             
             <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => setShowAdvancedSearch(!showAdvancedSearch)}
-                className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                  showAdvancedSearch 
-                    ? 'bg-blue-600 text-white' 
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                Advanced Search
-              </button>
+              {ADVANCED_SEARCH_ENABLED && (
+                <button
+                  onClick={() => setShowAdvancedSearch(!showAdvancedSearch)}
+                  className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                    showAdvancedSearch 
+                      ? 'bg-blue-600 text-white' 
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  Advanced Search
+                </button>
+              )}
               
               <button
                 onClick={() => setShowSavedSearches(!showSavedSearches)}
@@ -464,7 +476,7 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
       )}
       
       {/* Advanced Search Builder */}
-      {showAdvancedSearch && (
+      {ADVANCED_SEARCH_ENABLED && showAdvancedSearch && (
         <AdvancedSearchBuilder
           onApplyQuery={setAdvancedQuery}
           onClose={() => setShowAdvancedSearch(false)}

@@ -1,5 +1,5 @@
 import type { User } from '../types/domain';
-import { getErrorMessage } from './errors';
+import { getErrorMessage, readApiError } from './errors';
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:5000/api';
 
@@ -14,24 +14,6 @@ export interface RegisterResponse {
   pendingApproval: boolean;
   message: string;
   user: Pick<User, 'id' | 'email' | 'name' | 'isActive' | 'createdAt'>;
-}
-
-interface ApiErrorBody {
-  error?: string;
-  details?: Record<string, string[]>;
-}
-
-async function readError(response: Response, fallback: string): Promise<string> {
-  try {
-    const body = (await response.json()) as ApiErrorBody;
-    if (body.details) {
-      const first = Object.entries(body.details)[0];
-      if (first) return `${first[0]}: ${first[1][0]}`;
-    }
-    return body.error || fallback;
-  } catch {
-    return fallback;
-  }
 }
 
 class AuthService {
@@ -51,7 +33,7 @@ class AuthService {
       body: JSON.stringify({ email, password, name, phone }),
     });
     if (!response.ok) {
-      throw new Error(await readError(response, 'Registration failed'));
+      throw new Error(await readApiError(response, 'Registration failed'));
     }
     return (await response.json()) as RegisterResponse;
   }
@@ -63,7 +45,7 @@ class AuthService {
       body: JSON.stringify({ email, password }),
     });
     if (!response.ok) {
-      throw new Error(await readError(response, 'Login failed'));
+      throw new Error(await readApiError(response, 'Login failed'));
     }
     const data = (await response.json()) as AuthResponse;
     this.token = data.token;

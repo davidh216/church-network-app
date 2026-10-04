@@ -1,11 +1,9 @@
 // File: frontend/src/components/members/AddEditMemberModal.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
-import { authService } from '../../lib/auth';
-
-import { API_BASE } from '../../lib/auth';
-import { getErrorMessage } from '../../lib/errors';
+import { useState, useEffect, useCallback } from 'react';
+import { API_BASE, authService } from '../../lib/auth';
+import { getErrorMessage, readApiError } from '../../lib/errors';
 import type { Member, Role } from '../../types/domain';
 
 interface AddEditMemberModalProps {
@@ -30,6 +28,25 @@ export default function AddEditMemberModal({ isOpen, onClose, onSave, member }: 
   const [error, setError] = useState('');
 
   const isEditing = !!member;
+
+  const fetchRoles = useCallback(async () => {
+    try {
+      const response = await authService.fetchWithAuth(`${API_BASE}/roles`);
+      const data = await response.json();
+      if (data.success) {
+        setRoles(data.roles);
+        // A new member defaults to the member role unless roles were already picked.
+        if (!member) {
+          const memberRole = (data.roles as Role[]).find((r) => r.name === 'member');
+          if (memberRole) {
+            setSelectedRoles((prev) => (prev.length ? prev : [memberRole.id]));
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching roles:', err);
+    }
+  }, [member]);
 
   useEffect(() => {
     if (isOpen) {
@@ -57,26 +74,7 @@ export default function AddEditMemberModal({ isOpen, onClose, onSave, member }: 
       }
       setError('');
     }
-  }, [isOpen, member]);
-
-  const fetchRoles = async () => {
-    try {
-      const response = await authService.fetchWithAuth(`${API_BASE}/roles`);
-      const data = await response.json();
-      if (data.success) {
-        setRoles(data.roles);
-        // If adding new member and no roles selected, default to member role
-        if (!member && selectedRoles.length === 0) {
-          const memberRole = data.roles.find((r: Role) => r.name === 'member');
-          if (memberRole) {
-            setSelectedRoles([memberRole.id]);
-          }
-        }
-      }
-    } catch (err) {
-      console.error('Error fetching roles:', err);
-    }
-  };
+  }, [isOpen, member, fetchRoles]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -101,9 +99,8 @@ export default function AddEditMemberModal({ isOpen, onClose, onSave, member }: 
           }),
         });
 
-        const data = await response.json();
-        if (!response.ok || !data.success) {
-          throw new Error(data.error || 'Failed to update member');
+        if (!response.ok) {
+          throw new Error(await readApiError(response, 'Failed to update member'));
         }
       } else {
         // Create new member (staff only). Self-registration uses /api/auth/register instead.
@@ -120,9 +117,8 @@ export default function AddEditMemberModal({ isOpen, onClose, onSave, member }: 
           }),
         });
 
-        const data = await response.json();
-        if (!response.ok || !data.success) {
-          throw new Error(data.error || 'Failed to create member');
+        if (!response.ok) {
+          throw new Error(await readApiError(response, 'Failed to create member'));
         }
       }
 
@@ -201,8 +197,9 @@ export default function AddEditMemberModal({ isOpen, onClose, onSave, member }: 
                   value={formData.password}
                   onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
                   required
+                  minLength={8}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Temporary password"
+                  placeholder="Temporary password (at least 8 characters)"
                 />
               </div>
             )}

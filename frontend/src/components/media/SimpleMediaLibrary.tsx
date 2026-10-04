@@ -1,8 +1,8 @@
 // File: frontend/src/components/media/SimpleMediaLibrary.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
-import { authService } from '../../lib/auth';
+import { useState, useEffect, useCallback } from 'react';
+import { API_BASE, authService } from '../../lib/auth';
 
 import { getErrorMessage } from '../../lib/errors';
 import type { MediaItem } from '../../types/domain';
@@ -25,7 +25,7 @@ export default function SimpleMediaLibrary({ onPlayMedia }: SimpleMediaLibraryPr
     'youth', 'baptism', 'communion', 'special-event'
   ];
 
-  const fetchMedia = async () => {
+  const fetchMedia = useCallback(async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
@@ -33,7 +33,7 @@ export default function SimpleMediaLibrary({ onPlayMedia }: SimpleMediaLibraryPr
       if (selectedTag !== 'all') params.append('tag', selectedTag);
       
       const response = await authService.fetchWithAuth(
-        `http://localhost:5000/api/media?${params.toString()}`
+        `${API_BASE}/media?${params.toString()}`
       );
       const data = await response.json();
       
@@ -48,11 +48,11 @@ export default function SimpleMediaLibrary({ onPlayMedia }: SimpleMediaLibraryPr
     } finally {
       setLoading(false);
     }
-  };
+  }, [searchTerm, selectedTag]);
 
   useEffect(() => {
     fetchMedia();
-  }, [searchTerm, selectedTag]);
+  }, [fetchMedia]);
 
   const extractVideoId = (url: string): string => {
     // Handle various YouTube URL formats
@@ -422,7 +422,7 @@ function AddVideoModal({ onClose, onSave }: AddVideoModalProps) {
         throw new Error('Please enter a valid YouTube URL');
       }
 
-      const response = await authService.fetchWithAuth('http://localhost:5000/api/media', {
+      const response = await authService.fetchWithAuth(`${API_BASE}/media`, {
         method: 'POST',
         body: JSON.stringify({
           title: formData.title,
