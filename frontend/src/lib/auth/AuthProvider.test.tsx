@@ -64,6 +64,46 @@ describe('AuthProvider', () => {
     expect(flags).toEqual({ staff: false, leader: false });
   });
 
+  it('is anonymous when me() fails with 403', async () => {
+    api.me.mockRejectedValue(new ApiError(403, 'Forbidden'));
+    const container = await mount('/login');
+    expect(container.textContent).toBe('anonymous:none');
+  });
+
+  it('is in error, not anonymous, when me() fails with a 5xx', async () => {
+    api.me.mockRejectedValue(new ApiError(502, 'Bad Gateway'));
+    const container = await mount();
+    expect(container.textContent).toBe('error:none');
+    expect(router.replace).not.toHaveBeenCalled();
+  });
+
+  it('is in error when the API cannot be reached', async () => {
+    api.me.mockRejectedValue(new TypeError('fetch failed'));
+    const container = await mount();
+    expect(container.textContent).toBe('error:none');
+    expect(router.replace).not.toHaveBeenCalled();
+  });
+
+  it('keeps the user through a failed refresh() and recovers on the next one', async () => {
+    api.me.mockResolvedValueOnce(makeUser(['leader'], { name: 'Kept' }));
+    const container = await mount();
+    expect(container.textContent).toBe('authenticated:Kept');
+
+    api.me.mockRejectedValueOnce(new ApiError(503, 'Service Unavailable'));
+    await act(async () => {
+      await auth.refresh();
+    });
+    expect(container.textContent).toBe('error:Kept');
+    expect(flags).toEqual({ staff: true, leader: true });
+
+    api.me.mockResolvedValueOnce(makeUser(['leader'], { name: 'Kept' }));
+    await act(async () => {
+      await auth.refresh();
+    });
+    expect(container.textContent).toBe('authenticated:Kept');
+    expect(api.me).toHaveBeenCalledTimes(3);
+  });
+
   it('login() stores the user; logout() calls the API and routes to /login', async () => {
     api.me.mockRejectedValue(new ApiError(401, 'Unauthorized'));
     api.login.mockResolvedValue(makeUser(['leader'], { name: 'Lee' }));

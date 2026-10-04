@@ -13,7 +13,7 @@ import type { Member, MediaItem } from '../types/domain';
 // The authenticated shell. The middleware sends visitors without a session cookie
 // to /login; if the API rejects the cookie, the AuthProvider routes there instead.
 export default function Home() {
-  const { user, status, logout } = useAuth();
+  const { user, status, logout, refresh } = useAuth();
   const canManage = useIsStaff();
   const [showMembers, setShowMembers] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -25,8 +25,13 @@ export default function Home() {
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
   const [showAnalytics, setShowAnalytics] = useState(false);
 
+  // The API could not be reached (network error, 5xx): offer a retry rather than a sign-in link.
+  if (status === 'error') {
+    return <ServerUnavailable onRetry={refresh} />;
+  }
+
   // A 401 from the API makes the AuthProvider clear the cookie and route to /login;
-  // this covers the rarer case of the API being unreachable.
+  // this covers the moment before that redirect, and a 403 from /me.
   if (status === 'anonymous') {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -290,6 +295,34 @@ export default function Home() {
       {canManage && showAnalytics && (
         <MemberAnalyticsDashboard onClose={() => setShowAnalytics(false)} />
       )}
+    </div>
+  );
+}
+
+function ServerUnavailable({ onRetry }: { onRetry: () => Promise<void> }) {
+  const [retrying, setRetrying] = useState(false);
+  const retry = async () => {
+    setRetrying(true);
+    try {
+      await onRetry();
+    } finally {
+      setRetrying(false);
+    }
+  };
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div role="alert" className="text-center">
+        <p className="text-gray-900 font-medium">The server is unavailable</p>
+        <p className="mt-1 text-sm text-gray-600">Please try again in a moment.</p>
+        <button
+          type="button"
+          onClick={() => void retry()}
+          disabled={retrying}
+          className="mt-4 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+        >
+          {retrying ? 'Retrying...' : 'Retry'}
+        </button>
+      </div>
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Home from '@/app/page';
 import LoginForm from '@/components/auth/LoginForm';
 import SimpleMediaLibrary from '@/components/media/SimpleMediaLibrary';
+import { ApiError } from '@/lib/api/client';
 import { AuthProvider } from '@/lib/auth/AuthProvider';
 import { makeUser } from '@/test/fixtures';
 import { buttonTexts, render, settle } from '@/test/render';
@@ -82,6 +83,33 @@ describe('dashboard shell', () => {
   it('shows the analytics quick action to staff', async () => {
     const container = await renderAs(['admin'], <Home />);
     expect(buttonTexts(container).some((b) => b.includes('Member Analytics'))).toBe(true);
+  });
+
+  it('shows "The server is unavailable" when me() fails; Retry asks again', async () => {
+    authApi.me.mockRejectedValueOnce(new TypeError('fetch failed'));
+    authApi.me.mockRejectedValueOnce(new ApiError(502, 'Bad Gateway'));
+    authApi.me.mockResolvedValueOnce(makeUser(['member']));
+    const { container } = await render(
+      <AuthProvider>
+        <Home />
+      </AuthProvider>,
+    );
+    const retry = () =>
+      Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Retry');
+    expect(container.textContent).toContain('The server is unavailable');
+    expect(container.textContent).not.toContain('signed out');
+    expect(retry()).toBeDefined();
+
+    await act(async () => retry()?.click());
+    await settle();
+    expect(authApi.me).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toContain('The server is unavailable');
+
+    await act(async () => retry()?.click());
+    await settle();
+    expect(authApi.me).toHaveBeenCalledTimes(3);
+    expect(container.textContent).not.toContain('The server is unavailable');
+    expect(container.textContent).toContain('Your Profile');
   });
 
   it('Logout calls the API and routes to /login', async () => {

@@ -11,11 +11,15 @@ import {
 } from 'react';
 import { useRouter } from 'next/navigation';
 import * as authApi from '@/lib/api/auth';
-import { UNAUTHENTICATED_EVENT } from '@/lib/api/client';
+import { isApiError, UNAUTHENTICATED_EVENT } from '@/lib/api/client';
 import { hasRole, isStaff, type User } from '@/types/domain';
 import { isPublicPath } from './paths';
 
-export type AuthStatus = 'loading' | 'authenticated' | 'anonymous';
+/**
+ * `anonymous`: the API said there is no (valid) session. `error`: the API could not be asked
+ * (network error, 5xx), so whether there is a session is unknown; `refresh()` asks again.
+ */
+export type AuthStatus = 'loading' | 'authenticated' | 'anonymous' | 'error';
 
 export interface AuthContextValue {
   user: User | null;
@@ -42,10 +46,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       setUser(await authApi.me());
       setStatus('authenticated');
-    } catch {
-      // 401 (no session) or API unreachable: treat as signed out.
-      setUser(null);
-      setStatus('anonymous');
+    } catch (err) {
+      if (isApiError(err) && (err.status === 401 || err.status === 403)) {
+        setUser(null);
+        setStatus('anonymous');
+      } else {
+        // Unreachable or failing API: not evidence of a signed-out user, so keep any user
+        // already loaded and let the page offer a retry.
+        setStatus('error');
+      }
     }
   }, []);
 
