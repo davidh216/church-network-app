@@ -26,8 +26,9 @@ async function main() {
   }
   console.log(`Seeded ${ROLES.length} roles`);
 
-  const email = process.env.SEED_ADMIN_EMAIL?.toLowerCase();
-  const password = process.env.SEED_ADMIN_PASSWORD;
+  const email = process.env.SEED_ADMIN_EMAIL?.trim().toLowerCase();
+  const password = process.env.SEED_ADMIN_PASSWORD?.trim();
+  const name = process.env.SEED_ADMIN_NAME?.trim() || 'Administrator';
   if (email && password) {
     if (password.length < 12) throw new Error('SEED_ADMIN_PASSWORD must be at least 12 characters');
     const admin = await prisma.role.findUniqueOrThrow({ where: { name: 'admin' } });
@@ -38,7 +39,7 @@ async function main() {
       await prisma.user.create({
         data: {
           email,
-          name: process.env.SEED_ADMIN_NAME ?? 'Administrator',
+          name,
           password: await bcrypt.hash(password, 10),
           isActive: true,
           roles: { create: [{ roleId: admin.id }] },
