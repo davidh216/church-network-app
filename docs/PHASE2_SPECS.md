@@ -1,6 +1,6 @@
 # Phase 2 implementation specifications: frontend structure and feature truth
 
-Companion to `MODERNIZATION_GAMEPLAN.md` section 6, Phase 2. Written by the planner for the implementation agents (Claude Opus 5.5, medium effort). Status: DRAFT, awaiting owner approval. Two streams run in sequence, one agent per item: Stream S (shared schemas and backend search) first, then Stream F (frontend) on the merged result. The planner merges, verifies and reviews after each stream.
+Companion to `MODERNIZATION_GAMEPLAN.md` section 6, Phase 2. Written by the planner for the implementation agents (Claude Opus 5.5, medium effort). Status: APPROVED 2026-10-04 with the planner's recommendations (P2-1 route, P2-2 server-side paging at 25, P2-3 keep avatar URLs, P2-4 compiled CommonJS shared package, P2-5 axe gate only). Streams run sequentially on branch `modernize/phase-2` in the main checkout. Two streams run in sequence, one agent per item: Stream S (shared schemas and backend search) first, then Stream F (frontend) on the merged result. The planner merges, verifies and reviews after each stream.
 
 ## 0. Rules for every implementation agent
 
@@ -68,7 +68,7 @@ Same as `PHASE1_SPECS.md` section 0, plus:
 1. After Stream S: merge into `modernize/phase-2`, run all root checks against local Postgres, review the diff (security and contract lenses), fix, push.
 2. After Stream F: merge, run all root checks plus Playwright with axe, adversarial review (accessibility, regressions, spec compliance, security), fix, update the gameplan, push, open the Phase 2 PR stacked on Phase 1.
 
-## 5. Decisions for the owner before Stream F starts
+## 5. Decisions (taken 2026-10-04: all recommendations accepted)
 | Id | Decision | Options | Recommendation |
 |---|---|---|---|
 | P2-1 | Member profile | Route `/members/[id]` (recommended); keep the modal | Route: shareable URL, back button, simpler state |

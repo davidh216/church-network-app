@@ -218,7 +218,7 @@ Risks: 1.3 is the largest change and must be done behind the route tests from 1.
 
 ### Phase 2: frontend structure and feature truth (about 2.5 to 3 weeks)
 
-Goal: a navigable App Router application whose promised features work. Detailed item specifications, contracts and decisions are in `PHASE2_SPECS.md` (status: DRAFT, awaiting owner approval). Two streams run in sequence: shared schemas and backend search first, then the frontend.
+Goal: a navigable App Router application whose promised features work. Detailed item specifications, contracts and decisions are in `PHASE2_SPECS.md` (approved 2026-10-04 with the planner's recommendations). Two streams run in sequence: shared schemas and backend search first, then the frontend.
 
 - [ ] 2.1 (L) Routes and layouts: `(auth)` and `(app)` groups, `/members`, `/members/[id]`, `/media`, `/analytics`; `loading.tsx`, `error.tsx`, `not-found.tsx`; dashboard with real counts; member profile as a route; `RequireStaff` guard. F028, F074, F075, F078, F123, F124. Spec F1.
 - [ ] 2.2 (L) Server state with TanStack Query; debounced, focus-preserving search; server-side pagination; page reset on filter change; honest select-all; inclusive date range; hook-level loading and error states. F033, F076, F084, F086, F127, F128, F130, F132. Spec F2.
