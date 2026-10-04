@@ -17,7 +17,7 @@ describe('media search (postgres, case-insensitive)', () => {
         title: 'Sunday Worship Service',
         description: 'Morning GATHERING',
         type: 'YOUTUBE_VIDEO',
-        url: 'https://youtu.be/abc123',
+        url: 'https://youtu.be/abc123def45',
         tags: ['Worship'],
       });
     expect(created.status).toBe(201);
@@ -27,7 +27,7 @@ describe('media search (postgres, case-insensitive)', () => {
       .send({
         title: 'Youth night',
         type: 'YOUTUBE_VIDEO',
-        url: 'https://youtu.be/def456',
+        url: 'https://youtu.be/def456ghi78',
         tags: ['youth'],
       });
   });

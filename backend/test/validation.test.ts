@@ -196,7 +196,7 @@ describe('request validation', () => {
     expect(res.body.details.body).toHaveLength(1);
   });
 
-  it('bounds limit to 100 and coerces it from the query string', async () => {
+  it('bounds limit and pageSize to 100 and coerces it from the query string', async () => {
     const tooMany = await request(app)
       .get(`/api/member-details/${memberId}/timeline?limit=101`)
       .set(bearer(token));
@@ -211,7 +211,7 @@ describe('request validation', () => {
       .get(`/api/member-details/${memberId}/timeline?limit=100&offset=0`)
       .set(bearer(token));
     expect(ok.status).toBe(200);
-    expect((await request(app).get('/api/media?limit=500').set(bearer(token))).status).toBe(400);
+    expect((await request(app).get('/api/media?pageSize=500').set(bearer(token))).status).toBe(400);
   });
 
   it('rejects unknown enum values in list filters', async () => {

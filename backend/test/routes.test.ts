@@ -177,7 +177,10 @@ const ROUTES: Route[] = [
     access: 'auth',
     as: 'member',
     url: () => '/api/users/saved-searches',
-    body: () => ({ name: 'New search', query: { conditions: [] } }),
+    body: () => ({
+      name: 'New search',
+      query: { conditions: [{ field: 'name', operator: 'isEmpty' }], logic: 'OR' },
+    }),
     status: 201,
   },
   {
@@ -203,7 +206,11 @@ const ROUTES: Route[] = [
     access: 'staff',
     as: 'leader',
     url: () => '/api/media',
-    body: () => ({ title: 'New video', type: 'YOUTUBE_VIDEO', url: 'https://youtu.be/xyz789' }),
+    body: () => ({
+      title: 'New video',
+      type: 'YOUTUBE_VIDEO',
+      url: 'https://youtu.be/xyz789abc12',
+    }),
     status: 201,
   },
   {

@@ -1,11 +1,12 @@
 import { z } from 'zod';
+import { searchQuery } from './search';
 
-// POST /api/users/saved-searches
+// POST /api/users/saved-searches. The stored query is exactly a `searchQuery`; it is validated
+// again on load and returned with `invalid: true` when it no longer matches the schema.
 export const createSavedSearchInput = z.object({
   name: z.string().trim().min(1).max(200),
   description: z.string().trim().max(1000).optional(),
-  // The advanced-search query; item S3 narrows this to `searchQuery`.
-  query: z.unknown().refine((q) => q !== undefined && q !== null, 'query is required'),
+  query: searchQuery,
   isPublic: z.boolean().optional(),
 });
 

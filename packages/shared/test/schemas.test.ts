@@ -6,6 +6,10 @@ import {
   changePasswordInput,
   createMediaInput,
   createSavedSearchInput,
+  canonicalYouTubeUrl,
+  DEFAULT_MEDIA_PAGE_SIZE,
+  listMediaQuery,
+  youtubeVideoId,
   createUserInput,
   isCommonPassword,
   loginInput,
@@ -76,9 +80,76 @@ describe('input schemas', () => {
     expect(createMediaInput.safeParse({ ...base, url: 'https://vimeo.com/1' }).success).toBe(false);
   });
 
-  it('requires a saved-search query', () => {
+  it('canonicalises YouTube watch and share URLs', () => {
+    const base = { title: 'Sermon', type: 'YOUTUBE_VIDEO' };
+    const canonical = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+    for (const url of [
+      'https://youtu.be/dQw4w9WgXcQ',
+      'https://youtu.be/dQw4w9WgXcQ?si=abc&t=42',
+      'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+      'https://youtube.com/watch?v=dQw4w9WgXcQ&list=PL1',
+      'https://m.youtube.com/watch?feature=share&v=dQw4w9WgXcQ',
+      '  https://YOUTU.BE/dQw4w9WgXcQ  ',
+    ])
+      expect(createMediaInput.parse({ ...base, url }).url, url).toBe(canonical);
+  });
+
+  it('rejects non-YouTube and malformed YouTube URLs', () => {
+    const base = { title: 'Sermon', type: 'YOUTUBE_VIDEO' };
+    for (const url of [
+      'https://youtu.be/abc123',
+      'https://youtu.be/dQw4w9WgXcQx',
+      'https://youtu.be/dQw4w9WgXc!',
+      'https://youtu.be/',
+      'https://youtu.be/dQw4w9WgXcQ/extra',
+      'https://www.youtube.com/watch?v=short',
+      'https://www.youtube.com/watch',
+      'https://www.youtube.com/embed/dQw4w9WgXcQ',
+      'https://www.youtube.com/channel/UC123',
+      'https://youtube.com.evil.example/watch?v=dQw4w9WgXcQ',
+      'https://evil.example/youtu.be/dQw4w9WgXcQ',
+      'https://user@youtu.be/dQw4w9WgXcQ',
+      'https://youtu.be:8443/dQw4w9WgXcQ',
+      'javascript:alert(1)//youtu.be/dQw4w9WgXcQ',
+      'not a url',
+    ])
+      expect(createMediaInput.safeParse({ ...base, url }).success, url).toBe(false);
+  });
+
+  it('derives video ids leniently for stored rows', () => {
+    expect(youtubeVideoId('http://youtu.be/dQw4w9WgXcQ')).toBe('dQw4w9WgXcQ');
+    expect(youtubeVideoId('https://www.youtube.com/watch?v=dQw4w9WgXcQ')).toBe('dQw4w9WgXcQ');
+    expect(youtubeVideoId('https://youtu.be/abc123')).toBeNull();
+    expect(youtubeVideoId('ftp://youtu.be/dQw4w9WgXcQ')).toBeNull();
+    expect(youtubeVideoId('garbage')).toBeNull();
+    expect(canonicalYouTubeUrl('dQw4w9WgXcQ')).toBe('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+  });
+
+  it('validates the media list query', () => {
+    expect(listMediaQuery.parse({})).toEqual({ page: 1, pageSize: DEFAULT_MEDIA_PAGE_SIZE });
+    expect(listMediaQuery.parse({ page: '3', pageSize: '100' })).toMatchObject({
+      page: 3,
+      pageSize: 100,
+    });
+    expect(listMediaQuery.safeParse({ pageSize: '101' }).success).toBe(false);
+    expect(listMediaQuery.safeParse({ page: '0' }).success).toBe(false);
+    expect(DEFAULT_MEDIA_PAGE_SIZE).toBe(24);
+  });
+
+  it('requires a saved-search query that is a valid searchQuery', () => {
+    const query = {
+      conditions: [
+        { field: 'engagement.membershipStage', operator: 'equals', value: 'new_member' },
+      ],
+      logic: 'AND',
+    };
     expect(createSavedSearchInput.safeParse({ name: 'S' }).success).toBe(false);
-    expect(createSavedSearchInput.safeParse({ name: 'S', query: { a: 1 } }).success).toBe(true);
+    expect(createSavedSearchInput.safeParse({ name: 'S', query: { a: 1 } }).success).toBe(false);
+    expect(
+      createSavedSearchInput.safeParse({ name: 'S', query: { conditions: [], logic: 'AND' } })
+        .success,
+    ).toBe(false);
+    expect(createSavedSearchInput.parse({ name: 'S', query }).query).toEqual(query);
   });
 
   it('exports the membership stages', () => {
