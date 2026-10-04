@@ -34,8 +34,5 @@
   },
   "engines": {
     "node": ">=22.12"
-  },
-  "overrides": {
-    "postcss": "^8.5.23"
   }
 }

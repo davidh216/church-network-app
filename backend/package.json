@@ -51,8 +51,5 @@
   "private": true,
   "engines": {
     "node": ">=22.12"
-  },
-  "overrides": {
-    "deepmerge-ts": "^8.0.0"
   }
 }
