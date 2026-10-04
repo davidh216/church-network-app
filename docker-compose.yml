@@ -2,6 +2,7 @@
 #   docker compose up -d db       database only, for `npm run dev` on the host
 #   docker compose up --build     everything; open http://localhost:3000
 # The api service reads JWT_SECRET and SEED_ADMIN_* from backend/.env when that file exists.
+# Ports are published on 127.0.0.1 only; DB_PORT moves PostgreSQL off 5432 on the host.
 name: church-network
 
 services:
@@ -12,7 +13,7 @@ services:
       POSTGRES_PASSWORD: church
       POSTGRES_DB: church_dev
     ports:
-      - '5432:5432'
+      - '127.0.0.1:${DB_PORT:-5432}:5432'
     volumes:
       - db-data:/var/lib/postgresql/data
       - ./docker/postgres/create-test-database.sql:/docker-entrypoint-initdb.d/create-test-database.sql:ro
@@ -34,8 +35,11 @@ services:
       PORT: '5000'
       DATABASE_URL: postgresql://church:church@db:5432/church_dev?schema=public
       CORS_ORIGIN: http://localhost:3000
+      # This stack serves plain HTTP, where a Secure cookie would never be sent back.
+      # Deployments behind TLS leave COOKIE_SECURE unset (Secure follows NODE_ENV=production).
+      COOKIE_SECURE: 'false'
     ports:
-      - '5000:5000'
+      - '127.0.0.1:5000:5000'
     depends_on:
       db:
         condition: service_healthy
@@ -50,13 +54,12 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile
-      # Next.js bakes the rewrite destination into the build, so API_URL is a build argument.
+      # Next.js bakes the rewrite destination into the build, so API_URL is a build argument
+      # only; setting it in the container environment would have no effect.
       args:
         API_URL: http://api:5000
-    environment:
-      API_URL: http://api:5000
     ports:
-      - '3000:3000'
+      - '127.0.0.1:3000:3000'
     depends_on:
       api:
         condition: service_healthy
