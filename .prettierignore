@@ -1,0 +1,7 @@
+# Prettier also skips everything in .gitignore.
+package-lock.json
+backend/prisma/migrations/
+frontend/next-env.d.ts
+.husky/_/
+# Documentation is maintained by hand.
+*.md
