@@ -2,8 +2,8 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import type { Express } from 'express';
 
-// Opts in to the auth rate limits with a max of 3 (login: 3 per IP and email, 15 per IP;
-// register: 3 per IP). The env is read when the app modules load, so the app is imported after
+// Opts in to the auth rate limits with a max of 3 (login: 15 per IP, 15 per email whatever the
+// IP, 3 per IP and email; register: 3 per IP). The env is read when the app modules load, so the app is imported after
 // stubbing (vitest gives every test file fresh modules). The .js suffix is what NodeNext requires
 // for import(); vite resolves it to the .ts source.
 //
@@ -37,14 +37,16 @@ describe('auth rate limits (RATE_LIMIT_AUTH_MAX=3)', () => {
     expect(app.get('trust proxy')).toBe('loopback, uniquelocal');
   });
 
-  it('answers 429 RATE_LIMITED after 3 logins for one IP and email, with both policies in the headers', async () => {
+  it('answers 429 RATE_LIMITED after 3 logins for one IP and email, with all three policies in the headers', async () => {
     const email = 'ghost@rate-limit.test.local';
     const first = await login('203.0.113.1', email);
     expect(first.status).toBe(401);
-    expect(first.headers['ratelimit-policy']).toMatch(/"15-in-15min"; q=15; w=900;/);
-    expect(first.headers['ratelimit-policy']).toMatch(/"3-in-15min"; q=3; w=900;/);
-    expect(first.headers.ratelimit).toMatch(/"15-in-15min"; r=14;/);
-    expect(first.headers.ratelimit).toMatch(/"3-in-15min"; r=2;/);
+    expect(first.headers['ratelimit-policy']).toMatch(/"login-ip"; q=15; w=900;/);
+    expect(first.headers['ratelimit-policy']).toMatch(/"login-email"; q=15; w=900;/);
+    expect(first.headers['ratelimit-policy']).toMatch(/"login-ip-email"; q=3; w=900;/);
+    expect(first.headers.ratelimit).toMatch(/"login-ip"; r=14;/);
+    expect(first.headers.ratelimit).toMatch(/"login-email"; r=14;/);
+    expect(first.headers.ratelimit).toMatch(/"login-ip-email"; r=2;/);
     expect((await login('203.0.113.1', email)).status).toBe(401);
     // The email is lower-cased like the login lookup, so this is the same account.
     expect((await login('203.0.113.1', 'GHOST@Rate-Limit.test.local')).status).toBe(401);
@@ -54,7 +56,7 @@ describe('auth rate limits (RATE_LIMIT_AUTH_MAX=3)', () => {
     expect(limited.body).toEqual({ error: expect.any(String), code: 'RATE_LIMITED' });
   });
 
-  it('keeps separate login buckets for different forwarded IPs (same email)', async () => {
+  it('trips the IP-and-email limit at 3 for one forwarded IP; another IP keeps its own bucket (same email)', async () => {
     const email = 'shared@rate-limit.test.local';
     for (let i = 0; i < 3; i++) expect((await login('203.0.113.7', email)).status).toBe(401);
     expect((await login('203.0.113.7', email)).status).toBe(429);
@@ -79,6 +81,26 @@ describe('auth rate limits (RATE_LIMIT_AUTH_MAX=3)', () => {
     expect(limited.status).toBe(429);
     expect(limited.body.code).toBe('RATE_LIMITED');
     expect((await login('203.0.113.11', 'spray-new@rate-limit.test.local')).status).toBe(401);
+  });
+
+  it('caps logins per email at five times the limit, however many forged addresses are used', async () => {
+    const email = 'target@rate-limit.test.local';
+    // A fresh forwarded address per attempt keeps the per-IP and per-IP-and-email buckets empty.
+    for (let i = 1; i <= 15; i++) {
+      expect((await login(`198.51.100.${i}`, email)).status).toBe(401);
+    }
+    const limited = await login('198.51.100.100', email);
+    expect(limited.status).toBe(429);
+    expect(limited.body).toEqual({ error: expect.any(String), code: 'RATE_LIMITED' });
+    // The same with the address missing altogether, and with the email in another case.
+    const direct = await request(app)
+      .post('/api/auth/login')
+      .send({ email, password: 'wrong-password-1' });
+    expect(direct.status).toBe(429);
+    expect((await login('198.51.100.101', 'Target@Rate-Limit.test.local')).status).toBe(429);
+    // Another email is unaffected, from a fresh address and from one already used above.
+    expect((await login('198.51.100.102', 'bystander@rate-limit.test.local')).status).toBe(401);
+    expect((await login('198.51.100.1', 'bystander@rate-limit.test.local')).status).toBe(401);
   });
 
   it('limits registration per IP regardless of the email, apart from logins', async () => {

@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { authenticate, SESSION_COOKIE, sessionCookieOptions } from '../../middleware/auth';
 import {
   loginAccountRateLimit,
+  loginEmailRateLimit,
   loginIpRateLimit,
   registerRateLimit,
 } from '../../middleware/rate-limit';
@@ -26,6 +27,7 @@ router.post('/register', registerRateLimit, validate({ body: registerBody }), as
 router.post(
   '/login',
   loginIpRateLimit,
+  loginEmailRateLimit,
   loginAccountRateLimit,
   validate({ body: loginBody }),
   async (req, res) => {
