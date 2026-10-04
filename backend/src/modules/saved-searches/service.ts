@@ -1,10 +1,10 @@
 import type { SavedSearch } from '@prisma/client';
 import type { z } from 'zod';
+import type { createSavedSearchInput } from '@embrace/shared';
 import { prisma } from '../../lib/prisma';
 import { HttpError } from '../../lib/http-error';
 import { isAdmin } from '../../middleware/auth';
 import type { AuthenticatedUser } from '../../types/auth';
-import type { createSavedSearchBody } from './schemas';
 
 function parseQuery(raw: string): unknown {
   try {
@@ -38,7 +38,7 @@ export async function listSavedSearches(userId: string) {
 
 export async function createSavedSearch(
   userId: string,
-  body: z.output<typeof createSavedSearchBody>,
+  body: z.output<typeof createSavedSearchInput>,
 ) {
   const saved = await prisma.savedSearch.create({
     data: {

@@ -1,9 +1,13 @@
 import type { MemberInteraction } from '@prisma/client';
 import type { z } from 'zod';
+import type {
+  membershipStage,
+  recordActivityInput,
+  recordInteractionInput,
+  riskLevel,
+} from '@embrace/shared';
 import { prisma } from '../../lib/prisma';
 import { logger } from '../../lib/logger';
-import type { membershipStage, riskLevel } from '../../lib/schemas';
-import type { recordActivityBody, recordInteractionBody } from './schemas';
 
 type MembershipStage = z.infer<typeof membershipStage>;
 type RiskLevel = z.infer<typeof riskLevel>;
@@ -197,7 +201,7 @@ export async function getMemberAnalytics() {
  */
 export async function recordActivity(
   userId: string,
-  body: z.output<typeof recordActivityBody>,
+  body: z.output<typeof recordActivityInput>,
 ): Promise<void> {
   await prisma.memberActivity.create({
     data: {
@@ -217,7 +221,7 @@ export async function recordActivity(
 export async function recordInteraction(
   userId: string,
   staffMemberId: string,
-  body: z.output<typeof recordInteractionBody>,
+  body: z.output<typeof recordInteractionInput>,
 ): Promise<void> {
   await prisma.memberInteraction.create({
     data: {

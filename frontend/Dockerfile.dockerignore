@@ -3,6 +3,10 @@
 !package.json
 !package-lock.json
 !tsconfig.base.json
+!packages/shared/package.json
+!packages/shared/tsconfig.json
+!packages/shared/tsconfig.build.json
+!packages/shared/src/
 !backend/package.json
 !frontend/
 frontend/node_modules/

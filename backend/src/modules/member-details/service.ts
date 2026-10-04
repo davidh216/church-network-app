@@ -1,18 +1,11 @@
 import type { Prisma } from '@prisma/client';
 import type { z } from 'zod';
+import type { addInteractionInput, addMilestoneInput, addNoteInput } from '@embrace/shared';
 import { prisma } from '../../lib/prisma';
 import { HttpError } from '../../lib/http-error';
 import { isAdmin } from '../../middleware/auth';
 import type { AuthenticatedUser } from '../../types/auth';
-import type {
-  addInteractionBody,
-  addMilestoneBody,
-  addNoteBody,
-  interactionsQuery,
-  milestonesQuery,
-  notesQuery,
-  timelineQuery,
-} from './schemas';
+import type { interactionsQuery, milestonesQuery, notesQuery, timelineQuery } from './schemas';
 
 // Private notes are visible only to their author and to admins.
 function visibleNotes(viewer: AuthenticatedUser): Prisma.MemberNoteWhereInput {
@@ -103,16 +96,16 @@ export function listNotes(
   });
 }
 
-export function addInteraction(userId: string, body: z.output<typeof addInteractionBody>) {
+export function addInteraction(userId: string, body: z.output<typeof addInteractionInput>) {
   return prisma.memberInteraction.create({
     data: { userId, ...body, status: 'completed', completedAt: new Date() },
   });
 }
 
-export function addMilestone(userId: string, body: z.output<typeof addMilestoneBody>) {
+export function addMilestone(userId: string, body: z.output<typeof addMilestoneInput>) {
   return prisma.memberMilestone.create({ data: { userId, ...body } });
 }
 
-export function addNote(userId: string, authorId: string, body: z.output<typeof addNoteBody>) {
+export function addNote(userId: string, authorId: string, body: z.output<typeof addNoteInput>) {
   return prisma.memberNote.create({ data: { userId, authorId, ...body } });
 }

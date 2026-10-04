@@ -17,6 +17,7 @@
   "license": "MIT",
   "description": "Embrace Church Network API",
   "dependencies": {
+    "@embrace/shared": "0.0.0",
     "@prisma/client": "^6.19.3",
     "bcryptjs": "^3.0.3",
     "cookie-parser": "^1.4.7",

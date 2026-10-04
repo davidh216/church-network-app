@@ -1,16 +1,10 @@
 import express from 'express';
+import { createUserInput, resetPasswordInput, updateUserInput } from '@embrace/shared';
 import { isAdmin, isStaff, requireRole, STAFF } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
 import { HttpError } from '../../lib/http-error';
 import savedSearchRoutes from '../saved-searches/router';
-import {
-  createUserBody,
-  exportQuery,
-  idParams,
-  listUsersQuery,
-  resetPasswordBody,
-  updateUserBody,
-} from './schemas';
+import { exportQuery, idParams, listUsersQuery } from './schemas';
 import * as users from './service';
 
 const router = express.Router();
@@ -33,7 +27,7 @@ router.get('/export', requireRole(...STAFF), validate({ query: exportQuery }), a
   res.send(users.toCsv(rows));
 });
 
-router.post('/', requireRole(...STAFF), validate({ body: createUserBody }), async (req, res) => {
+router.post('/', requireRole(...STAFF), validate({ body: createUserInput }), async (req, res) => {
   const user = await users.createUser(req.user!, req.body);
   res.status(201).json({ success: true, user });
 });
@@ -46,7 +40,7 @@ router.get('/:id', validate({ params: idParams }), async (req, res) => {
 
 // Members edit their own name/phone/bio. Staff may also activate/deactivate members.
 // Only admins change roles; the service applies the rules that depend on the target account.
-router.put('/:id', validate({ params: idParams, body: updateUserBody }), async (req, res) => {
+router.put('/:id', validate({ params: idParams, body: updateUserInput }), async (req, res) => {
   const requester = req.user!;
   const staff = isStaff(requester);
   if (!staff && requester.id !== req.params.id)
@@ -63,7 +57,7 @@ router.put('/:id', validate({ params: idParams, body: updateUserBody }), async (
 router.post(
   '/:id/reset-password',
   requireRole('admin'),
-  validate({ params: idParams, body: resetPasswordBody }),
+  validate({ params: idParams, body: resetPasswordInput }),
   async (req, res) => {
     await users.resetPassword(req.params.id, req.body.newPassword);
     res.json({ success: true, message: 'Password reset.' });

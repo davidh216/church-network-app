@@ -1,12 +1,7 @@
 import express from 'express';
+import { recordActivityInput, recordInteractionInput } from '@embrace/shared';
 import { validate } from '../../middleware/validate';
-import {
-  idParams,
-  noInputQuery,
-  recordActivityBody,
-  recordInteractionBody,
-  trendsQuery,
-} from './schemas';
+import { idParams, noInputQuery, trendsQuery } from './schemas';
 import * as analytics from './service';
 
 // Mounted behind authenticate + requireRole(staff) in app.ts.
@@ -50,7 +45,7 @@ router.get(
 
 router.post(
   '/members/:id/activities',
-  validate({ params: idParams, body: recordActivityBody }),
+  validate({ params: idParams, body: recordActivityInput }),
   async (req, res) => {
     await analytics.recordActivity(req.params.id, req.body);
     res.json({ success: true, message: 'Activity recorded successfully' });
@@ -59,7 +54,7 @@ router.post(
 
 router.post(
   '/members/:id/interactions',
-  validate({ params: idParams, body: recordInteractionBody }),
+  validate({ params: idParams, body: recordInteractionInput }),
   async (req, res) => {
     await analytics.recordInteraction(req.params.id, req.user!.id, req.body);
     res.json({ success: true, message: 'Interaction recorded successfully' });

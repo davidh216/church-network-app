@@ -1,6 +1,7 @@
 import express from 'express';
+import { createSavedSearchInput } from '@embrace/shared';
 import { validate } from '../../middleware/validate';
-import { createSavedSearchBody, idParams, listSavedSearchesQuery } from './schemas';
+import { idParams, listSavedSearchesQuery } from './schemas';
 import * as savedSearches from './service';
 
 // Mounted by the users router at /api/users/saved-searches.
@@ -10,7 +11,7 @@ router.get('/', validate({ query: listSavedSearchesQuery }), async (req, res) =>
   res.json({ success: true, searches: await savedSearches.listSavedSearches(req.user!.id) });
 });
 
-router.post('/', validate({ body: createSavedSearchBody }), async (req, res) => {
+router.post('/', validate({ body: createSavedSearchInput }), async (req, res) => {
   const search = await savedSearches.createSavedSearch(req.user!.id, req.body);
   res.status(201).json({ success: true, message: 'Search saved successfully', search });
 });

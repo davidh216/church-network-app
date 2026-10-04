@@ -1,8 +1,9 @@
 import type { Prisma } from '@prisma/client';
 import type { z } from 'zod';
+import type { createMediaInput } from '@embrace/shared';
 import { prisma } from '../../lib/prisma';
 import { HttpError } from '../../lib/http-error';
-import type { createMediaBody, listMediaQuery } from './schemas';
+import type { listMediaQuery } from './schemas';
 
 const withUploader = {
   uploadedBy: { select: { id: true, name: true } },
@@ -29,7 +30,7 @@ export function listMedia(query: z.output<typeof listMediaQuery>) {
 }
 
 // Staff-added media is approved and public immediately.
-export function createMedia(uploadedById: string, body: z.output<typeof createMediaBody>) {
+export function createMedia(uploadedById: string, body: z.output<typeof createMediaInput>) {
   return prisma.media.create({
     data: {
       title: body.title,

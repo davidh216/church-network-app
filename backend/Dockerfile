@@ -7,12 +7,16 @@ FROM node:22-alpine AS build
 RUN apk add --no-cache openssl
 WORKDIR /app
 COPY package.json package-lock.json tsconfig.base.json ./
+COPY packages/shared/package.json packages/shared/
 COPY backend/package.json backend/
 COPY frontend/package.json frontend/
 # The schema is needed by the backend postinstall (prisma generate).
 COPY backend/prisma.config.ts backend/
 COPY backend/prisma backend/prisma
-RUN npm ci -w backend
+RUN npm ci -w backend -w @embrace/shared
+# The API imports its input schemas from the compiled @embrace/shared package, so build it first.
+COPY packages/shared packages/shared
+RUN npm run -w @embrace/shared build
 COPY backend backend
 # prisma generate, then tsc for src/ (dist/) and prisma/seed.ts (dist/prisma/seed.js)
 RUN npm run -w backend build
@@ -22,6 +26,7 @@ RUN apk add --no-cache openssl
 ENV NODE_ENV=production
 WORKDIR /app
 COPY package.json package-lock.json ./
+COPY packages/shared/package.json packages/shared/
 COPY backend/package.json backend/
 COPY frontend/package.json frontend/
 COPY backend/prisma.config.ts backend/
@@ -32,6 +37,8 @@ COPY backend/prisma backend/prisma
 RUN npm ci -w backend --omit=dev \
   && npx -w backend prisma generate \
   && npm cache clean --force
+# node_modules/@embrace/shared links to packages/shared, which needs only its compiled dist.
+COPY --from=build /app/packages/shared/dist packages/shared/dist
 COPY --from=build /app/backend/dist backend/dist
 WORKDIR /app/backend
 USER node

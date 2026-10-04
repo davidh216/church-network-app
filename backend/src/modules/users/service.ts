@@ -1,12 +1,12 @@
 import bcrypt from 'bcryptjs';
 import type { z } from 'zod';
+import type { createUserInput, updateUserInput } from '@embrace/shared';
 import { prisma } from '../../lib/prisma';
 import { HttpError } from '../../lib/http-error';
 import { assertPasswordNotEmail } from '../../lib/password-policy';
 import { isAdmin, STAFF } from '../../middleware/auth';
 import type { AuthenticatedUser } from '../../types/auth';
 import { directorySelect, staffSelect } from './selects';
-import type { createUserBody, updateUserBody } from './schemas';
 
 const STAFF_ROLE_NAMES: readonly string[] = STAFF;
 
@@ -107,7 +107,7 @@ async function resolveRoleIds(
 // Staff create members directly (active by default, roles assigned).
 export async function createUser(
   requester: AuthenticatedUser,
-  body: z.output<typeof createUserBody>,
+  body: z.output<typeof createUserInput>,
 ) {
   const email = body.email.toLowerCase();
   if (await prisma.user.findUnique({ where: { email }, select: { id: true } })) {
@@ -149,7 +149,7 @@ function adminRoleId(user: AuthenticatedUser): string | undefined {
 export async function updateUser(
   requester: AuthenticatedUser,
   id: string,
-  body: z.output<typeof updateUserBody>,
+  body: z.output<typeof updateUserInput>,
 ) {
   const admin = isAdmin(requester);
   const self = requester.id === id;

@@ -1,9 +1,7 @@
 import express from 'express';
+import { addInteractionInput, addMilestoneInput, addNoteInput } from '@embrace/shared';
 import { validate } from '../../middleware/validate';
 import {
-  addInteractionBody,
-  addMilestoneBody,
-  addNoteBody,
   detailsQuery,
   idParams,
   interactionsQuery,
@@ -53,7 +51,7 @@ router.get('/:id/notes', validate({ params: idParams, query: notesQuery }), asyn
 
 router.post(
   '/:id/interactions',
-  validate({ params: idParams, body: addInteractionBody }),
+  validate({ params: idParams, body: addInteractionInput }),
   async (req, res) => {
     res.json({ success: true, interaction: await details.addInteraction(req.params.id, req.body) });
   },
@@ -61,13 +59,13 @@ router.post(
 
 router.post(
   '/:id/milestones',
-  validate({ params: idParams, body: addMilestoneBody }),
+  validate({ params: idParams, body: addMilestoneInput }),
   async (req, res) => {
     res.json({ success: true, milestone: await details.addMilestone(req.params.id, req.body) });
   },
 );
 
-router.post('/:id/notes', validate({ params: idParams, body: addNoteBody }), async (req, res) => {
+router.post('/:id/notes', validate({ params: idParams, body: addNoteInput }), async (req, res) => {
   res.json({ success: true, note: await details.addNote(req.params.id, req.user!.id, req.body) });
 });
 
