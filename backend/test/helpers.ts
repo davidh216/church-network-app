@@ -27,7 +27,7 @@ export async function createUser(opts: { email: string; role: RoleName; password
   return prisma.user.create({
     data: {
       email: opts.email,
-      name: opts.name ?? opts.email.split('@')[0],
+      name: opts.name ?? opts.email.split('@')[0]!,
       password: await bcrypt.hash(opts.password ?? 'correct-horse-battery', 4),
       isActive: opts.isActive ?? true,
       roles: { create: [{ roleId: role.id }] },
@@ -35,10 +35,20 @@ export async function createUser(opts: { email: string; role: RoleName; password
   });
 }
 
+// The JWT from the session cookie of a successful login (the body carries no token). Tests send
+// it back as a bearer token; test/auth.test.ts covers the cookie itself.
+export function sessionToken(res: request.Response): string | undefined {
+  const raw = res.headers['set-cookie'] as string[] | string | undefined;
+  const cookies = Array.isArray(raw) ? raw : raw ? [raw] : [];
+  const session = cookies.find((c) => c.startsWith('embrace_session='));
+  return session?.slice('embrace_session='.length).split(';')[0];
+}
+
 export async function login(email: string, password = 'correct-horse-battery'): Promise<string> {
   const res = await request(app).post('/api/auth/login').send({ email, password });
-  if (res.status !== 200) throw new Error(`login failed for ${email}: ${res.status} ${JSON.stringify(res.body)}`);
-  return res.body.token as string;
+  const token = sessionToken(res);
+  if (res.status !== 200 || !token) throw new Error(`login failed for ${email}: ${res.status} ${JSON.stringify(res.body)}`);
+  return token;
 }
 
 export const bearer = (token: string) => ({ Authorization: `Bearer ${token}` });
