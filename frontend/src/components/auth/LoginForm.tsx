@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { authService } from '@/lib/auth';
+import { useAuth } from '@/lib/auth/AuthProvider';
 import { getErrorMessage } from '@/lib/errors';
 import type { User } from '@/types/domain';
 
@@ -11,6 +11,7 @@ interface LoginFormProps {
 }
 
 export default function LoginForm({ onSuccess, onSwitchToRegister }: LoginFormProps) {
+  const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -22,8 +23,7 @@ export default function LoginForm({ onSuccess, onSwitchToRegister }: LoginFormPr
     setError('');
 
     try {
-      const response = await authService.login(email, password);
-      onSuccess(response.user);
+      onSuccess(await login(email, password));
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'Login failed'));
     } finally {

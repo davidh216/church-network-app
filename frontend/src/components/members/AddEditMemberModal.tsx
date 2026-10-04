@@ -2,8 +2,9 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { API_BASE, authService } from '../../lib/auth';
-import { getErrorMessage, readApiError } from '../../lib/errors';
+import { listRoles } from '../../lib/api/roles';
+import { createUser, updateUser } from '../../lib/api/users';
+import { getErrorMessage } from '../../lib/errors';
 import type { Member, Role } from '../../types/domain';
 
 interface AddEditMemberModalProps {
@@ -31,20 +32,17 @@ export default function AddEditMemberModal({ isOpen, onClose, onSave, member }: 
 
   const fetchRoles = useCallback(async () => {
     try {
-      const response = await authService.fetchWithAuth(`${API_BASE}/roles`);
-      const data = await response.json();
-      if (data.success) {
-        setRoles(data.roles);
-        // A new member defaults to the member role unless roles were already picked.
-        if (!member) {
-          const memberRole = (data.roles as Role[]).find((r) => r.name === 'member');
-          if (memberRole) {
-            setSelectedRoles((prev) => (prev.length ? prev : [memberRole.id]));
-          }
+      const fetchedRoles = await listRoles();
+      setRoles(fetchedRoles);
+      // A new member defaults to the member role unless roles were already picked.
+      if (!member) {
+        const memberRole = fetchedRoles.find((r) => r.name === 'member');
+        if (memberRole) {
+          setSelectedRoles((prev) => (prev.length ? prev : [memberRole.id]));
         }
       }
     } catch (err) {
-      console.error('Error fetching roles:', err);
+      setError(getErrorMessage(err, 'Failed to load roles'));
     }
   }, [member]);
 
@@ -88,38 +86,24 @@ export default function AddEditMemberModal({ isOpen, onClose, onSave, member }: 
         const originalRoleIds = member.roles.map((ur) => ur.role.id).sort();
         const nextRoleIds = [...selectedRoles].sort();
         const rolesChanged = JSON.stringify(originalRoleIds) !== JSON.stringify(nextRoleIds);
-        const response = await authService.fetchWithAuth(`${API_BASE}/users/${member.id}`, {
-          method: 'PUT',
-          body: JSON.stringify({
-            name: formData.name,
-            phone: formData.phone || null,
-            bio: formData.bio || null,
-            ...(formData.isActive !== member.isActive ? { isActive: formData.isActive } : {}),
-            ...(rolesChanged ? { roleIds: selectedRoles } : {}),
-          }),
+        await updateUser(member.id, {
+          name: formData.name,
+          phone: formData.phone || null,
+          bio: formData.bio || null,
+          ...(formData.isActive !== member.isActive ? { isActive: formData.isActive } : {}),
+          ...(rolesChanged ? { roleIds: selectedRoles } : {}),
         });
-
-        if (!response.ok) {
-          throw new Error(await readApiError(response, 'Failed to update member'));
-        }
       } else {
         // Create new member (staff only). Self-registration uses /api/auth/register instead.
-        const response = await authService.fetchWithAuth(`${API_BASE}/users`, {
-          method: 'POST',
-          body: JSON.stringify({
-            name: formData.name,
-            email: formData.email,
-            password: formData.password,
-            phone: formData.phone || null,
-            bio: formData.bio || null,
-            isActive: formData.isActive,
-            roleIds: selectedRoles,
-          }),
+        await createUser({
+          name: formData.name,
+          email: formData.email,
+          password: formData.password,
+          phone: formData.phone || null,
+          bio: formData.bio || null,
+          isActive: formData.isActive,
+          roleIds: selectedRoles,
         });
-
-        if (!response.ok) {
-          throw new Error(await readApiError(response, 'Failed to create member'));
-        }
       }
 
       onSave();
@@ -142,7 +126,7 @@ export default function AddEditMemberModal({ isOpen, onClose, onSave, member }: 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+    <div className="fixed inset-0 bg-gray-600/50 overflow-y-auto h-full w-full z-50">
       <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
         <div className="mt-3">
           <h3 className="text-lg font-medium text-gray-900 mb-4">
@@ -157,10 +141,11 @@ export default function AddEditMemberModal({ isOpen, onClose, onSave, member }: 
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="member-name" className="block text-sm font-medium text-gray-700 mb-1">
                 Full Name *
               </label>
               <input
+                id="member-name"
                 type="text"
                 value={formData.name}
                 onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
@@ -171,10 +156,11 @@ export default function AddEditMemberModal({ isOpen, onClose, onSave, member }: 
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="member-email" className="block text-sm font-medium text-gray-700 mb-1">
                 Email *
               </label>
               <input
+                id="member-email"
                 type="email"
                 value={formData.email}
                 onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
@@ -189,26 +175,29 @@ export default function AddEditMemberModal({ isOpen, onClose, onSave, member }: 
 
             {!isEditing && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="member-password" className="block text-sm font-medium text-gray-700 mb-1">
                   Password *
                 </label>
                 <input
+                  id="member-password"
                   type="password"
                   value={formData.password}
                   onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
                   required
-                  minLength={8}
+                  minLength={12}
+                  maxLength={128}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Temporary password (at least 8 characters)"
+                  placeholder="Temporary password (at least 12 characters)"
                 />
               </div>
             )}
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="member-phone" className="block text-sm font-medium text-gray-700 mb-1">
                 Phone
               </label>
               <input
+                id="member-phone"
                 type="tel"
                 value={formData.phone}
                 onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
@@ -218,10 +207,11 @@ export default function AddEditMemberModal({ isOpen, onClose, onSave, member }: 
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="member-bio" className="block text-sm font-medium text-gray-700 mb-1">
                 Bio
               </label>
               <textarea
+                id="member-bio"
                 value={formData.bio}
                 onChange={(e) => setFormData(prev => ({ ...prev, bio: e.target.value }))}
                 rows={3}
@@ -256,12 +246,13 @@ export default function AddEditMemberModal({ isOpen, onClose, onSave, member }: 
 
             <div className="flex items-center">
               <input
+                id="member-active"
                 type="checkbox"
                 checked={formData.isActive}
                 onChange={(e) => setFormData(prev => ({ ...prev, isActive: e.target.checked }))}
                 className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
               />
-              <label className="ml-2 text-sm text-gray-700">
+              <label htmlFor="member-active" className="ml-2 text-sm text-gray-700">
                 Active Member
               </label>
             </div>

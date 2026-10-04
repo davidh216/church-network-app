@@ -1,14 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import { authService } from '@/lib/auth';
+import { register } from '@/lib/api/auth';
 import { getErrorMessage } from '@/lib/errors';
 
 interface RegisterFormProps {
   onSwitchToLogin: () => void;
 }
 
-const MIN_PASSWORD_LENGTH = 8;
+// Matches the API's password policy (Phase 1 item 1.6: 12 to 128 characters).
+const MIN_PASSWORD_LENGTH = 12;
 
 export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
   const [name, setName] = useState('');
@@ -37,7 +38,7 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
 
     setLoading(true);
     try {
-      const response = await authService.register(email, password, name);
+      const response = await register({ email, password, name });
       setSubmittedMessage(response.message);
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'Registration failed. Please try again.'));

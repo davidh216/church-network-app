@@ -2,19 +2,23 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { API_BASE, authService } from '../../lib/auth';
+import { exportUsers, listUsers } from '../../lib/api/users';
+import { useIsStaff } from '../../lib/auth/AuthProvider';
 import MemberProfile from './MemberProfile';
 import AdvancedSearchBuilder from './AdvancedSearchBuilder';
 import SavedSearches from './SavedSearches';
 import BulkActionsToolbar from './BulkActionsToolbar';
 
+import { getErrorMessage } from '../../lib/errors';
 import type { Member, SearchQuery } from '../../types/domain';
 
 // Pure helpers live at module scope so they are initialised before render uses them.
 // The advanced-query evaluator is a stub that matches every member, so the Advanced
 // Search button and builder are not rendered while ADVANCED_SEARCH_ENABLED is false.
-// A query loaded from Saved Searches still goes through the stub (matches everyone).
+// Saved Searches only load such queries, so their button is hidden behind the same flag.
 const ADVANCED_SEARCH_ENABLED = false; // hidden until the evaluator exists (gameplan 2.4 / F038)
+
+const TOAST_TIMEOUT_MS = 6000;
 
 function evaluateAdvancedQuery(member: Member, query: SearchQuery): boolean {
   void member;
@@ -31,12 +35,6 @@ function getNestedValue(obj: unknown, path: string): unknown {
   }, obj);
 }
 
-// Download name from the export's Content-Disposition header (exposed by the API's CORS config).
-function filenameFromDisposition(header: string | null, fallback = 'members.csv'): string {
-  const match = header?.match(/filename="?([^";]+)"?/i);
-  return match?.[1] ?? fallback;
-}
-
 interface MemberListProps {
   onEditMember: (member: Member) => void;
   onAddMember: () => void;
@@ -44,6 +42,8 @@ interface MemberListProps {
 }
 
 export default function MemberList({ onEditMember, onAddMember, refreshTrigger }: MemberListProps) {
+  // Selection, export, profiles and editing are staff-only; members get the directory.
+  const canManage = useIsStaff();
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -62,22 +62,15 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(25);
   const [error, setError] = useState('');
+  const [toast, setToast] = useState('');
   const [advancedQuery, setAdvancedQuery] = useState<SearchQuery | null>(null);
 
   const fetchMembers = async () => {
     try {
       setLoading(true);
-      const response = await authService.fetchWithAuth(`${API_BASE}/users`);
-      const data = await response.json();
-      
-      if (data.success) {
-        setMembers(data.users);
-      } else {
-        setError('Failed to load members');
-      }
+      setMembers(await listUsers());
     } catch (err) {
-      setError('Failed to load members');
-      console.error('Error fetching members:', err);
+      setError(getErrorMessage(err, 'Failed to load members'));
     } finally {
       setLoading(false);
     }
@@ -86,6 +79,12 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
   useEffect(() => {
     fetchMembers();
   }, [refreshTrigger]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(''), TOAST_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [toast]);
 
   const filteredMembers = useMemo(() => members.filter(member => {
     // Advanced query takes precedence over basic filters
@@ -200,26 +199,19 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
     setCurrentPage(1);
   };
   
-  const exportMembers = async (format: 'csv') => {
+  const exportMembers = async () => {
     try {
-      const params = new URLSearchParams({ format, members: Array.from(selectedMembers).join(',') });
-      const response = await authService.fetchWithAuth(`${API_BASE}/users/export?${params.toString()}`);
-      if (!response.ok) {
-        setError('Export failed');
-        return;
-      }
-      const blob = await response.blob();
+      const { blob, filename } = await exportUsers(Array.from(selectedMembers));
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = filenameFromDisposition(response.headers.get('Content-Disposition'));
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
     } catch (err) {
-      console.error('Export failed:', err);
-      setError('Export failed');
+      setToast(getErrorMessage(err, 'Export failed'));
     }
   };
   
@@ -271,15 +263,17 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
               </button>
             </div>
             
-            <button
-              onClick={onAddMember}
-              className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center space-x-2"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              <span>Add Member</span>
-            </button>
+            {canManage && (
+              <button
+                onClick={onAddMember}
+                className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center space-x-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                <span>Add Member</span>
+              </button>
+            )}
           </div>
         </div>
         
@@ -316,16 +310,18 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
                 </button>
               )}
               
-              <button
-                onClick={() => setShowSavedSearches(!showSavedSearches)}
-                className="px-4 py-2 text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-md transition-colors"
-              >
-                Saved Searches
-              </button>
-              
-              {selectedMembers.size > 0 && (
+              {ADVANCED_SEARCH_ENABLED && (
                 <button
-                  onClick={() => exportMembers('csv')}
+                  onClick={() => setShowSavedSearches(!showSavedSearches)}
+                  className="px-4 py-2 text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-md transition-colors"
+                >
+                  Saved Searches
+                </button>
+              )}
+              
+              {canManage && selectedMembers.size > 0 && (
+                <button
+                  onClick={() => exportMembers()}
                   className="px-4 py-2 text-sm font-medium bg-green-100 text-green-700 hover:bg-green-200 rounded-md transition-colors"
                 >
                   Export Selected ({selectedMembers.size})
@@ -347,53 +343,58 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
               <option value="member">Member</option>
             </select>
             
-            <select
-              value={membershipStageFilter}
-              onChange={(e) => setMembershipStageFilter(e.target.value)}
-              className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">All Stages</option>
-              <option value="leader">Leader</option>
-              <option value="core_member">Core Member</option>
-              <option value="active_member">Active Member</option>
-              <option value="new_member">New Member</option>
-              <option value="visitor">Visitor</option>
-              <option value="at_risk">At Risk</option>
-              <option value="inactive">Inactive</option>
-            </select>
+            {/* Engagement and status are staff-only fields; the member directory has neither. */}
+            {canManage && (
+              <>
+                <select
+                  value={membershipStageFilter}
+                  onChange={(e) => setMembershipStageFilter(e.target.value)}
+                  className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="all">All Stages</option>
+                  <option value="leader">Leader</option>
+                  <option value="core_member">Core Member</option>
+                  <option value="active_member">Active Member</option>
+                  <option value="new_member">New Member</option>
+                  <option value="visitor">Visitor</option>
+                  <option value="at_risk">At Risk</option>
+                  <option value="inactive">Inactive</option>
+                </select>
             
-            <select
-              value={engagementFilter}
-              onChange={(e) => setEngagementFilter(e.target.value)}
-              className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">All Engagement</option>
-              <option value="high">High (80%+)</option>
-              <option value="medium">Medium (50-79%)</option>
-              <option value="low">Low (&lt;50%)</option>
-            </select>
+                <select
+                  value={engagementFilter}
+                  onChange={(e) => setEngagementFilter(e.target.value)}
+                  className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="all">All Engagement</option>
+                  <option value="high">High (80%+)</option>
+                  <option value="medium">Medium (50-79%)</option>
+                  <option value="low">Low (&lt;50%)</option>
+                </select>
             
-            <select
-              value={riskLevelFilter}
-              onChange={(e) => setRiskLevelFilter(e.target.value)}
-              className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">All Risk Levels</option>
-              <option value="low">Low Risk</option>
-              <option value="medium">Medium Risk</option>
-              <option value="high">High Risk</option>
-            </select>
+                <select
+                  value={riskLevelFilter}
+                  onChange={(e) => setRiskLevelFilter(e.target.value)}
+                  className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="all">All Risk Levels</option>
+                  <option value="low">Low Risk</option>
+                  <option value="medium">Medium Risk</option>
+                  <option value="high">High Risk</option>
+                </select>
             
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">All Status</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-            </select>
-            
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="all">All Status</option>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </>
+            )}
+
             <input
               type="date"
               placeholder="Start Date"
@@ -466,12 +467,11 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
       )}
 
       {/* Bulk Actions Toolbar */}
-      {selectedMembers.size > 0 && (
+      {canManage && selectedMembers.size > 0 && (
         <BulkActionsToolbar
           selectedCount={selectedMembers.size}
-          onExport={(format) => exportMembers(format)}
+          onExport={() => void exportMembers()}
           onClearSelection={() => setSelectedMembers(new Set())}
-          onBulkUpdate={() => {/* Implement bulk update */}}
         />
       )}
       
@@ -484,7 +484,7 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
       )}
       
       {/* Saved Searches */}
-      {showSavedSearches && (
+      {ADVANCED_SEARCH_ENABLED && showSavedSearches && (
         <SavedSearches
           onLoadSearch={(query) => {
             setAdvancedQuery(query);
@@ -501,14 +501,16 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
           <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-6 py-3 w-12">
-                <input
-                  type="checkbox"
-                  checked={selectedMembers.size === paginatedMembers.length && paginatedMembers.length > 0}
-                  onChange={toggleSelectAll}
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                />
-              </th>
+              {canManage && (
+                <th className="px-6 py-3 w-12">
+                  <input
+                    type="checkbox"
+                    checked={selectedMembers.size === paginatedMembers.length && paginatedMembers.length > 0}
+                    onChange={toggleSelectAll}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                </th>
+              )}
               <th 
                 className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                 onClick={() => handleSort('name')}
@@ -522,51 +524,57 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
                   )}
                 </div>
               </th>
-              <th 
-                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                onClick={() => handleSort('email')}
-              >
-                <div className="flex items-center space-x-1">
-                  <span>Contact</span>
-                  {sortConfig.find(s => s.key === 'email') && (
-                    <span className="text-blue-500">
-                      {sortConfig.find(s => s.key === 'email')?.direction === 'asc' ? '↑' : '↓'}
-                    </span>
-                  )}
-                </div>
-              </th>
+              {canManage && (
+                <th 
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('email')}
+                >
+                  <div className="flex items-center space-x-1">
+                    <span>Contact</span>
+                    {sortConfig.find(s => s.key === 'email') && (
+                      <span className="text-blue-500">
+                        {sortConfig.find(s => s.key === 'email')?.direction === 'asc' ? '↑' : '↓'}
+                      </span>
+                    )}
+                  </div>
+                </th>
+              )}
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Role
               </th>
-              <th 
-                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                onClick={() => handleSort('engagement.engagementScore')}
-              >
-                <div className="flex items-center space-x-1">
-                  <span>Engagement</span>
-                  {sortConfig.find(s => s.key === 'engagement.engagementScore') && (
-                    <span className="text-blue-500">
-                      {sortConfig.find(s => s.key === 'engagement.engagementScore')?.direction === 'asc' ? '↑' : '↓'}
-                    </span>
-                  )}
-                </div>
-              </th>
-              <th 
-                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                onClick={() => handleSort('engagement.membershipStage')}
-              >
-                <div className="flex items-center space-x-1">
-                  <span>Stage</span>
-                  {sortConfig.find(s => s.key === 'engagement.membershipStage') && (
-                    <span className="text-blue-500">
-                      {sortConfig.find(s => s.key === 'engagement.membershipStage')?.direction === 'asc' ? '↑' : '↓'}
-                    </span>
-                  )}
-                </div>
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Status
-              </th>
+              {canManage && (
+                <>
+                  <th 
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('engagement.engagementScore')}
+                  >
+                    <div className="flex items-center space-x-1">
+                      <span>Engagement</span>
+                      {sortConfig.find(s => s.key === 'engagement.engagementScore') && (
+                        <span className="text-blue-500">
+                          {sortConfig.find(s => s.key === 'engagement.engagementScore')?.direction === 'asc' ? '↑' : '↓'}
+                        </span>
+                      )}
+                    </div>
+                  </th>
+                  <th 
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('engagement.membershipStage')}
+                  >
+                    <div className="flex items-center space-x-1">
+                      <span>Stage</span>
+                      {sortConfig.find(s => s.key === 'engagement.membershipStage') && (
+                        <span className="text-blue-500">
+                          {sortConfig.find(s => s.key === 'engagement.membershipStage')?.direction === 'asc' ? '↑' : '↓'}
+                        </span>
+                      )}
+                    </div>
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Status
+                  </th>
+                </>
+              )}
               <th 
                 className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                 onClick={() => handleSort('createdAt')}
@@ -580,9 +588,11 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
                   )}
                 </div>
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Actions
-              </th>
+              {canManage && (
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Actions
+                </th>
+              )}
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
@@ -590,17 +600,19 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
               <tr key={member.id} className={`hover:bg-gray-50 ${
                 selectedMembers.has(member.id) ? 'bg-blue-50' : ''
               }`}>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <input
-                    type="checkbox"
-                    checked={selectedMembers.has(member.id)}
-                    onChange={() => toggleSelectMember(member.id)}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                  />
-                </td>
+                {canManage && (
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <input
+                      type="checkbox"
+                      checked={selectedMembers.has(member.id)}
+                      onChange={() => toggleSelectMember(member.id)}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                  </td>
+                )}
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center flex-shrink-0">
+                    <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center shrink-0">
                       {member.avatar ? (
                         <img src={member.avatar} alt={member.name} className="w-10 h-10 rounded-full object-cover" />
                       ) : (
@@ -617,17 +629,19 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
                     </div>
                   </div>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm text-gray-900">{member.email}</div>
-                  {member.phone && (
-                    <div className="text-sm text-gray-500">{member.phone}</div>
-                  )}
-                  {member.lastLoginAt && (
-                    <div className="text-xs text-gray-400">
-                      Last login: {new Date(member.lastLoginAt).toLocaleDateString()}
-                    </div>
-                  )}
-                </td>
+                {canManage && (
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-900">{member.email}</div>
+                    {member.phone && (
+                      <div className="text-sm text-gray-500">{member.phone}</div>
+                    )}
+                    {member.lastLoginAt && (
+                      <div className="text-xs text-gray-400">
+                        Last login: {new Date(member.lastLoginAt).toLocaleDateString()}
+                      </div>
+                    )}
+                  </td>
+                )}
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="flex flex-wrap gap-1">
                     {member.roles && member.roles.length > 0 ? (
@@ -646,53 +660,57 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
                     )}
                   </div>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  {member.engagement ? (
-                    <div className="flex items-center space-x-2">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium ${
-                        member.engagement.engagementScore >= 80 ? 'bg-green-100 text-green-800' :
-                        member.engagement.engagementScore >= 50 ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-red-100 text-red-800'
+                {canManage && (
+                  <>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {member.engagement ? (
+                        <div className="flex items-center space-x-2">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium ${
+                            member.engagement.engagementScore >= 80 ? 'bg-green-100 text-green-800' :
+                            member.engagement.engagementScore >= 50 ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-red-100 text-red-800'
+                          }`}>
+                            {member.engagement.engagementScore}%
+                          </div>
+                          <div className={`w-2 h-2 rounded-full ${
+                            member.engagement.riskLevel === 'low' ? 'bg-green-400' :
+                            member.engagement.riskLevel === 'medium' ? 'bg-yellow-400' :
+                            'bg-red-400'
+                          }`} title={`${member.engagement.riskLevel} risk`}>
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-gray-400">-</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {member.engagement?.membershipStage ? (
+                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                          member.engagement.membershipStage === 'leader' ? 'bg-purple-100 text-purple-800' :
+                          member.engagement.membershipStage === 'core_member' ? 'bg-blue-100 text-blue-800' :
+                          member.engagement.membershipStage === 'active_member' ? 'bg-green-100 text-green-800' :
+                          member.engagement.membershipStage === 'new_member' ? 'bg-yellow-100 text-yellow-800' :
+                          member.engagement.membershipStage === 'visitor' ? 'bg-gray-100 text-gray-800' :
+                          member.engagement.membershipStage === 'at_risk' ? 'bg-orange-100 text-orange-800' :
+                          'bg-red-100 text-red-800'
+                        }`}>
+                          {member.engagement.membershipStage.replace('_', ' ')}
+                        </span>
+                      ) : (
+                        <span className="text-sm text-gray-400">Unknown</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        member.isActive 
+                          ? 'bg-green-100 text-green-800' 
+                          : 'bg-red-100 text-red-800'
                       }`}>
-                        {member.engagement.engagementScore}%
-                      </div>
-                      <div className={`w-2 h-2 rounded-full ${
-                        member.engagement.riskLevel === 'low' ? 'bg-green-400' :
-                        member.engagement.riskLevel === 'medium' ? 'bg-yellow-400' :
-                        'bg-red-400'
-                      }`} title={`${member.engagement.riskLevel} risk`}>
-                      </div>
-                    </div>
-                  ) : (
-                    <span className="text-sm text-gray-400">-</span>
-                  )}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  {member.engagement?.membershipStage ? (
-                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                      member.engagement.membershipStage === 'leader' ? 'bg-purple-100 text-purple-800' :
-                      member.engagement.membershipStage === 'core_member' ? 'bg-blue-100 text-blue-800' :
-                      member.engagement.membershipStage === 'active_member' ? 'bg-green-100 text-green-800' :
-                      member.engagement.membershipStage === 'new_member' ? 'bg-yellow-100 text-yellow-800' :
-                      member.engagement.membershipStage === 'visitor' ? 'bg-gray-100 text-gray-800' :
-                      member.engagement.membershipStage === 'at_risk' ? 'bg-orange-100 text-orange-800' :
-                      'bg-red-100 text-red-800'
-                    }`}>
-                      {member.engagement.membershipStage.replace('_', ' ')}
-                    </span>
-                  ) : (
-                    <span className="text-sm text-gray-400">Unknown</span>
-                  )}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                    member.isActive 
-                      ? 'bg-green-100 text-green-800' 
-                      : 'bg-red-100 text-red-800'
-                  }`}>
-                    {member.isActive ? 'Active' : 'Inactive'}
-                  </span>
-                </td>
+                        {member.isActive ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+                  </>
+                )}
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                   <div>{new Date(member.createdAt).toLocaleDateString()}</div>
                   {member.membershipDate && member.membershipDate !== member.createdAt && (
@@ -701,24 +719,26 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
                     </div>
                   )}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                  <div className="flex space-x-2">
-                    <button
-                      onClick={() => setSelectedMember(member.id)}
-                      className="text-green-600 hover:text-green-900"
-                      title="View Profile"
-                    >
-                      View
-                    </button>
-                    <button
-                      onClick={() => onEditMember(member)}
-                      className="text-blue-600 hover:text-blue-900"
-                      title="Edit Member"
-                    >
-                      Edit
-                    </button>
-                  </div>
-                </td>
+                {canManage && (
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={() => setSelectedMember(member.id)}
+                        className="text-green-600 hover:text-green-900"
+                        title="View Profile"
+                      >
+                        View
+                      </button>
+                      <button
+                        onClick={() => onEditMember(member)}
+                        className="text-blue-600 hover:text-blue-900"
+                        title="Edit Member"
+                      >
+                        Edit
+                      </button>
+                    </div>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -734,17 +754,19 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
               selectedMembers.has(member.id) ? 'ring-2 ring-blue-500 border-blue-300' : ''
             }`}>
               {/* Selection checkbox */}
-              <div className="absolute top-4 right-4">
-                <input
-                  type="checkbox"
-                  checked={selectedMembers.has(member.id)}
-                  onChange={() => toggleSelectMember(member.id)}
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                />
-              </div>
+              {canManage && (
+                <div className="absolute top-4 right-4">
+                  <input
+                    type="checkbox"
+                    checked={selectedMembers.has(member.id)}
+                    onChange={() => toggleSelectMember(member.id)}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                </div>
+              )}
               
               <div className="flex items-start space-x-4">
-                <div className="w-12 h-12 bg-gray-300 rounded-full flex items-center justify-center flex-shrink-0">
+                <div className="w-12 h-12 bg-gray-300 rounded-full flex items-center justify-center shrink-0">
                   {member.avatar ? (
                     <img src={member.avatar} alt={member.name} className="w-12 h-12 rounded-full object-cover" />
                   ) : (
@@ -755,7 +777,9 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
                 </div>
                 <div className="flex-1 min-w-0">
                   <h3 className="text-lg font-medium text-gray-900 truncate">{member.name}</h3>
-                  <p className="text-sm text-gray-500 truncate">{member.email}</p>
+                  {member.email && (
+                    <p className="text-sm text-gray-500 truncate">{member.email}</p>
+                  )}
                   {member.phone && (
                     <p className="text-sm text-gray-500">{member.phone}</p>
                   )}
@@ -775,14 +799,16 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
                         member
                       </span>
                     )}
-                    
-                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                      member.isActive 
-                        ? 'bg-green-100 text-green-800' 
-                        : 'bg-red-100 text-red-800'
-                    }`}>
-                      {member.isActive ? 'Active' : 'Inactive'}
-                    </span>
+
+                    {canManage && (
+                      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                        member.isActive
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-red-100 text-red-800'
+                      }`}>
+                        {member.isActive ? 'Active' : 'Inactive'}
+                      </span>
+                    )}
                   </div>
                   
                   {member.bio && (
@@ -793,20 +819,22 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
                     <span className="text-xs text-gray-500">
                       Joined {new Date(member.createdAt).toLocaleDateString()}
                     </span>
-                    <div className="flex space-x-2">
-                      <button
-                        onClick={() => setSelectedMember(member.id)}
-                        className="text-green-600 hover:text-green-900 text-sm font-medium"
-                      >
-                        View
-                      </button>
-                      <button
-                        onClick={() => onEditMember(member)}
-                        className="text-blue-600 hover:text-blue-900 text-sm font-medium"
-                      >
-                        Edit
-                      </button>
-                    </div>
+                    {canManage && (
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => setSelectedMember(member.id)}
+                          className="text-green-600 hover:text-green-900 text-sm font-medium"
+                        >
+                          View
+                        </button>
+                        <button
+                          onClick={() => onEditMember(member)}
+                          className="text-blue-600 hover:text-blue-900 text-sm font-medium"
+                        >
+                          Edit
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -910,8 +938,26 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
         </div>
       )}
 
+      {/* Error toast (export failures) */}
+      {toast && (
+        <div
+          role="alert"
+          className="fixed bottom-4 right-4 z-50 flex items-start gap-3 max-w-sm rounded-md bg-red-600 px-4 py-3 text-sm text-white shadow-lg"
+        >
+          <span className="flex-1">{toast}</span>
+          <button
+            type="button"
+            onClick={() => setToast('')}
+            className="text-white/80 hover:text-white"
+            aria-label="Dismiss"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
       {/* Member Profile Modal */}
-      {selectedMember && (
+      {canManage && selectedMember && (
         <MemberProfile
           memberId={selectedMember}
           onClose={() => setSelectedMember(null)}
