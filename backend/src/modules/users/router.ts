@@ -3,7 +3,7 @@ import { isAdmin, isStaff, requireRole, STAFF } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
 import { HttpError } from '../../lib/http-error';
 import savedSearchRoutes from '../saved-searches/router';
-import { createUserBody, exportQuery, idParams, listUsersQuery, updateUserBody } from './schemas';
+import { createUserBody, exportQuery, idParams, listUsersQuery, resetPasswordBody, updateUserBody } from './schemas';
 import * as users from './service';
 
 const router = express.Router();
@@ -47,5 +47,17 @@ router.put('/:id', validate({ params: idParams, body: updateUserBody }), async (
   if (req.body.roleIds !== undefined && !isAdmin(requester)) throw new HttpError(403, 'Only an admin can change roles');
   res.json({ success: true, user: await users.updateUser(requester, req.params.id, req.body) });
 });
+
+// An admin sets a new password for any account. Existing sessions (stateless JWTs) stay valid
+// until they expire.
+router.post(
+  '/:id/reset-password',
+  requireRole('admin'),
+  validate({ params: idParams, body: resetPasswordBody }),
+  async (req, res) => {
+    await users.resetPassword(req.params.id, req.body.newPassword);
+    res.json({ success: true, message: 'Password reset.' });
+  },
+);
 
 export default router;

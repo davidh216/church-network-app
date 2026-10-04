@@ -56,7 +56,7 @@ describe('authorization', () => {
     });
 
     it('cannot create users or change roles/status', async () => {
-      expect((await request(app).post('/api/users').set(bearer(memberToken)).send({ name: 'x', email: 'x@test.local', password: 'longenough1' })).status).toBe(403);
+      expect((await request(app).post('/api/users').set(bearer(memberToken)).send({ name: 'x', email: 'x@test.local', password: 'long-enough-pass1' })).status).toBe(403);
       expect((await request(app).put(`/api/users/${otherMemberId}`).set(bearer(memberToken)).send({ name: 'Hacked' })).status).toBe(403);
       expect((await request(app).put(`/api/users/${memberId}`).set(bearer(memberToken)).send({ isActive: false })).status).toBe(403);
       const leaderRoleId = await roleId(memberToken, 'leader');
@@ -154,12 +154,12 @@ describe('authorization', () => {
         const denied = await request(app)
           .post('/api/users')
           .set(bearer(leaderToken))
-          .send({ name: 'Sneaky', email: `sneaky-${name}@test.local`, password: 'longenough1', roleIds: [await roleId(leaderToken, name)] });
+          .send({ name: 'Sneaky', email: `sneaky-${name}@test.local`, password: 'long-enough-pass1', roleIds: [await roleId(leaderToken, name)] });
         expect(denied.status).toBe(403);
         expect(denied.body.error).toBe('Only an admin can grant staff roles');
       }
       expect(await prisma.user.count({ where: { email: { startsWith: 'sneaky' } } })).toBe(0);
-      const ok = await request(app).post('/api/users').set(bearer(leaderToken)).send({ name: 'Created By Leader', email: 'Created@test.local', password: 'longenough1' });
+      const ok = await request(app).post('/api/users').set(bearer(leaderToken)).send({ name: 'Created By Leader', email: 'Created@test.local', password: 'long-enough-pass1' });
       expect(ok.status).toBe(201);
       expect(ok.body.user.email).toBe('created@test.local');
       expect(ok.body.user.isActive).toBe(true);
@@ -167,12 +167,12 @@ describe('authorization', () => {
     });
 
     it('can approve a pending registration', async () => {
-      await request(app).post('/api/auth/register').send({ email: 'pending@test.local', password: 'longenough1', name: 'Pending' });
+      await request(app).post('/api/auth/register').send({ email: 'pending@test.local', password: 'long-enough-pass1', name: 'Pending' });
       const pending = await prisma.user.findUniqueOrThrow({ where: { email: 'pending@test.local' } });
-      expect((await request(app).post('/api/auth/login').send({ email: 'pending@test.local', password: 'longenough1' })).status).toBe(401);
+      expect((await request(app).post('/api/auth/login').send({ email: 'pending@test.local', password: 'long-enough-pass1' })).status).toBe(401);
       const approve = await request(app).put(`/api/users/${pending.id}`).set(bearer(leaderToken)).send({ isActive: true });
       expect(approve.status).toBe(200);
-      expect((await request(app).post('/api/auth/login').send({ email: 'pending@test.local', password: 'longenough1' })).status).toBe(200);
+      expect((await request(app).post('/api/auth/login').send({ email: 'pending@test.local', password: 'long-enough-pass1' })).status).toBe(200);
     });
 
     it('cannot change roles, even to member', async () => {

@@ -15,6 +15,10 @@ const schema = z.object({
   JWT_EXPIRES_IN: z.string().default('7d'),
   CORS_ORIGIN: z.string().default('http://localhost:3000'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
+  // Login and registration attempts allowed per IP per window. Left unset, the limit is 10 and
+  // it is off when NODE_ENV=test; setting it turns the limit on in tests too.
+  RATE_LIMIT_AUTH_MAX: z.coerce.number().int().min(1).optional(),
+  RATE_LIMIT_AUTH_WINDOW_MINUTES: z.coerce.number().int().min(1).default(15),
 });
 
 const parsed = schema.safeParse(process.env);

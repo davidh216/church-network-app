@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
-import { app, bearer, createUser, login, resetDatabase } from './helpers';
+import { app, bearer, createUser, login, resetDatabase, sessionToken } from './helpers';
 import { prisma } from '../src/lib/prisma';
 
 // Every route mounted behind `authenticate` in app.ts; none may answer an anonymous caller.
@@ -16,6 +16,8 @@ const GATED_ROUTES: { method: 'get' | 'post'; path: string }[] = [
   { method: 'get', path: '/api/analytics/members' },
   { method: 'get', path: `/api/member-details/${SOME_ID}` },
   { method: 'post', path: `/api/member-details/${SOME_ID}/notes` },
+  { method: 'post', path: '/api/auth/change-password' },
+  { method: 'post', path: `/api/users/${SOME_ID}/reset-password` },
 ];
 
 describe('authentication', () => {
@@ -33,11 +35,12 @@ describe('authentication', () => {
   it('self-registration creates an inactive account and returns no token', async () => {
     const res = await request(app)
       .post('/api/auth/register')
-      .send({ email: 'New.Person@test.local', password: 'longenough1', name: 'New Person' });
+      .send({ email: 'New.Person@test.local', password: 'long-enough-pass1', name: 'New Person' });
     expect(res.status).toBe(201);
     expect(res.body.pendingApproval).toBe(true);
     expect(res.body.token).toBeUndefined();
-    expect(res.body.user.password).toBeUndefined();
+    expect(res.body.user).toBeUndefined();
+    expect(res.headers['set-cookie']).toBeUndefined();
 
     const stored = await prisma.user.findUnique({ where: { email: 'new.person@test.local' }, include: { roles: { include: { role: true } } } });
     expect(stored?.isActive).toBe(false);
@@ -51,7 +54,7 @@ describe('authentication', () => {
   });
 
   it('inactive accounts cannot log in', async () => {
-    const res = await request(app).post('/api/auth/login').send({ email: 'new.person@test.local', password: 'longenough1' });
+    const res = await request(app).post('/api/auth/login').send({ email: 'new.person@test.local', password: 'long-enough-pass1' });
     expect(res.status).toBe(401);
   });
 
@@ -80,7 +83,7 @@ describe('authentication', () => {
     expect(loginRes.status).toBe(200);
     expect('password' in loginRes.body.user).toBe(false);
     expect('notes' in loginRes.body.user).toBe(false);
-    const me = await request(app).get('/api/auth/me').set(bearer(loginRes.body.token));
+    const me = await request(app).get('/api/auth/me').set(bearer(sessionToken(loginRes)!));
     expect(me.status).toBe(200);
     expect('password' in me.body.user).toBe(false);
     expect('notes' in me.body.user).toBe(false);

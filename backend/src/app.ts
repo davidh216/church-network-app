@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import express from 'express';
+import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import helmet from 'helmet';
 import { corsOrigins } from './config/env';
@@ -28,6 +29,7 @@ export function createApp() {
   // Content-Disposition is exposed so the browser can read the export's filename.
   app.use(cors({ origin: corsOrigins, credentials: true, exposedHeaders: ['Content-Disposition'] }));
   app.use(express.json({ limit: '100kb' }));
+  app.use(cookieParser());
 
   app.get('/health', async (_req, res) => {
     const info = { version, uptime: Math.round(process.uptime()), timestamp: new Date().toISOString() };

@@ -10,10 +10,14 @@ const BAD_ID = 'not-a-cuid';
 
 type Case = { method: 'post' | 'put' | 'delete'; path: () => string; body?: object; field: string };
 const CASES: Case[] = [
-  { method: 'post', path: () => '/api/auth/register', body: { email: 'nope', password: 'longenough1', name: 'X' }, field: 'email' },
+  { method: 'post', path: () => '/api/auth/register', body: { email: 'nope', password: 'long-enough-pass1', name: 'X' }, field: 'email' },
   { method: 'post', path: () => '/api/auth/login', body: { email: 'nope', password: 'x' }, field: 'email' },
-  { method: 'post', path: () => '/api/users', body: { name: '', email: 'ok@test.local', password: 'longenough1' }, field: 'name' },
-  { method: 'post', path: () => '/api/users', body: { name: 'X', email: 'ok@test.local', password: 'longenough1', roleIds: ['x'] }, field: 'roleIds' },
+  { method: 'post', path: () => '/api/auth/change-password', body: { currentPassword: 'x', newPassword: 'short' }, field: 'newPassword' },
+  { method: 'post', path: () => '/api/auth/change-password', body: { newPassword: 'long-enough-pass1' }, field: 'currentPassword' },
+  { method: 'post', path: () => `/api/users/${memberId}/reset-password`, body: { newPassword: 'short' }, field: 'newPassword' },
+  { method: 'post', path: () => `/api/users/${BAD_ID}/reset-password`, body: { newPassword: 'long-enough-pass1' }, field: 'id' },
+  { method: 'post', path: () => '/api/users', body: { name: '', email: 'ok@test.local', password: 'long-enough-pass1' }, field: 'name' },
+  { method: 'post', path: () => '/api/users', body: { name: 'X', email: 'ok@test.local', password: 'long-enough-pass1', roleIds: ['x'] }, field: 'roleIds' },
   { method: 'put', path: () => `/api/users/${memberId}`, body: { isActive: 'yes' }, field: 'isActive' },
   { method: 'put', path: () => `/api/users/${BAD_ID}`, body: { name: 'X' }, field: 'id' },
   { method: 'post', path: () => '/api/users/saved-searches', body: { name: '', query: {} }, field: 'name' },

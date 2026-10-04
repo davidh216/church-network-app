@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import type { z } from 'zod';
 import { prisma } from '../../lib/prisma';
 import { HttpError } from '../../lib/http-error';
+import { assertPasswordNotEmail } from '../../lib/password-policy';
 import { isAdmin, STAFF } from '../../middleware/auth';
 import type { AuthenticatedUser } from '../../types/auth';
 import { directorySelect, staffSelect } from './selects';
@@ -170,4 +171,11 @@ export async function updateUser(requester: AuthenticatedUser, id: string, body:
     },
     select: staffSelect,
   });
+}
+
+export async function resetPassword(id: string, newPassword: string): Promise<void> {
+  const user = await prisma.user.findUnique({ where: { id }, select: { email: true } });
+  if (!user) throw new HttpError(404, 'User not found');
+  assertPasswordNotEmail(newPassword, user.email, 'newPassword');
+  await prisma.user.update({ where: { id }, data: { password: await bcrypt.hash(newPassword, 10) } });
 }
