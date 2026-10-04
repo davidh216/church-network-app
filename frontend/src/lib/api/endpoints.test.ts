@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
+import type { RegisterResult } from '@/types/domain';
 import * as analytics from './analytics';
 import * as auth from './auth';
 import * as media from './media';
@@ -57,7 +58,9 @@ describe('auth endpoints', () => {
   });
 
   it('register returns the pending-approval result', async () => {
-    const result = { success: true, pendingApproval: true, message: 'Wait', user: { id: 'u2' } };
+    // The API sends no user: the body is the same whether or not the email was already taken.
+    expectTypeOf<RegisterResult>().not.toHaveProperty('user');
+    const result = { success: true, pendingApproval: true, message: 'Wait' };
     respond(result, { status: 201 });
     await expect(auth.register({ email: 'a@b.c', password: 'p', name: 'A' })).resolves.toEqual(
       result,

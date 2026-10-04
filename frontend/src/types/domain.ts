@@ -262,7 +262,6 @@ export interface ApiErrorBody {
 export interface RegisterResult {
   pendingApproval: boolean;
   message: string;
-  user: Pick<User, 'id' | 'email' | 'name' | 'isActive' | 'createdAt'>;
 }
 
 /** Body of POST /api/users (staff only). */
