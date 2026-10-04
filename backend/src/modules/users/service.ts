@@ -1,22 +1,59 @@
 import bcrypt from 'bcryptjs';
+import type { Prisma } from '@prisma/client';
 import type { z } from 'zod';
-import type { createUserInput, updateUserInput } from '@embrace/shared';
+import type {
+  createUserInput,
+  listUsersQuery,
+  searchQuery,
+  updateUserInput,
+} from '@embrace/shared';
 import { prisma } from '../../lib/prisma';
 import { HttpError } from '../../lib/http-error';
 import { assertPasswordNotEmail } from '../../lib/password-policy';
 import { isAdmin, STAFF } from '../../middleware/auth';
 import type { AuthenticatedUser } from '../../types/auth';
+import { listWhere, orderBy, paging, searchWhere } from './search';
 import { directorySelect, staffSelect } from './selects';
 
 const STAFF_ROLE_NAMES: readonly string[] = STAFF;
 
+// One page of users matching `where`, with the total count of matches.
+async function findPage<S extends Prisma.UserSelect>(
+  where: Prisma.UserWhereInput,
+  select: S,
+  sortBy: Prisma.UserOrderByWithRelationInput[],
+  page: number | undefined,
+  pageSize: number | undefined,
+) {
+  const p = paging(page, pageSize);
+  const [users, total] = await prisma.$transaction([
+    prisma.user.findMany({ where, select, orderBy: sortBy, skip: p.skip, take: p.take }),
+    prisma.user.count({ where }),
+  ]);
+  return { users, total, page: p.page, pageSize: p.pageSize };
+}
+
 // Staff see every account with contact and engagement fields; members see the active directory.
-export function listUsers(staff: boolean) {
-  return prisma.user.findMany({
-    where: staff ? undefined : { isActive: true },
-    select: staff ? staffSelect : directorySelect,
-    orderBy: { name: 'asc' },
-  });
+// The router has already refused the staff-only filters for members.
+export function listUsers(staff: boolean, query: z.output<typeof listUsersQuery>) {
+  return findPage(
+    listWhere(query, staff),
+    staff ? staffSelect : directorySelect,
+    orderBy(query.sort, query.order),
+    query.page,
+    query.pageSize,
+  );
+}
+
+// The advanced member search (staff only).
+export function searchUsers(query: z.output<typeof searchQuery>) {
+  return findPage(
+    searchWhere(query),
+    staffSelect,
+    orderBy(query.sort, query.order),
+    query.page,
+    query.pageSize,
+  );
 }
 
 // Column order of the export. The CSV header always lists every column, even when no rows match.

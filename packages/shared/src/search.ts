@@ -106,9 +106,37 @@ export const searchQuery = z.object({
   pageSize: z.number().int().min(1).max(MAX_PAGE_SIZE).optional(),
 });
 
+// Query string of GET /api/users (all values arrive as strings). Members may only use q, sort=name,
+// order, page and pageSize; the API answers 403 for the staff-only filters and sorts.
+export const listUsersQuery = z.object({
+  q: z.string().trim().min(1).max(200).optional(),
+  role: z.string().trim().min(1).max(100).optional(),
+  status: z.enum(['active', 'inactive']).optional(),
+  stage: membershipStage.optional(),
+  risk: riskLevel.optional(),
+  // Inclusive calendar dates (UTC) of the account's creation.
+  joinedFrom: z.iso.date().optional(),
+  joinedTo: z.iso.date().optional(),
+  sort: userSortField.optional(),
+  order: sortOrder.optional(),
+  page: z.coerce.number().int().min(1).max(100_000).default(1),
+  pageSize: z.coerce.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_USER_PAGE_SIZE),
+});
+
+// The list filters only staff may use.
+export const STAFF_ONLY_LIST_FILTERS = [
+  'role',
+  'status',
+  'stage',
+  'risk',
+  'joinedFrom',
+  'joinedTo',
+] as const satisfies readonly (keyof z.infer<typeof listUsersQuery>)[];
+
 export type SearchCondition = z.infer<typeof searchCondition>;
 export type SearchField = SearchCondition['field'];
 export type SearchOperator = SearchCondition['operator'];
 export type UserSortField = z.infer<typeof userSortField>;
 export type SortOrder = z.infer<typeof sortOrder>;
 export type SearchQuery = z.infer<typeof searchQuery>;
+export type ListUsersQuery = z.input<typeof listUsersQuery>;

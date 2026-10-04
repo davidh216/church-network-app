@@ -119,6 +119,17 @@ const ROUTES: Route[] = [
     status: 200,
   },
   {
+    route: 'POST /api/users/search',
+    access: 'staff',
+    as: 'leader',
+    url: () => '/api/users/search',
+    body: () => ({
+      conditions: [{ field: 'email', operator: 'contains', value: 'routes' }],
+      logic: 'AND',
+    }),
+    status: 200,
+  },
+  {
     route: 'POST /api/users',
     access: 'staff',
     as: 'leader',

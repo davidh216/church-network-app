@@ -1,10 +1,17 @@
 import express from 'express';
-import { createUserInput, resetPasswordInput, updateUserInput } from '@embrace/shared';
+import {
+  createUserInput,
+  listUsersQuery,
+  resetPasswordInput,
+  searchQuery,
+  STAFF_ONLY_LIST_FILTERS,
+  updateUserInput,
+} from '@embrace/shared';
 import { isAdmin, isStaff, requireRole, STAFF } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
 import { HttpError } from '../../lib/http-error';
 import savedSearchRoutes from '../saved-searches/router';
-import { exportQuery, idParams, listUsersQuery } from './schemas';
+import { exportQuery, idParams } from './schemas';
 import * as users from './service';
 
 const router = express.Router();
@@ -12,8 +19,22 @@ const router = express.Router();
 // Saved searches live under /api/users/saved-searches and must be mounted before /:id.
 router.use('/saved-searches', savedSearchRoutes);
 
+// Members may search the directory by name and sort it by name; the other filters are staff-only.
 router.get('/', validate({ query: listUsersQuery }), async (req, res) => {
-  res.json({ success: true, users: await users.listUsers(isStaff(req.user!)) });
+  const staff = isStaff(req.user!);
+  const query = req.query;
+  if (!staff) {
+    const used = STAFF_ONLY_LIST_FILTERS.filter((key) => query[key] !== undefined);
+    if (used.length > 0) throw new HttpError(403, `Only staff can filter by ${used.join(', ')}`);
+    if (query.sort !== undefined && query.sort !== 'name')
+      throw new HttpError(403, 'Only staff can sort by ' + query.sort);
+  }
+  res.json({ success: true, ...(await users.listUsers(staff, query)) });
+});
+
+// The advanced member search. The body is a searchQuery; unknown fields or operators are a 400.
+router.post('/search', requireRole(...STAFF), validate({ body: searchQuery }), async (req, res) => {
+  res.json({ success: true, ...(await users.searchUsers(req.body)) });
 });
 
 router.get('/export', requireRole(...STAFF), validate({ query: exportQuery }), async (req, res) => {

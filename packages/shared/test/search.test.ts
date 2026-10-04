@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { SEARCH_FIELD_OPERATORS, searchCondition, searchQuery, type SearchField } from '../src';
+import {
+  listUsersQuery,
+  SEARCH_FIELD_OPERATORS,
+  searchCondition,
+  searchQuery,
+  type SearchField,
+} from '../src';
 
 // A valid value for every field/operator pair the search allows.
 const VALID: Record<SearchField, Record<string, unknown>> = {
@@ -106,5 +112,58 @@ describe('searchQuery', () => {
     ['pageSize over 100', { conditions: [condition], logic: 'AND', pageSize: 101 }],
   ])('rejects %s', (_label, query) => {
     expect(searchQuery.safeParse(query).success).toBe(false);
+  });
+});
+
+describe('listUsersQuery', () => {
+  it('defaults to the first page of 25', () => {
+    expect(listUsersQuery.parse({})).toEqual({ page: 1, pageSize: 25 });
+  });
+
+  it('coerces query-string values', () => {
+    expect(
+      listUsersQuery.parse({
+        q: '  ann ',
+        role: 'leader',
+        status: 'inactive',
+        stage: 'new_member',
+        risk: 'high',
+        joinedFrom: '2026-01-01',
+        joinedTo: '2026-01-31',
+        sort: 'engagementScore',
+        order: 'desc',
+        page: '3',
+        pageSize: '100',
+      }),
+    ).toEqual({
+      q: 'ann',
+      role: 'leader',
+      status: 'inactive',
+      stage: 'new_member',
+      risk: 'high',
+      joinedFrom: '2026-01-01',
+      joinedTo: '2026-01-31',
+      sort: 'engagementScore',
+      order: 'desc',
+      page: 3,
+      pageSize: 100,
+    });
+  });
+
+  it.each([
+    { q: '' },
+    { status: 'archived' },
+    { stage: 'pastor' },
+    { risk: 'none' },
+    { joinedFrom: '2026-02-30T00:00:00Z' },
+    { joinedTo: 'yesterday' },
+    { sort: 'password' },
+    { order: 'up' },
+    { page: '0' },
+    { page: '1.5' },
+    { pageSize: '101' },
+    { q: ['a', 'b'] },
+  ])('rejects %o', (query) => {
+    expect(listUsersQuery.safeParse(query).success).toBe(false);
   });
 });
