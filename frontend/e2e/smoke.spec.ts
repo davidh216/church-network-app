@@ -142,3 +142,64 @@ test('a member visiting /analytics lands on the dashboard with a notice', async 
   await expect(memberPage).toHaveURL(/\/\?notice=staff-only$/);
   await context.close();
 });
+
+test('admin builds an advanced query, saves it, reloads and applies it', async ({ page }) => {
+  const admin = seededAdmin();
+  await page.goto('/login');
+  await signIn(page, admin.email, admin.password);
+  await page.goto('/members');
+  await expect(page.getByRole('heading', { name: 'Church Members' })).toBeVisible();
+
+  // stage equals new_member AND engagement score at least 50.
+  await page.getByRole('button', { name: 'Advanced Search' }).click();
+  await page.getByLabel('Condition 1 field').selectOption('engagement.membershipStage');
+  await page.getByLabel('Condition 1 operator').selectOption('equals');
+  await page.getByLabel('Condition 1 value').selectOption('new_member');
+  await page.getByRole('button', { name: 'Add Condition' }).click();
+  await page.getByLabel('Condition 2 field').selectOption('engagement.engagementScore');
+  await page.getByLabel('Condition 2 operator').selectOption('gte');
+  await page.getByLabel('Condition 2 value').fill('50');
+  await expectNoSeriousA11yViolations(page, '/members with the advanced search open');
+  await page.getByRole('button', { name: 'Apply Search' }).click();
+  await expect(page.getByText('Advanced query active')).toBeVisible();
+
+  // Save it under a unique name.
+  const name = `E2E new members ${Date.now()}`;
+  await page.getByRole('button', { name: 'Saved Searches' }).click();
+  await page.getByRole('button', { name: 'Save Current Search' }).click();
+  await page.getByLabel('Search name').fill(name);
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByRole('button', { name: `Apply ${name}` })).toBeVisible();
+
+  // After a reload the query is gone until the saved search is applied again.
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Church Members' })).toBeVisible();
+  await expect(page.getByText('Advanced query active')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Saved Searches' }).click();
+  await page.getByRole('button', { name: `Apply ${name}` }).click();
+  await expect(page.getByText('Advanced query active')).toBeVisible();
+
+  // The list shows what the API returns for the same query.
+  const query = {
+    conditions: [
+      { field: 'engagement.membershipStage', operator: 'equals', value: 'new_member' },
+      { field: 'engagement.engagementScore', operator: 'gte', value: 50 },
+    ],
+    logic: 'AND',
+    page: 1,
+    pageSize: 25,
+  };
+  const response = await page.request.post('/api/users/search', { data: query });
+  expect(response.status()).toBe(200);
+  const { total } = (await response.json()) as { total: number };
+  await expect(page.getByText(`(${total} total)`)).toBeVisible();
+  await expect(page.getByRole('status', { name: 'Loading members' })).toHaveCount(0);
+  await expect(page.locator('table tbody tr')).toHaveCount(Math.min(total, 25));
+
+  // Clean up the saved search.
+  const list = await page.request.get('/api/users/saved-searches');
+  const { searches } = (await list.json()) as { searches: { id: string; name: string }[] };
+  const saved = searches.find((s) => s.name === name);
+  expect(saved).toBeDefined();
+  expect((await page.request.delete(`/api/users/saved-searches/${saved!.id}`)).status()).toBe(200);
+});

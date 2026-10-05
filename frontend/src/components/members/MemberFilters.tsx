@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
+import type { SearchQuery } from '@embrace/shared';
 import { formatStage } from '../../lib/members/display';
 import type { MemberFilters as Filters, MemberSort } from '../../lib/members/filters';
+import AdvancedQueryChip from './search/AdvancedQueryChip';
 
 interface MemberFiltersProps {
   filters: Filters;
@@ -14,6 +16,8 @@ interface MemberFiltersProps {
   dateError: string | null;
   /** Buttons shown beside the search box (export, advanced search). */
   actions?: ReactNode;
+  /** While an advanced query is active it replaces the search box and quick filters. */
+  advanced?: { query: SearchQuery; onEdit: () => void; onClear: () => void } | null;
 }
 
 const filterClass =
@@ -75,6 +79,7 @@ export default function MemberFilters({
   canManage,
   dateError,
   actions,
+  advanced,
 }: MemberFiltersProps) {
   const chips: { label: string; clear: () => void }[] = [];
   if (filters.search)
@@ -93,34 +98,38 @@ export default function MemberFilters({
     <div className="mt-4 space-y-4">
       <div className="flex flex-col lg:flex-row gap-4">
         <div className="flex-1">
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="Search by name, email, phone, or bio..."
-              aria-label="Search members"
-              value={filters.search}
-              onChange={(e) => onFilterChange('search', e.target.value)}
-              className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <svg
-              className="absolute left-3 top-2.5 h-4 w-4 text-gray-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+          {advanced ? (
+            <AdvancedQueryChip {...advanced} />
+          ) : (
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search by name, email, phone, or bio..."
+                aria-label="Search members"
+                value={filters.search}
+                onChange={(e) => onFilterChange('search', e.target.value)}
+                className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-            </svg>
-          </div>
+              <svg
+                className="absolute left-3 top-2.5 h-4 w-4 text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
+              </svg>
+            </div>
+          )}
         </div>
         {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
       </div>
 
-      {canManage && (
+      {canManage && !advanced && (
         <div className="flex flex-wrap gap-2">
           {SELECTS.map(({ key, label, options }) => (
             <select

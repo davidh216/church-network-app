@@ -97,6 +97,26 @@ describe('users endpoints', () => {
     );
   });
 
+  it('searchUsers posts the query and returns the page and total', async () => {
+    const pageBody = { users: [{ id: 'u1' }], total: 1, page: 1, pageSize: 25 };
+    respond({ success: true, ...pageBody });
+    const query = {
+      conditions: [
+        {
+          field: 'engagement.membershipStage' as const,
+          operator: 'equals' as const,
+          value: 'new_member' as const,
+        },
+        { field: 'engagement.engagementScore' as const, operator: 'gte' as const, value: 50 },
+      ],
+      logic: 'AND' as const,
+      page: 1,
+      pageSize: 25,
+    };
+    await expect(users.searchUsers(query)).resolves.toEqual(pageBody);
+    expect(call(0)).toEqual({ url: '/api/users/search', method: 'POST', body: query });
+  });
+
   it('getUser', async () => {
     respond({ success: true, user: { id: 'u1' } });
     await expect(users.getUser('u1')).resolves.toEqual({ id: 'u1' });
@@ -226,7 +246,14 @@ describe('saved searches endpoints', () => {
     expect(call(0).url).toBe('/api/users/saved-searches');
 
     respond({ success: true, search: { id: 's2' } }, { status: 201 });
-    const input = { name: 'N', query: { conditions: [] }, isPublic: false };
+    const input = {
+      name: 'N',
+      query: {
+        conditions: [{ field: 'name' as const, operator: 'contains' as const, value: 'ann' }],
+        logic: 'AND' as const,
+      },
+      isPublic: false,
+    };
     await expect(savedSearches.createSavedSearch(input)).resolves.toEqual({ id: 's2' });
     expect(call(1)).toEqual({ url: '/api/users/saved-searches', method: 'POST', body: input });
 

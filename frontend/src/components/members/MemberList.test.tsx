@@ -20,11 +20,20 @@ vi.mock('@/lib/api/auth', () => authApi);
 
 const usersApi = vi.hoisted(() => ({
   listUsers: vi.fn(),
+  searchUsers: vi.fn(),
   exportUsers: vi.fn(),
   createUser: vi.fn(),
   updateUser: vi.fn(),
 }));
 vi.mock('@/lib/api/users', () => usersApi);
+
+const savedApi = vi.hoisted(() => ({
+  listSavedSearches: vi.fn(),
+  createSavedSearch: vi.fn(),
+  deleteSavedSearch: vi.fn(),
+  useSavedSearch: vi.fn(),
+}));
+vi.mock('@/lib/api/savedSearches', () => savedApi);
 
 const rolesApi = vi.hoisted(() => ({ listRoles: vi.fn() }));
 vi.mock('@/lib/api/roles', () => rolesApi);
@@ -291,11 +300,126 @@ describe('MemberList', () => {
     expect(screen.getByRole('heading', { name: 'Edit Member' })).toBeInTheDocument();
     expect(screen.getByDisplayValue('Ann Example')).toBeInTheDocument();
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /Update|Save/ }));
+      fireEvent.click(
+        within(screen.getByRole('dialog')).getByRole('button', { name: /Update|Save/ }),
+      );
     });
     expect(usersApi.updateUser).toHaveBeenCalledWith('m2', expect.any(Object));
     // The update invalidates the member queries, so the list refetches.
     await waitFor(() => expect(usersApi.listUsers).toHaveBeenCalledTimes(2));
     expect(screen.queryByRole('heading', { name: 'Edit Member' })).not.toBeInTheDocument();
+  });
+
+  it('runs an advanced query from the quick filters, shows its result, and clears it', async () => {
+    usersApi.listUsers.mockResolvedValue(page(staffRows));
+    usersApi.searchUsers.mockResolvedValue(page([staffRows[1]!], 31));
+    await renderAs(['admin']);
+    await screen.findByText('Carol Example');
+
+    fireEvent.change(screen.getByLabelText('Membership stage'), {
+      target: { value: 'new_member' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced Search' }));
+    // The builder starts from the quick filters.
+    expect(screen.getByLabelText('Condition 1 field')).toHaveValue('engagement.membershipStage');
+    expect(screen.getByLabelText('Condition 1 value')).toHaveValue('new_member');
+    fireEvent.click(screen.getByRole('button', { name: 'Add Condition' }));
+    fireEvent.change(screen.getByLabelText('Condition 2 field'), {
+      target: { value: 'engagement.engagementScore' },
+    });
+    fireEvent.change(screen.getByLabelText('Condition 2 operator'), { target: { value: 'gte' } });
+    fireEvent.change(screen.getByLabelText('Condition 2 value'), { target: { value: '50' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply Search' }));
+
+    await waitFor(() =>
+      expect(usersApi.searchUsers).toHaveBeenCalledWith({
+        conditions: [
+          { field: 'engagement.membershipStage', operator: 'equals', value: 'new_member' },
+          { field: 'engagement.engagementScore', operator: 'gte', value: 50 },
+        ],
+        logic: 'AND',
+        page: 1,
+        pageSize: 25,
+      }),
+    );
+    expect(await screen.findByText('(31 total)')).toBeInTheDocument();
+    expect(rowNames()).toEqual(['Ann Example']);
+    expect(screen.getByText('Advanced query active')).toBeInTheDocument();
+    // The quick filters are folded into the query, so they are hidden while it is active.
+    expect(screen.queryByLabelText('Membership stage')).not.toBeInTheDocument();
+    expect(screen.getByText('Page 1 of 2')).toBeInTheDocument();
+
+    // Paging and sorting go to the search, not the list.
+    const listCalls = usersApi.listUsers.mock.calls.length;
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    await waitFor(() =>
+      expect(usersApi.searchUsers).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2 })),
+    );
+    expect(usersApi.listUsers).toHaveBeenCalledTimes(listCalls);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear advanced query' }));
+    await waitFor(() =>
+      expect(screen.queryByText('Advanced query active')).not.toBeInTheDocument(),
+    );
+    expect(await screen.findByText('Carol Example')).toBeInTheDocument();
+    expect(screen.getByLabelText('Membership stage')).toHaveValue('all');
+  });
+
+  it('saves the quick filters as a query and applies a saved search through the search API', async () => {
+    usersApi.listUsers.mockResolvedValue(page(staffRows));
+    usersApi.searchUsers.mockResolvedValue(page([staffRows[2]!]));
+    const query = {
+      conditions: [{ field: 'engagement.riskLevel', operator: 'equals', value: 'high' }],
+      logic: 'AND',
+      sort: 'name',
+      order: 'desc',
+    };
+    savedApi.listSavedSearches.mockResolvedValue([
+      {
+        id: 's1',
+        name: 'High risk',
+        description: null,
+        createdAt: '2026-10-01',
+        isPublic: false,
+        invalid: false,
+        query,
+      },
+    ]);
+    savedApi.createSavedSearch.mockResolvedValue({ id: 's2' });
+    savedApi.useSavedSearch.mockResolvedValue(undefined);
+    await renderAs(['admin']);
+    await screen.findByText('Carol Example');
+
+    fireEvent.change(screen.getByLabelText('Risk level'), { target: { value: 'high' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Saved Searches' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save Current Search' }));
+    fireEvent.change(screen.getByLabelText('Search name'), { target: { value: 'High risk' } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    });
+    expect(savedApi.createSavedSearch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'High risk',
+        query: {
+          conditions: [{ field: 'engagement.riskLevel', operator: 'equals', value: 'high' }],
+          logic: 'AND',
+        },
+      }),
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Apply High risk' }));
+    await waitFor(() =>
+      expect(usersApi.searchUsers).toHaveBeenCalledWith({
+        conditions: query.conditions,
+        logic: 'AND',
+        sort: 'name',
+        order: 'desc',
+        page: 1,
+        pageSize: 25,
+      }),
+    );
+    await waitFor(() => expect(savedApi.useSavedSearch).toHaveBeenCalledWith('s1'));
+    expect(await screen.findByText('Advanced query active')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Saved Searches' })).not.toBeInTheDocument();
   });
 });

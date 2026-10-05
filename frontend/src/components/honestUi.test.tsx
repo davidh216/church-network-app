@@ -212,11 +212,17 @@ describe('MemberList', () => {
     await act(async () => rowCheckbox.click());
   }
 
-  it('hides Advanced Search and Saved Searches until the evaluator exists', async () => {
-    const container = await renderAs(['admin'], <MemberList />);
-    const buttons = buttonTexts(container);
-    expect(buttons).not.toContain('Advanced Search');
-    expect(buttons).not.toContain('Saved Searches');
+  it('offers Advanced Search and Saved Searches to staff only (the search API is staff-only)', async () => {
+    const staff = await renderAs(['admin'], <MemberList />);
+    expect(buttonTexts(staff)).toEqual(
+      expect.arrayContaining(['Advanced Search', 'Saved Searches']),
+    );
+    staff.remove();
+
+    usersApi.listUsers.mockResolvedValue(usersPage(directoryRows));
+    const member = await renderAs(['member'], <MemberList />);
+    expect(buttonTexts(member)).not.toContain('Advanced Search');
+    expect(buttonTexts(member)).not.toContain('Saved Searches');
   });
 
   it('downloads the CSV under the server-provided filename', async () => {
@@ -288,13 +294,15 @@ describe('MemberList', () => {
 });
 
 describe('SavedSearches', () => {
-  it('does not offer the predefined quick searches', async () => {
+  it('offers the predefined quick searches now that the search runs on the server', async () => {
     const container = await renderAs(
       ['admin'],
       <SavedSearches onLoadSearch={noop} onClose={noop} currentQuery={null} />,
     );
     expect(container.textContent).toContain('Your Saved Searches');
-    expect(container.textContent).not.toContain('Quick Searches');
-    expect(container.textContent).not.toContain('High Engagement Members');
+    expect(container.textContent).toContain('Quick Searches');
+    expect(container.textContent).toContain('High Engagement Members');
+    // Nothing to save without a current query.
+    expect(buttonTexts(container)).not.toContain('Save Current Search');
   });
 });

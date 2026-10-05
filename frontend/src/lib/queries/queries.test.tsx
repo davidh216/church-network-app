@@ -14,10 +14,18 @@ import {
   useRecordSavedSearchUse,
   useSavedSearches,
 } from './savedSearches';
-import { useCreateUser, useUpdateUser, useUser, useUserSummary, useUsers } from './users';
+import {
+  useCreateUser,
+  useMemberSearch,
+  useUpdateUser,
+  useUser,
+  useUserSummary,
+  useUsers,
+} from './users';
 
 const usersApi = vi.hoisted(() => ({
   listUsers: vi.fn(),
+  searchUsers: vi.fn(),
   getUser: vi.fn(),
   getUserSummary: vi.fn(),
   createUser: vi.fn(),
@@ -41,6 +49,18 @@ const savedApi = vi.hoisted(() => ({
 vi.mock('@/lib/api/savedSearches', () => savedApi);
 
 const failure = new ApiError(500, 'Server exploded');
+const stageQuery = {
+  conditions: [
+    {
+      field: 'engagement.membershipStage' as const,
+      operator: 'equals' as const,
+      value: 'new_member' as const,
+    },
+  ],
+  logic: 'AND' as const,
+  page: 1,
+  pageSize: 25,
+};
 
 interface QueryCase {
   name: string;
@@ -68,6 +88,12 @@ const queryCases: QueryCase[] = [
     api: usersApi.listUsers,
     useHook: () => useUsers({ q: 'ann', page: 2, pageSize: 25 }),
     args: [{ q: 'ann', page: 2, pageSize: 25 }],
+  },
+  {
+    name: 'useMemberSearch',
+    api: usersApi.searchUsers,
+    useHook: () => useMemberSearch(stageQuery),
+    args: [stageQuery],
   },
   { name: 'useUser', api: usersApi.getUser, useHook: () => useUser('u1'), args: ['u1'] },
   { name: 'useUserSummary', api: usersApi.getUserSummary, useHook: useUserSummary, args: [] },
@@ -108,6 +134,28 @@ describe.each(queryCases)('$name', ({ api, useHook, args }) => {
     const { result } = renderHook(useHook, { wrapper: queryWrapper() });
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(result.current.error).toBe(failure);
+  });
+});
+
+describe('useMemberSearch', () => {
+  it('stays idle without a query', () => {
+    const { result } = renderHook(() => useMemberSearch(null), {
+      wrapper: queryWrapper(makeTestQueryClient()),
+    });
+    expect(result.current.fetchStatus).toBe('idle');
+    expect(usersApi.searchUsers).not.toHaveBeenCalled();
+  });
+
+  it('caches under the users prefix, so member invalidations refetch the search', async () => {
+    usersApi.searchUsers.mockResolvedValue({ users: [], total: 0, page: 1, pageSize: 25 });
+    const client = makeTestQueryClient();
+    const { result } = renderHook(() => useMemberSearch(stageQuery), {
+      wrapper: queryWrapper(client),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(client.getQueryData(queryKeys.users.search(stageQuery))).toBeDefined();
+    await client.invalidateQueries({ queryKey: queryKeys.users.all });
+    await waitFor(() => expect(usersApi.searchUsers).toHaveBeenCalledTimes(2));
   });
 });
 

@@ -1,4 +1,4 @@
-import type { SearchQuery } from '../../types/domain';
+import type { SearchQuery } from '@embrace/shared';
 
 export interface PredefinedSearch {
   name: string;
@@ -6,82 +6,62 @@ export interface PredefinedSearch {
   query: SearchQuery;
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+const isoDay = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+
 /**
- * Quick searches for common scenarios. Hidden behind PREDEFINED_SEARCHES_ENABLED in
- * SavedSearches: these use the old operator names, which the searchQuery schema rejects,
- * and F5 replaces them with valid queries.
+ * Quick searches for common scenarios, each a valid `searchQuery` (the test parses them with
+ * the shared schema). `now` is injectable for tests.
  */
 export function predefinedSearches(now: number = Date.now()): PredefinedSearch[] {
   return [
     {
       name: 'High Engagement Members',
-      description: 'Members with engagement score above 80%',
+      description: 'Engagement score above 80',
       query: {
-        conditions: [
-          {
-            field: 'engagement.engagementScore',
-            operator: 'greater_than',
-            value: '80',
-            logic: 'AND',
-          },
-        ],
-        type: 'advanced',
+        conditions: [{ field: 'engagement.engagementScore', operator: 'gt', value: 80 }],
+        logic: 'AND',
       },
     },
     {
       name: 'At Risk Members',
-      description: 'Members with high or medium risk levels',
+      description: 'High or medium risk level',
       query: {
-        conditions: [
-          { field: 'engagement.riskLevel', operator: 'in', value: 'high,medium', logic: 'AND' },
-        ],
-        type: 'advanced',
+        conditions: [{ field: 'engagement.riskLevel', operator: 'in', value: ['high', 'medium'] }],
+        logic: 'AND',
       },
     },
     {
       name: 'New Members (Last 30 Days)',
-      description: 'Members who joined in the last 30 days',
+      description: 'Joined in the last 30 days',
       query: {
-        conditions: [
-          {
-            field: 'createdAt',
-            operator: 'after',
-            value: new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-            logic: 'AND',
-          },
-        ],
-        type: 'advanced',
+        conditions: [{ field: 'createdAt', operator: 'after', value: isoDay(now - 30 * DAY_MS) }],
+        logic: 'AND',
       },
     },
     {
       name: 'Leaders and Core Members',
-      description: 'Members in leadership or core member stages',
+      description: 'Leader or core member stage',
       query: {
         conditions: [
           {
             field: 'engagement.membershipStage',
             operator: 'in',
-            value: 'leader,core_member',
-            logic: 'AND',
+            value: ['leader', 'core_member'],
           },
         ],
-        type: 'advanced',
+        logic: 'AND',
       },
     },
     {
       name: 'Inactive Members',
-      description: "Members who haven't been active recently",
+      description: 'Inactive stage or high risk',
       query: {
         conditions: [
-          {
-            field: 'engagement.membershipStage',
-            operator: 'equals',
-            value: 'inactive',
-            logic: 'OR',
-          },
-          { field: 'engagement.riskLevel', operator: 'equals', value: 'high', logic: 'OR' },
+          { field: 'engagement.membershipStage', operator: 'equals', value: 'inactive' },
+          { field: 'engagement.riskLevel', operator: 'equals', value: 'high' },
         ],
-        type: 'advanced',
+        logic: 'OR',
       },
     },
   ];

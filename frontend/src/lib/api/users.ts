@@ -1,4 +1,4 @@
-import type { ListUsersParams } from '@embrace/shared';
+import type { ListUsersParams, SearchQuery } from '@embrace/shared';
 import type { ApiEnvelope, CreateUserInput, Member, UpdateUserInput } from '../../types/domain';
 import { apiFetch, apiRequest } from './client';
 import { queryString, type Paged } from './query';
@@ -15,6 +15,18 @@ export async function listUsers(params: ListUsersParams = {}): Promise<UserPage>
   const { users, total, page, pageSize } = await apiFetch<ApiEnvelope<UserPage>>(
     `/users${queryString(params)}`,
   );
+  return { users, total, page, pageSize };
+}
+
+/**
+ * POST /api/users/search (staff): one page of members matching an advanced query. Same
+ * response shape as the list.
+ */
+export async function searchUsers(query: SearchQuery): Promise<UserPage> {
+  const { users, total, page, pageSize } = await apiFetch<ApiEnvelope<UserPage>>('/users/search', {
+    method: 'POST',
+    json: query,
+  });
   return { users, total, page, pageSize };
 }
 

@@ -2,7 +2,7 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import { DEFAULT_USER_PAGE_SIZE, type UserSortField } from '@embrace/shared';
+import { DEFAULT_USER_PAGE_SIZE, type SearchQuery, type UserSortField } from '@embrace/shared';
 import { exportUsers } from '../../lib/api/users';
 import { useIsStaff } from '../../lib/auth/AuthProvider';
 import { useDebouncedValue } from '../../lib/hooks/useDebouncedValue';
@@ -18,7 +18,8 @@ import {
   type MemberFilters as Filters,
   type MemberSort,
 } from '../../lib/members/filters';
-import { useUsers } from '../../lib/queries/users';
+import { filtersToQuery } from '../../lib/members/searchQuery';
+import { useMemberSearch, useUsers } from '../../lib/queries/users';
 import AddEditMemberModal from './AddEditMemberModal';
 import AdvancedSearchBuilder from './AdvancedSearchBuilder';
 import SavedSearches from './SavedSearches';
@@ -29,16 +30,13 @@ import MemberFilters from './MemberFilters';
 import MemberPagination from './MemberPagination';
 import MemberTable from './MemberTable';
 import MemberListHeader, { type ViewMode } from './MemberListHeader';
+import MemberListActions, { type SearchPanel } from './MemberListActions';
 import ErrorToast from '../ui/ErrorToast';
 import InlineError from '../ui/InlineError';
 import Skeleton from '../ui/Skeleton';
 import { downloadBlob } from '../../lib/download';
 import { getErrorMessage } from '../../lib/errors';
-import type { Member, SearchQuery } from '../../types/domain';
-
-// The advanced search runs on the server only from F5 (POST /api/users/search); until then
-// the Advanced Search and Saved Searches buttons stay hidden behind this flag.
-const ADVANCED_SEARCH_ENABLED = false; // hidden until the search UI exists (gameplan 2.4 / F038)
+import type { Member } from '../../types/domain';
 
 /** The `/members` route body; staff add and edit members in place, profiles are links. */
 export default function MemberList() {
@@ -53,21 +51,31 @@ export default function MemberList() {
   const [editing, setEditing] = useState<{ member: Member | null } | null>(null);
   // Selection is kept across pages and filter changes; export sends exactly these ids.
   const [selectedMembers, setSelectedMembers] = useState<Set<string>>(new Set());
-  const [showAdvancedSearch, setShowAdvancedSearch] = useState(false);
-  const [showSavedSearches, setShowSavedSearches] = useState(false);
+  const [panel, setPanel] = useState<SearchPanel>(null);
   const [toast, setToast] = useState('');
+  // An applied advanced query (staff): the list then shows POST /api/users/search results.
   const [advancedQuery, setAdvancedQuery] = useState<SearchQuery | null>(null);
 
   // The search box updates at once; the query follows 300 ms after the last keystroke.
   const search = useDebouncedValue(filters.search.trim());
   const queryFilters = { ...filters, search };
-  const filterKey = JSON.stringify([queryFilters, sort, pageSize]);
+  const filterKey = JSON.stringify([queryFilters, sort, pageSize, advancedQuery]);
   const [page, setPage] = useResettingPage(filterKey);
-  const usersQuery = useUsers(buildListParams(queryFilters, sort, page, pageSize, canManage));
+  const sortParams = sort ? { sort: sort.key, order: sort.order } : {};
+  const listQuery = useUsers(buildListParams(queryFilters, sort, page, pageSize, canManage), {
+    enabled: !advancedQuery,
+  });
+  const searchResult = useMemberSearch(
+    advancedQuery ? { ...advancedQuery, ...sortParams, page, pageSize } : null,
+  );
+  const usersQuery = advancedQuery ? searchResult : listQuery;
+  // What "Save Current Search" stores: the advanced query, or the quick filters as conditions.
+  const baseQuery = advancedQuery ?? filtersToQuery(queryFilters);
+  const currentQuery = baseQuery && { ...baseQuery, ...sortParams };
   const members = usersQuery.data?.users ?? [];
   const total = usersQuery.data?.total ?? 0;
   const pageIds = members.map((m) => m.id);
-  const filtersActive = hasActiveFilters(filters);
+  const filtersActive = hasActiveFilters(filters) || advancedQuery !== null;
   const dateError = canManage ? dateRangeError(filters.joinedFrom, filters.joinedTo) : null;
 
   const setFilter = (key: keyof Filters, value: string) =>
@@ -86,6 +94,18 @@ export default function MemberList() {
     setFilters(EMPTY_FILTERS);
     setAdvancedQuery(null);
     setSort(null);
+  };
+
+  const togglePanel = (next: Exclude<SearchPanel, null>) =>
+    setPanel((prev) => (prev === next ? null : next));
+
+  // The applied query replaces the quick filters (the builder starts from them).
+  const applyQuery = (query: SearchQuery) => {
+    const { conditions, logic } = query;
+    setAdvancedQuery({ conditions, logic });
+    if (query.sort) setSort({ key: query.sort, order: query.order ?? 'asc' });
+    setFilters(EMPTY_FILTERS);
+    setPanel(null);
   };
 
   const exportMembers = async () => {
@@ -118,40 +138,22 @@ export default function MemberList() {
           onClearSort={() => setSort(null)}
           canManage={canManage}
           dateError={dateError}
+          advanced={
+            advancedQuery && {
+              query: advancedQuery,
+              onEdit: () => setPanel('advanced'),
+              onClear: () => setAdvancedQuery(null),
+            }
+          }
           actions={
-            <>
-              {ADVANCED_SEARCH_ENABLED && (
-                <button
-                  type="button"
-                  onClick={() => setShowAdvancedSearch(!showAdvancedSearch)}
-                  className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                    showAdvancedSearch
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  Advanced Search
-                </button>
-              )}
-              {ADVANCED_SEARCH_ENABLED && (
-                <button
-                  type="button"
-                  onClick={() => setShowSavedSearches(!showSavedSearches)}
-                  className="px-4 py-2 text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-md transition-colors"
-                >
-                  Saved Searches
-                </button>
-              )}
-              {canManage && selectedMembers.size > 0 && (
-                <button
-                  type="button"
-                  onClick={() => void exportMembers()}
-                  className="px-4 py-2 text-sm font-medium bg-green-100 text-green-700 hover:bg-green-200 rounded-md transition-colors"
-                >
-                  Export Selected ({selectedMembers.size})
-                </button>
-              )}
-            </>
+            canManage && (
+              <MemberListActions
+                panel={panel}
+                onTogglePanel={togglePanel}
+                selectedCount={selectedMembers.size}
+                onExport={() => void exportMembers()}
+              />
+            )
           }
         />
       </div>
@@ -174,21 +176,23 @@ export default function MemberList() {
         />
       )}
 
-      {ADVANCED_SEARCH_ENABLED && showAdvancedSearch && (
+      {canManage && panel === 'advanced' && (
         <AdvancedSearchBuilder
-          onApplyQuery={setAdvancedQuery}
-          onClose={() => setShowAdvancedSearch(false)}
+          initialQuery={advancedQuery ?? filtersToQuery(filters)}
+          onApply={applyQuery}
+          onClear={() => {
+            setAdvancedQuery(null);
+            setPanel(null);
+          }}
+          onClose={() => setPanel(null)}
         />
       )}
 
-      {ADVANCED_SEARCH_ENABLED && showSavedSearches && (
+      {canManage && panel === 'saved' && (
         <SavedSearches
-          onLoadSearch={(query) => {
-            setAdvancedQuery(query);
-            setShowSavedSearches(false);
-          }}
-          onClose={() => setShowSavedSearches(false)}
-          currentQuery={advancedQuery}
+          onLoadSearch={applyQuery}
+          onClose={() => setPanel(null)}
+          currentQuery={currentQuery}
         />
       )}
 
