@@ -11,7 +11,10 @@ export default tseslint.config(
   {
     languageOptions: {
       globals: globals.node,
-      parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname },
+      parserOptions: {
+        projectService: { allowDefaultProject: ['scripts/*.mjs'] },
+        tsconfigRootDir: import.meta.dirname,
+      },
     },
     rules: {
       // `_`-prefixed names mark values deliberately left unused (destructured-away fields, unused handler args).

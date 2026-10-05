@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { passwordNotEmail, passwordSchema } from './password-policy';
-import { cuid, optionalText } from './primitives';
+import { passwordNotEmail, passwordSchema } from './password-policy.js';
+import { cuid, optionalText } from './primitives.js';
 
 const roleIds = z.array(cuid).max(10);
 

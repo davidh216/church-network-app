@@ -7,7 +7,7 @@ import {
   milestoneCategory,
   noteType,
   priority,
-} from './enums';
+} from './enums.js';
 
 // POST /api/member-details/:id/interactions (staff)
 export const addInteractionInput = z.object({

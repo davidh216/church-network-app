@@ -6,6 +6,8 @@
 !packages/shared/package.json
 !packages/shared/tsconfig.json
 !packages/shared/tsconfig.build.json
+!packages/shared/tsconfig.build.esm.json
+!packages/shared/scripts/
 !packages/shared/src/
 !backend/package.json
 !backend/tsconfig.json

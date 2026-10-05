@@ -5,19 +5,23 @@
   "license": "MIT",
   "description": "Zod schemas and types shared by the Embrace API and web app",
   "main": "dist/index.js",
+  "module": "dist/esm/index.js",
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
+      "import": "./dist/esm/index.js",
+      "require": "./dist/index.js"
     },
     "./package.json": "./package.json"
   },
+  "sideEffects": false,
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "prebuild": "node scripts/write-esm-package.mjs",
+    "build": "tsc -b tsconfig.build.json tsconfig.build.esm.json",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run"

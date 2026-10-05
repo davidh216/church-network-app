@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { MAX_PAGE, MAX_PAGE_SIZE, optionalQueryText, type WithNumericPaging } from './primitives';
+import {
+  MAX_PAGE,
+  MAX_PAGE_SIZE,
+  optionalQueryText,
+  type WithNumericPaging,
+} from './primitives.js';
 
 // Only YouTube videos can be added today; the column also names IMAGE, VIDEO, AUDIO and DOCUMENT.
 export const mediaType = z.enum(['YOUTUBE_VIDEO']);

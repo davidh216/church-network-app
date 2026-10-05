@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { MAX_PASSWORD_LENGTH, passwordNotEmail, passwordSchema } from './password-policy';
+import { MAX_PASSWORD_LENGTH, passwordNotEmail, passwordSchema } from './password-policy.js';
 
 // POST /api/auth/register
 export const registerInput = z

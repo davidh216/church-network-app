@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { channel, interactionType } from './enums';
-import { metadata } from './primitives';
+import { channel, interactionType } from './enums.js';
+import { metadata } from './primitives.js';
 
 // POST /api/analytics/members/:id/activities (staff)
 export const recordActivityInput = z.object({

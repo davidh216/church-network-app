@@ -1,6 +1,11 @@
 import { z } from 'zod';
-import { membershipStage, riskLevel } from './enums';
-import { MAX_PAGE, MAX_PAGE_SIZE, optionalQueryText, type WithNumericPaging } from './primitives';
+import { membershipStage, riskLevel } from './enums.js';
+import {
+  MAX_PAGE,
+  MAX_PAGE_SIZE,
+  optionalQueryText,
+  type WithNumericPaging,
+} from './primitives.js';
 
 // The advanced member search (POST /api/users/search) and the shape stored by saved searches.
 // Each condition names a field, an operator allowed for that field and a value of the right type.

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { COMMON_PASSWORDS } from './common-passwords';
+import { COMMON_PASSWORDS } from './common-passwords.js';
 
 // Password rules for registration, staff-created accounts and password changes.
 export const MIN_PASSWORD_LENGTH = 12;

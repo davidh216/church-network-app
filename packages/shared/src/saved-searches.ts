@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { searchQuery } from './search';
+import { searchQuery } from './search.js';
 
 // POST /api/users/saved-searches. The stored query is exactly a `searchQuery`; it is validated
 // again on load and returned with `invalid: true` when it no longer matches the schema.
