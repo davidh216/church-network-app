@@ -1,5 +1,5 @@
-import type { MemberDetails } from '../../../types/domain';
-import { formatDate } from '../../../lib/members/profile';
+import type { MemberDetails } from '@/types/domain';
+import { formatDate } from '@/lib/members/profile';
 import { Field } from './Field';
 
 /** The "Personal Info" tab: basic information, emergency contact and bio. */

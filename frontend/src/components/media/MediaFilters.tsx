@@ -1,4 +1,4 @@
-import { MEDIA_TAGS, tagLabel } from '../../lib/media/format';
+import { MEDIA_TAGS, tagLabel } from '@/lib/media/format';
 
 interface MediaFiltersProps {
   search: string;
@@ -8,7 +8,7 @@ interface MediaFiltersProps {
 }
 
 const inputClass =
-  'px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500';
+  'px-3 py-2 border border-gray-300 rounded-md focus:outline-hidden focus:ring-2 focus:ring-blue-500';
 
 /** The media search box and the category select ('all' for every category). */
 export default function MediaFilters({

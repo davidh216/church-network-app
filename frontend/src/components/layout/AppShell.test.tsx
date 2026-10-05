@@ -8,6 +8,7 @@ import { ApiError } from '@/lib/api/client';
 import { AuthProvider } from '@/lib/auth/AuthProvider';
 import { makeUser } from '@/test/fixtures';
 import { render, settle } from '@/test/render';
+import type { User } from '@/types/domain';
 
 const router = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn() }));
 const nav = vi.hoisted(() => ({ pathname: '/', search: '' }));
@@ -30,8 +31,8 @@ vi.mock('@/lib/api/users', () => usersApi);
 
 const staffSummary = { total: 12, active: 10, pendingApproval: 2, newThisMonth: 3 };
 
-async function renderDashboard(roleNames: string[]) {
-  authApi.me.mockResolvedValue(makeUser(roleNames));
+async function renderDashboard(roleNames: string[], overrides: Partial<User> = {}) {
+  authApi.me.mockResolvedValue(makeUser(roleNames, overrides));
   const { container } = await render(
     <AuthProvider>
       <AppShell>
@@ -180,6 +181,21 @@ describe('dashboard', () => {
     await settle();
     expect(container.querySelector('[role="alert"]')).toBeNull();
     expect(container.textContent).toContain('Members7');
+  });
+
+  it('shows "Member since" only with a real membership date, never the account date', async () => {
+    const without = await renderDashboard(['member']);
+    expect(without.textContent).not.toContain('Member since');
+    expect(without.textContent).not.toContain('Not set');
+  });
+
+  it('shows the membership date in the browser locale when there is one', async () => {
+    const container = await renderDashboard(['member'], {
+      membershipDate: '2020-03-15T12:00:00.000Z',
+    });
+    expect(container.textContent).toContain(
+      `Member since: ${new Date('2020-03-15T12:00:00.000Z').toLocaleDateString()}`,
+    );
   });
 
   it('has no placeholder actions or hard-coded overview', async () => {

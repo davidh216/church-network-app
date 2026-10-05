@@ -1,5 +1,5 @@
-import type { MemberDetails } from '../../../types/domain';
-import { formatDate, membershipDuration } from '../../../lib/members/profile';
+import type { MemberDetails } from '@/types/domain';
+import { formatDate, membershipDuration } from '@/lib/members/profile';
 import { Field } from './Field';
 
 /** The "Church Info" tab: membership, background and engagement analytics. */

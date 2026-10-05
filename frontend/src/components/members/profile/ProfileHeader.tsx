@@ -1,8 +1,8 @@
 import Link from 'next/link';
-import type { MemberDetails } from '../../../types/domain';
-import { formatStage, initials } from '../../../lib/members/display';
-import { calculateAge, formatDate, riskBadgeClass } from '../../../lib/members/profile';
-import AvatarImage from '../../ui/AvatarImage';
+import type { MemberDetails } from '@/types/domain';
+import { formatStage, initials } from '@/lib/members/display';
+import { calculateAge, profileDate, riskBadgeClass } from '@/lib/members/profile';
+import AvatarImage from '@/components/ui/AvatarImage';
 
 export const backLinkClass = 'text-sm font-medium text-blue-600 hover:text-blue-800';
 
@@ -16,6 +16,7 @@ export default function ProfileHeader({
   member: MemberDetails;
   onEdit: () => void;
 }) {
+  const memberSince = profileDate(member.membershipDate);
   return (
     <div className="flex justify-between items-start border-b border-gray-200 pb-4 mb-6">
       <div className="flex items-center space-x-4">
@@ -38,9 +39,9 @@ export default function ProfileHeader({
             >
               {member.isActive ? 'Active' : 'Inactive'}
             </span>
-            <span className="text-sm text-gray-500">
-              Member since {formatDate(member.membershipDate)}
-            </span>
+            {memberSince && (
+              <span className="text-sm text-gray-500">Member since {memberSince}</span>
+            )}
             {member.dateOfBirth && (
               <span className="text-sm text-gray-500">Age {calculateAge(member.dateOfBirth)}</span>
             )}
@@ -69,7 +70,7 @@ export default function ProfileHeader({
         <button
           type="button"
           onClick={onEdit}
-          className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
         >
           Edit Member
         </button>

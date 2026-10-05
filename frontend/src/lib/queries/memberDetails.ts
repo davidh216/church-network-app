@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { getMemberDetails } from '../api/memberDetails';
+import { getMemberDetails } from '@/lib/api/memberDetails';
 import { queryKeys } from './keys';
 
 /** Staff only: the full CRM profile shown on `/members/[id]`. */

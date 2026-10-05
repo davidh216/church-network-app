@@ -9,14 +9,14 @@ import {
   FORM_ERROR_KEY,
   validateForm,
   type FieldErrors,
-} from '../../lib/forms/validate';
-import Dialog from '../ui/Dialog';
-import FieldError from '../ui/FieldError';
-import InlineError from '../ui/InlineError';
-import TextField from '../ui/TextField';
-import { useRoles } from '../../lib/queries/roles';
-import { useCreateUser, useUpdateUser } from '../../lib/queries/users';
-import type { Member } from '../../types/domain';
+} from '@/lib/forms/validate';
+import Dialog from '@/components/ui/Dialog';
+import FieldError from '@/components/ui/FieldError';
+import InlineError from '@/components/ui/InlineError';
+import TextField from '@/components/ui/TextField';
+import { useRoles } from '@/lib/queries/roles';
+import { useCreateUser, useUpdateUser } from '@/lib/queries/users';
+import type { Member } from '@/types/domain';
 
 const FIELDS = ['name', 'email', 'password', 'phone', 'bio', 'isActive', 'roleIds'] as const;
 
@@ -144,7 +144,7 @@ export default function AddEditMemberModal({
         {error && (
           <div
             role="alert"
-            className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded"
+            className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-sm"
           >
             {error}
           </div>
@@ -214,7 +214,7 @@ export default function AddEditMemberModal({
               value={formData.bio}
               onChange={(e) => setFormData((prev) => ({ ...prev, bio: e.target.value }))}
               rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-hidden focus:ring-2 focus:ring-blue-500"
               placeholder="Tell us about this member..."
             />
             <FieldError fieldId="member-bio" message={fieldErrors.bio} />
@@ -229,7 +229,7 @@ export default function AddEditMemberModal({
                     type="checkbox"
                     checked={selectedRoles.includes(role.id)}
                     onChange={() => handleRoleChange(role.id)}
-                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    className="rounded-sm border-gray-300 text-blue-600 focus:ring-blue-500"
                   />
                   <span className="ml-2 text-sm text-gray-700 capitalize">
                     {role.name}
@@ -249,7 +249,7 @@ export default function AddEditMemberModal({
               type="checkbox"
               checked={formData.isActive}
               onChange={(e) => setFormData((prev) => ({ ...prev, isActive: e.target.checked }))}
-              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              className="rounded-sm border-gray-300 text-blue-600 focus:ring-blue-500"
             />
             <label htmlFor="member-active" className="ml-2 text-sm text-gray-700">
               Active Member
@@ -260,14 +260,14 @@ export default function AddEditMemberModal({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-500"
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md focus:outline-hidden focus:ring-2 focus:ring-gray-500"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md focus:outline-hidden focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
             >
               {loading ? 'Saving...' : isEditing ? 'Update Member' : 'Add Member'}
             </button>

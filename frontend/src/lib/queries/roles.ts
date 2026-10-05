@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { listRoles } from '../api/roles';
+import { listRoles } from '@/lib/api/roles';
 import { queryKeys } from './keys';
 
 /** Roles change rarely; they stay fresh for the session. `enabled: false` defers the fetch. */

@@ -1,5 +1,5 @@
-import type { MemberDetails } from '../../../types/domain';
-import { formatDate, formatDateTime, parseJsonList } from '../../../lib/members/profile';
+import type { MemberDetails } from '@/types/domain';
+import { formatDate, formatDateTime, parseJsonList } from '@/lib/members/profile';
 import { Field, pillClass } from './Field';
 
 function TagList({

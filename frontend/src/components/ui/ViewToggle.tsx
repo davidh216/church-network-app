@@ -31,7 +31,7 @@ export default function ViewToggle<T extends string>({
           onClick={() => onChange(mode)}
           aria-label={title}
           aria-pressed={value === mode}
-          className={`p-2 rounded transition-colors ${value === mode ? 'bg-white shadow-sm' : 'hover:bg-gray-200'}`}
+          className={`p-2 rounded-sm transition-colors ${value === mode ? 'bg-white shadow-xs' : 'hover:bg-gray-200'}`}
           title={title}
         >
           <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">

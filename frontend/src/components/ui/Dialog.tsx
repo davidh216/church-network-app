@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, type MouseEvent, type ReactNode } from 'react';
-import { focusableWithin, trapTarget } from '../../lib/a11y/focus';
+import { focusableWithin, trapTarget } from '@/lib/a11y/focus';
 
 interface DialogProps {
   /** id of the element that names the dialog (usually its heading). */
@@ -101,7 +101,7 @@ export default function Dialog({
         aria-modal="true"
         aria-labelledby={labelledBy}
         tabIndex={-1}
-        className={`${className} focus:outline-none`}
+        className={`${className} focus:outline-hidden`}
       >
         {children}
       </div>

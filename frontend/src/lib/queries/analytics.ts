@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { getAnalytics, refreshAllEngagement } from '../api/analytics';
+import { getAnalytics, refreshAllEngagement } from '@/lib/api/analytics';
 import { queryKeys } from './keys';
 
 /** Staff only. */

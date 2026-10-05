@@ -8,11 +8,11 @@ import {
   FORM_ERROR_KEY,
   validateForm,
   type FieldErrors,
-} from '../../lib/forms/validate';
-import { MEDIA_TAGS } from '../../lib/media/format';
-import { useCreateMedia } from '../../lib/queries/media';
-import Dialog from '../ui/Dialog';
-import FieldError from '../ui/FieldError';
+} from '@/lib/forms/validate';
+import { MEDIA_TAGS } from '@/lib/media/format';
+import { useCreateMedia } from '@/lib/queries/media';
+import Dialog from '@/components/ui/Dialog';
+import FieldError from '@/components/ui/FieldError';
 
 interface AddMediaDialogProps {
   onClose: () => void;
@@ -21,7 +21,7 @@ interface AddMediaDialogProps {
 }
 
 const inputClass =
-  'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500';
+  'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-hidden focus:ring-2 focus:ring-blue-500';
 const labelClass = 'block text-sm font-medium text-gray-700 mb-1';
 const FIELDS = ['title', 'url', 'description', 'tags'] as const;
 
@@ -74,7 +74,7 @@ export default function AddMediaDialog({ onClose, onSaved }: AddMediaDialogProps
         {error && (
           <div
             role="alert"
-            className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded"
+            className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-sm"
           >
             {error}
           </div>
@@ -143,7 +143,7 @@ export default function AddMediaDialog({ onClose, onSaved }: AddMediaDialogProps
                     type="checkbox"
                     checked={form.tags.includes(tag)}
                     onChange={() => toggleTag(tag)}
-                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    className="rounded-sm border-gray-300 text-blue-600 focus:ring-blue-500"
                   />
                   <span className="ml-2 text-sm text-gray-700 capitalize">
                     {tag.replace('-', ' ')}
@@ -158,14 +158,14 @@ export default function AddMediaDialog({ onClose, onSaved }: AddMediaDialogProps
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-500"
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md focus:outline-hidden focus:ring-2 focus:ring-gray-500"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-50"
+              className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md focus:outline-hidden focus:ring-2 focus:ring-red-500 disabled:opacity-50"
             >
               {loading ? 'Adding...' : 'Add Video'}
             </button>

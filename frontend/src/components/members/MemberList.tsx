@@ -3,10 +3,10 @@
 
 import { useCallback, useState } from 'react';
 import { DEFAULT_USER_PAGE_SIZE, type SearchQuery, type UserSortField } from '@embrace/shared';
-import { exportUsers } from '../../lib/api/users';
-import { useIsStaff } from '../../lib/auth/AuthProvider';
-import { useDebouncedValue } from '../../lib/hooks/useDebouncedValue';
-import { useResettingPage } from '../../lib/hooks/useResettingPage';
+import { exportUsers } from '@/lib/api/users';
+import { useIsStaff } from '@/lib/auth/AuthProvider';
+import { useDebouncedValue } from '@/lib/hooks/useDebouncedValue';
+import { useResettingPage } from '@/lib/hooks/useResettingPage';
 import {
   EMPTY_FILTERS,
   buildListParams,
@@ -17,9 +17,9 @@ import {
   toggleAllOnPage,
   type MemberFilters as Filters,
   type MemberSort,
-} from '../../lib/members/filters';
-import { filtersToQuery } from '../../lib/members/searchQuery';
-import { useMemberSearch, useUsers } from '../../lib/queries/users';
+} from '@/lib/members/filters';
+import { filtersToQuery } from '@/lib/members/searchQuery';
+import { useMemberSearch, useUsers } from '@/lib/queries/users';
 import AddEditMemberModal from './AddEditMemberModal';
 import AdvancedSearchBuilder from './AdvancedSearchBuilder';
 import SavedSearches from './SavedSearches';
@@ -31,12 +31,12 @@ import MemberPagination from './MemberPagination';
 import MemberTable from './MemberTable';
 import MemberListHeader, { type ViewMode } from './MemberListHeader';
 import MemberListActions, { type SearchPanel } from './MemberListActions';
-import ErrorToast from '../ui/ErrorToast';
-import InlineError from '../ui/InlineError';
-import Skeleton from '../ui/Skeleton';
-import { downloadBlob } from '../../lib/download';
-import { getErrorMessage } from '../../lib/errors';
-import type { Member } from '../../types/domain';
+import ErrorToast from '@/components/ui/ErrorToast';
+import InlineError from '@/components/ui/InlineError';
+import Skeleton from '@/components/ui/Skeleton';
+import { downloadBlob } from '@/lib/download';
+import { getErrorMessage } from '@/lib/errors';
+import type { Member } from '@/types/domain';
 
 /** The `/members` route body; staff add and edit members in place, profiles are links. */
 export default function MemberList() {
@@ -120,7 +120,7 @@ export default function MemberList() {
   const editMember = (member: Member) => setEditing({ member });
 
   return (
-    <div className="bg-white shadow rounded-lg">
+    <div className="bg-white shadow-sm rounded-lg">
       <div className="px-6 py-4 border-b border-gray-200">
         <MemberListHeader
           total={total}

@@ -1,4 +1,4 @@
-import type { ApiEnvelope, Role } from '../../types/domain';
+import type { ApiEnvelope, Role } from '@/types/domain';
 import { apiFetch } from './client';
 
 export async function listRoles(): Promise<Role[]> {

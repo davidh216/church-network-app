@@ -1,7 +1,7 @@
 import type { ListMediaParams } from '@embrace/shared';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { CreateMediaInput } from '../../types/domain';
-import { createMedia, listMedia } from '../api/media';
+import type { CreateMediaInput } from '@/types/domain';
+import { createMedia, listMedia } from '@/lib/api/media';
 import { queryKeys } from './keys';
 
 /** One page of the media library; the previous page stays visible while the next loads. */

@@ -138,6 +138,22 @@ describe('MemberList', () => {
     await waitFor(() => expect(lastParams()).toMatchObject({ sort: 'email', order: 'asc' }));
   });
 
+  it('says in the search placeholder what each caller may search', async () => {
+    await renderAs(['member']);
+    expect(screen.getByRole('textbox', { name: 'Search members' })).toHaveAttribute(
+      'placeholder',
+      'Search by name...',
+    );
+  });
+
+  it('offers staff the full search placeholder', async () => {
+    await renderAs(['admin']);
+    expect(screen.getByRole('textbox', { name: 'Search members' })).toHaveAttribute(
+      'placeholder',
+      'Search by name, email, phone, or bio...',
+    );
+  });
+
   it('debounces the search box, keeps focus and the current rows, and sends one request', async () => {
     await renderAs(['member']);
     const input = screen.getByPlaceholderText(/Search by name/);

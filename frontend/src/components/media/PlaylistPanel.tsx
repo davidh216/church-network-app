@@ -1,5 +1,5 @@
-import type { MediaItem } from '../../types/domain';
-import { parseTags } from '../../lib/media/format';
+import type { MediaItem } from '@/types/domain';
+import { parseTags } from '@/lib/media/format';
 
 interface PlaylistPanelProps {
   playlist: MediaItem[];
@@ -29,7 +29,7 @@ export default function PlaylistPanel({
           <button
             type="button"
             onClick={onClose}
-            className="p-1 hover:bg-gray-700 rounded"
+            className="p-1 hover:bg-gray-700 rounded-sm"
             aria-label="Close playlist"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -51,7 +51,7 @@ export default function PlaylistPanel({
               type="button"
               key={item.id}
               aria-current={current ? 'true' : undefined}
-              className={`block w-full text-left p-3 rounded cursor-pointer hover:bg-gray-800 transition-colors mb-2 ${
+              className={`block w-full text-left p-3 rounded-sm cursor-pointer hover:bg-gray-800 transition-colors mb-2 ${
                 current ? 'bg-gray-700 border-l-4 border-red-500' : ''
               }`}
               onClick={() => {
@@ -80,7 +80,7 @@ export default function PlaylistPanel({
                         .map((tag, tagIndex) => (
                           <span
                             key={tagIndex}
-                            className="text-xs bg-gray-700 text-gray-300 px-2 py-1 rounded"
+                            className="text-xs bg-gray-700 text-gray-300 px-2 py-1 rounded-sm"
                           >
                             {tag}
                           </span>

@@ -1,12 +1,12 @@
-import type { Member } from '../../types/domain';
+import type { Member } from '@/types/domain';
 import {
   engagementClass,
   formatStage,
   initials,
   riskDotClass,
   stageClass,
-} from '../../lib/members/display';
-import AvatarImage from '../ui/AvatarImage';
+} from '@/lib/members/display';
+import AvatarImage from '@/components/ui/AvatarImage';
 
 const pill = 'inline-flex items-center rounded-full text-xs font-medium';
 

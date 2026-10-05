@@ -1,6 +1,6 @@
 import type { z } from 'zod';
-import { isApiError } from '../api/client';
-import { getErrorMessage } from '../errors';
+import { isApiError } from '@/lib/api/client';
+import { getErrorMessage } from '@/lib/errors';
 
 /** The first error message for each top-level field; `_form` holds errors about the whole form. */
 export type FieldErrors = Partial<Record<string, string>>;

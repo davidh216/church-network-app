@@ -1,4 +1,5 @@
-import type { Member } from '../../types/domain';
+import { formatLocalDate } from '@/lib/format/date';
+import type { Member } from '@/types/domain';
 import { MemberAvatar, RoleBadges, StatusBadge } from './MemberBadges';
 import MemberRowActions from './MemberRowActions';
 
@@ -34,7 +35,7 @@ export default function MemberCards({
                 aria-label={`Select ${member.name}`}
                 checked={selected.has(member.id)}
                 onChange={() => onToggleSelect(member.id)}
-                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded-sm"
               />
             </div>
           )}
@@ -57,7 +58,7 @@ export default function MemberCards({
 
               <div className="flex items-center justify-between mt-4">
                 <span className="text-xs text-gray-500">
-                  Joined {new Date(member.createdAt).toLocaleDateString()}
+                  Joined {formatLocalDate(member.createdAt)}
                 </span>
                 {canManage && <MemberRowActions member={member} onEdit={onEdit} variant="card" />}
               </div>

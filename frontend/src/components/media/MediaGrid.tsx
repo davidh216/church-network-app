@@ -1,6 +1,6 @@
-import type { MediaItem } from '../../types/domain';
-import { formatMediaDate, parseTags } from '../../lib/media/format';
-import { mediaVideoId } from '../../lib/media/youtube';
+import type { MediaItem } from '@/types/domain';
+import { formatMediaDate, parseTags } from '@/lib/media/format';
+import { mediaVideoId } from '@/lib/media/youtube';
 import VideoThumbnail from './VideoThumbnail';
 
 interface MediaGridProps {
@@ -20,7 +20,7 @@ export default function MediaGrid({ media, onPlay }: MediaGridProps) {
         return (
           <div
             key={item.id}
-            className="bg-gray-50 rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-all duration-200 hover:scale-105"
+            className="bg-gray-50 rounded-lg overflow-hidden shadow-xs hover:shadow-md transition-all duration-200 hover:scale-105"
           >
             <div className="relative group bg-gray-200 h-48">
               {videoId && (
@@ -37,7 +37,7 @@ export default function MediaGrid({ media, onPlay }: MediaGridProps) {
                 type="button"
                 onClick={() => onPlay(item)}
                 aria-label={`Play ${item.title}`}
-                className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-blue-500 transition-opacity duration-200"
+                className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-hidden focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-blue-500 transition-opacity duration-200"
               >
                 <div className="bg-red-600 rounded-full p-4 hover:bg-red-700 transition-colors shadow-lg">
                   <svg

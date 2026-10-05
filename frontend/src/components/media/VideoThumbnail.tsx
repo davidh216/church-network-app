@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import { useState } from 'react';
-import { thumbnailUrl } from '../../lib/media/youtube';
+import { thumbnailUrl } from '@/lib/media/youtube';
 
 interface VideoThumbnailProps {
   videoId: string;

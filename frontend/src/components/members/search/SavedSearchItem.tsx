@@ -1,4 +1,5 @@
-import type { SavedSearch } from '../../../types/domain';
+import { formatLocalDate } from '@/lib/format/date';
+import type { SavedSearch } from '@/types/domain';
 
 interface SavedSearchItemProps {
   search: SavedSearch;
@@ -38,7 +39,7 @@ export default function SavedSearchItem({ search, onApply, onDelete }: SavedSear
         <span className="block text-xs text-gray-600 mt-1">
           {search.invalid
             ? 'This search no longer matches the search rules and cannot be applied.'
-            : `Saved ${new Date(search.createdAt).toLocaleDateString()}`}
+            : `Saved ${formatLocalDate(search.createdAt) ?? ''}`.trim()}
         </span>
       </button>
       <button

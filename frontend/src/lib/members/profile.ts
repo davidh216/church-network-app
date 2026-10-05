@@ -1,25 +1,27 @@
 /** Formatting helpers for the member profile at `/members/[id]`. */
+import { formatLocalDate, formatLocalDateTime, parseDate } from '@/lib/format/date';
 
-/** "January 5, 2024", or "Not set". */
-export function formatDate(dateString?: string | null): string {
-  if (!dateString) return 'Not set';
-  return new Date(dateString).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
+/** A long date in the viewer's locale ("January 5, 2024" in en-US), or null without a real date. */
+export function profileDate(dateString?: string | null): string | null {
+  return formatLocalDate(dateString, { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
-/** "Jan 5, 2024, 09:30 AM", or "Not set". */
+/** A long date in the viewer's locale, or "Not set" for a field the profile always lists. */
+export function formatDate(dateString?: string | null): string {
+  return profileDate(dateString) ?? 'Not set';
+}
+
+/** Date and time in the viewer's locale ("Jan 5, 2024, 09:30 AM" in en-US), or "Not set". */
 export function formatDateTime(dateString?: string | null): string {
-  if (!dateString) return 'Not set';
-  return new Date(dateString).toLocaleString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return (
+    formatLocalDateTime(dateString, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }) ?? 'Not set'
+  );
 }
 
 /** A JSON-encoded string array (skills, interests); anything unparsable or non-array is []. */
@@ -44,18 +46,24 @@ export function calculateAge(dateOfBirth?: string | null, now: Date = new Date()
   return age;
 }
 
-const plural = (n: number, unit: string) => `${n} ${unit}${n > 1 ? 's' : ''}`;
+const plural = (n: number, unit: string) => `${n} ${unit}${n === 1 ? '' : 's'}`;
 
-/** "2 years, 3 months" or "5 months" since the membership date, or "Unknown". */
+/**
+ * "2 years, 3 months", "1 year", "5 months" or "Less than a month" since the membership date,
+ * or "Unknown" without a real date. Zero parts are left out ("1 year", never "1 year, 0 month").
+ */
 export function membershipDuration(membershipDate?: string | null, now: Date = new Date()): string {
-  if (!membershipDate) return 'Unknown';
-  const diffTime = Math.abs(now.getTime() - new Date(membershipDate).getTime());
+  const since = parseDate(membershipDate);
+  if (!since) return 'Unknown';
+  const diffTime = Math.abs(now.getTime() - since.getTime());
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   const years = Math.floor(diffDays / 365);
   const months = Math.floor((diffDays % 365) / 30);
-  return years > 0
-    ? `${plural(years, 'year')}, ${plural(months, 'month')}`
-    : plural(months, 'month');
+  const parts = [
+    years > 0 ? plural(years, 'year') : null,
+    months > 0 ? plural(months, 'month') : null,
+  ].filter((part): part is string => part !== null);
+  return parts.length ? parts.join(', ') : 'Less than a month';
 }
 
 const INTERACTION_ICONS: Record<string, string> = {

@@ -3,6 +3,7 @@
 import { Suspense } from 'react';
 import Link from 'next/link';
 import { useAuth, useIsStaff } from '@/lib/auth/AuthProvider';
+import { formatLocalDate } from '@/lib/format/date';
 import DashboardNotice from './DashboardNotice';
 import SummaryTiles from './SummaryTiles';
 
@@ -13,6 +14,8 @@ export default function Dashboard() {
   const { user } = useAuth();
   const staff = useIsStaff();
   if (!user) return null;
+  // A real membership date or nothing: the account's creation date is not a membership date.
+  const memberSince = formatLocalDate(user.membershipDate);
 
   return (
     <div>
@@ -24,7 +27,7 @@ export default function Dashboard() {
         <SummaryTiles />
       </section>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <section className="bg-white overflow-hidden shadow rounded-lg p-5">
+        <section className="bg-white overflow-hidden shadow-sm rounded-lg p-5">
           <h2 className="text-lg font-medium text-gray-900">Your Profile</h2>
           <div className="mt-4 space-y-2 text-sm text-gray-600">
             <p>
@@ -42,13 +45,14 @@ export default function Dashboard() {
               <span className="font-medium">Roles:</span>{' '}
               {user.roles.length ? user.roles.map((r) => r.role.name).join(', ') : 'member'}
             </p>
-            <p>
-              <span className="font-medium">Member since:</span>{' '}
-              {new Date(user.createdAt).toLocaleDateString()}
-            </p>
+            {memberSince && (
+              <p>
+                <span className="font-medium">Member since:</span> {memberSince}
+              </p>
+            )}
           </div>
         </section>
-        <section className="bg-white overflow-hidden shadow rounded-lg p-5">
+        <section className="bg-white overflow-hidden shadow-sm rounded-lg p-5">
           <h2 className="text-lg font-medium text-gray-900">Quick Links</h2>
           <ul className="mt-4 space-y-3">
             <li>

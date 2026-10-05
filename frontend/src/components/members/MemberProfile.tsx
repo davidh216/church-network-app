@@ -3,10 +3,10 @@
 import { useState, type ComponentType } from 'react';
 import Link from 'next/link';
 import AddEditMemberModal from './AddEditMemberModal';
-import { useMemberDetails } from '../../lib/queries/memberDetails';
-import InlineError from '../ui/InlineError';
-import Skeleton from '../ui/Skeleton';
-import type { MemberDetails } from '../../types/domain';
+import { useMemberDetails } from '@/lib/queries/memberDetails';
+import InlineError from '@/components/ui/InlineError';
+import Skeleton from '@/components/ui/Skeleton';
+import type { MemberDetails } from '@/types/domain';
 import ChurchInfo from './profile/ChurchInfo';
 import ContactInfo from './profile/ContactInfo';
 import Family from './profile/Family';
@@ -33,7 +33,7 @@ const TAB_PANELS: Record<ProfileTabId, ComponentType<{ member: MemberDetails }>>
   activity: Notes,
 };
 
-const cardClass = 'p-5 border border-gray-200 shadow rounded-md bg-white';
+const cardClass = 'p-5 border border-gray-200 shadow-sm rounded-md bg-white';
 
 /** Staff view of one member at `/members/[id]`, with Edit opening the member form in place. */
 export default function MemberProfile({ memberId }: MemberProfileProps) {

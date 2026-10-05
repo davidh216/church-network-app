@@ -1,4 +1,4 @@
-import { fieldKind, optionsFor, type DraftCondition } from '../../../lib/members/searchQuery';
+import { fieldKind, optionsFor, type DraftCondition } from '@/lib/members/searchQuery';
 
 interface ConditionValueProps {
   draft: DraftCondition;
@@ -10,7 +10,7 @@ interface ConditionValueProps {
 }
 
 const inputClass =
-  'px-3 py-2 text-sm border border-gray-300 rounded-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
+  'px-3 py-2 text-sm border border-gray-300 rounded-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500';
 
 /** The value input(s) for one condition: typed by field, two inputs for `between`. */
 export default function ConditionValue({ draft, index, onChange, errorId }: ConditionValueProps) {

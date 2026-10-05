@@ -1,5 +1,5 @@
 import type { ListUsersParams, SearchQuery } from '@embrace/shared';
-import type { ApiEnvelope, CreateUserInput, Member, UpdateUserInput } from '../../types/domain';
+import type { ApiEnvelope, CreateUserInput, Member, UpdateUserInput } from '@/types/domain';
 import { apiFetch, apiRequest } from './client';
 import { queryString, type Paged } from './query';
 

@@ -1,6 +1,7 @@
 import type { UserSortField } from '@embrace/shared';
-import type { MemberSort } from '../../lib/members/filters';
-import type { Member } from '../../types/domain';
+import type { MemberSort } from '@/lib/members/filters';
+import { formatLocalDate } from '@/lib/format/date';
+import type { Member } from '@/types/domain';
 import { EngagementBadge, MemberAvatar, RoleBadges, StageBadge, StatusBadge } from './MemberBadges';
 import MemberRowActions from './MemberRowActions';
 import SortableHeader from './SortableHeader';
@@ -19,7 +20,7 @@ interface MemberTableProps {
 
 const thClass = 'px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider';
 const tdClass = 'px-6 py-4 whitespace-nowrap';
-const checkboxClass = 'h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded';
+const checkboxClass = 'h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded-sm';
 
 /** The member list's table view (one page of members). */
 export default function MemberTable({
@@ -118,7 +119,7 @@ export default function MemberTable({
                   {member.phone && <div className="text-sm text-gray-500">{member.phone}</div>}
                   {member.lastLoginAt && (
                     <div className="text-xs text-gray-500">
-                      Last login: {new Date(member.lastLoginAt).toLocaleDateString()}
+                      Last login: {formatLocalDate(member.lastLoginAt)}
                     </div>
                   )}
                 </td>
@@ -142,10 +143,10 @@ export default function MemberTable({
                 </>
               )}
               <td className={`${tdClass} text-sm text-gray-500`}>
-                <div>{new Date(member.createdAt).toLocaleDateString()}</div>
+                <div>{formatLocalDate(member.createdAt)}</div>
                 {member.membershipDate && member.membershipDate !== member.createdAt && (
                   <div className="text-xs text-gray-500">
-                    Member: {new Date(member.membershipDate).toLocaleDateString()}
+                    Member: {formatLocalDate(member.membershipDate)}
                   </div>
                 )}
               </td>

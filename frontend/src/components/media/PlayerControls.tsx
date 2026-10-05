@@ -1,5 +1,5 @@
-import type { MediaItem } from '../../types/domain';
-import { formatMediaDate } from '../../lib/media/format';
+import type { MediaItem } from '@/types/domain';
+import { formatMediaDate } from '@/lib/media/format';
 
 interface PlayerControlsProps {
   /** id for the title heading, which names the player dialog. */
@@ -38,7 +38,7 @@ export default function PlayerControls({
       }`}
     >
       {/* Top Bar */}
-      <div className="absolute top-0 left-0 right-0 bg-gradient-to-b from-black/70 to-transparent p-4">
+      <div className="absolute top-0 left-0 right-0 bg-linear-to-b from-black/70 to-transparent p-4">
         <div className="flex justify-between items-start">
           <div className="flex-1 mr-4">
             <h2 id={titleId} className="text-white text-lg font-semibold mb-1 truncate">
@@ -60,7 +60,7 @@ export default function PlayerControls({
             {playlistLength > 1 && (
               <button
                 onClick={onTogglePlaylist}
-                className="p-2 text-white hover:bg-white/20 rounded transition-colors"
+                className="p-2 text-white hover:bg-white/20 rounded-sm transition-colors"
                 type="button"
                 aria-label="Toggle playlist"
                 title="Toggle Playlist"
@@ -75,7 +75,7 @@ export default function PlayerControls({
             {/* Fullscreen Toggle */}
             <button
               onClick={onToggleFullscreen}
-              className="p-2 text-white hover:bg-white/20 rounded transition-colors"
+              className="p-2 text-white hover:bg-white/20 rounded-sm transition-colors"
               type="button"
               aria-label={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
               title={isFullscreen ? 'Exit Fullscreen (F)' : 'Fullscreen (F)'}
@@ -92,7 +92,7 @@ export default function PlayerControls({
             {/* Close Button */}
             <button
               onClick={onClose}
-              className="p-2 text-white hover:bg-white/20 rounded transition-colors"
+              className="p-2 text-white hover:bg-white/20 rounded-sm transition-colors"
               type="button"
               aria-label="Close player"
               title="Close (Esc)"
@@ -117,7 +117,7 @@ export default function PlayerControls({
       </div>
 
       {/* Bottom Controls */}
-      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-4">
+      <div className="absolute bottom-0 left-0 right-0 bg-linear-to-t from-black/70 to-transparent p-4">
         <div className="flex items-center justify-between">
           {/* Left Controls */}
           <div className="flex items-center space-x-3">
@@ -127,7 +127,7 @@ export default function PlayerControls({
                 <button
                   onClick={onPlayPrevious}
                   disabled={currentIndex === 0}
-                  className="p-2 text-white hover:bg-white/20 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="p-2 text-white hover:bg-white/20 rounded-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   type="button"
                   aria-label="Previous video"
                   title="Previous (←)"
@@ -145,7 +145,7 @@ export default function PlayerControls({
                 <button
                   onClick={onPlayNext}
                   disabled={currentIndex === playlistLength - 1}
-                  className="p-2 text-white hover:bg-white/20 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="p-2 text-white hover:bg-white/20 rounded-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   type="button"
                   aria-label="Next video"
                   title="Next (→)"
@@ -170,7 +170,7 @@ export default function PlayerControls({
               href={media.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="p-2 text-white hover:bg-white/20 rounded transition-colors"
+              className="p-2 text-white hover:bg-white/20 rounded-sm transition-colors"
               aria-label="Watch on YouTube (opens in a new tab)"
               title="Watch on YouTube"
             >

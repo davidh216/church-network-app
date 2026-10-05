@@ -1,6 +1,6 @@
-import type { MemberAnalytics } from '../../types/domain';
-import { engagementScoreClass, stageColour, stageLabel } from '../../lib/analytics/display';
-import AvatarImage from '../ui/AvatarImage';
+import type { MemberAnalytics } from '@/types/domain';
+import { engagementScoreClass, stageColour, stageLabel } from '@/lib/analytics/display';
+import AvatarImage from '@/components/ui/AvatarImage';
 
 const SHOWN = 8;
 
@@ -11,7 +11,7 @@ export default function TopEngagedMembers({
   members: MemberAnalytics['topEngagedMembers'];
 }) {
   return (
-    <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
+    <div className="bg-white rounded-lg border border-gray-200 shadow-xs">
       <div className="px-6 py-4 border-b border-gray-200">
         <h3 className="text-lg font-medium text-gray-900">Most Engaged Members</h3>
       </div>

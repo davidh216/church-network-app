@@ -7,7 +7,7 @@ import {
   draftsFromQuery,
   newDraft,
   type DraftCondition,
-} from '../../lib/members/searchQuery';
+} from '@/lib/members/searchQuery';
 import ConditionRow from './search/ConditionRow';
 
 const MAX_CONDITIONS = 10;

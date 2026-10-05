@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import type { SearchQuery } from '@embrace/shared';
-import { formatStage } from '../../lib/members/display';
-import type { MemberFilters as Filters, MemberSort } from '../../lib/members/filters';
+import { formatStage } from '@/lib/members/display';
+import type { MemberFilters as Filters, MemberSort } from '@/lib/members/filters';
 import AdvancedQueryChip from './search/AdvancedQueryChip';
 
 interface MemberFiltersProps {
@@ -21,7 +21,7 @@ interface MemberFiltersProps {
 }
 
 const filterClass =
-  'px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500';
+  'px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-hidden focus:ring-2 focus:ring-blue-500';
 
 const SELECTS: { key: keyof Filters; label: string; options: [string, string][] }[] = [
   {
@@ -104,11 +104,13 @@ export default function MemberFilters({
             <div className="relative">
               <input
                 type="text"
-                placeholder="Search by name, email, phone, or bio..."
+                placeholder={
+                  canManage ? 'Search by name, email, phone, or bio...' : 'Search by name...'
+                }
                 aria-label="Search members"
                 value={filters.search}
                 onChange={(e) => onFilterChange('search', e.target.value)}
-                className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-hidden focus:ring-2 focus:ring-blue-500"
               />
               <svg
                 className="absolute left-3 top-2.5 h-4 w-4 text-gray-400"

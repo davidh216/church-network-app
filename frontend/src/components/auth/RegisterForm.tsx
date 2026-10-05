@@ -73,7 +73,7 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
       {error && (
         <div
           role="alert"
-          className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded"
+          className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-sm"
         >
           {error}
         </div>
@@ -92,7 +92,7 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
             onChange={(e) => setName(e.target.value)}
             required
             autoComplete="name"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-hidden focus:ring-2 focus:ring-green-500 focus:border-transparent"
             placeholder="Full Name"
             disabled={loading}
           />
@@ -111,7 +111,7 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
             onChange={(e) => setEmail(e.target.value)}
             required
             autoComplete="email"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-hidden focus:ring-2 focus:ring-green-500 focus:border-transparent"
             placeholder="Email"
             disabled={loading}
           />
@@ -131,7 +131,7 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
             required
             minLength={MIN_PASSWORD_LENGTH}
             autoComplete="new-password"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-hidden focus:ring-2 focus:ring-green-500 focus:border-transparent"
             placeholder={`Password (minimum ${MIN_PASSWORD_LENGTH} characters)`}
             disabled={loading}
           />

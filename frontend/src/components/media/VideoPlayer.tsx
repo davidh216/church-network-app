@@ -5,7 +5,7 @@ import type { MediaItem } from '@/types/domain';
 import { embedUrl, mediaVideoId } from '@/lib/media/youtube';
 import PlayerControls from './PlayerControls';
 import PlaylistPanel from './PlaylistPanel';
-import Dialog from '../ui/Dialog';
+import Dialog from '@/components/ui/Dialog';
 
 /** True when a key press belongs to the focused control: Space presses a button, typing types. */
 function ownedByControl(e: KeyboardEvent): boolean {

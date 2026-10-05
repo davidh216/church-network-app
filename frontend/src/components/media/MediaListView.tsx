@@ -1,6 +1,6 @@
-import type { MediaItem } from '../../types/domain';
-import { formatMediaDate, parseTags } from '../../lib/media/format';
-import { mediaVideoId } from '../../lib/media/youtube';
+import type { MediaItem } from '@/types/domain';
+import { formatMediaDate, parseTags } from '@/lib/media/format';
+import { mediaVideoId } from '@/lib/media/youtube';
 import VideoThumbnail from './VideoThumbnail';
 
 interface MediaListViewProps {
@@ -32,7 +32,7 @@ export default function MediaListView({ media, onPlay }: MediaListViewProps) {
                   type="button"
                   onClick={() => onPlay(item)}
                   aria-label={`Play ${item.title}`}
-                  className="group/play absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/50 focus-visible:bg-black/50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-blue-500 transition-colors rounded-lg"
+                  className="group/play absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/50 focus-visible:bg-black/50 focus-visible:outline-hidden focus-visible:ring-4 focus-visible:ring-blue-500 transition-colors rounded-lg"
                 >
                   <div className="bg-red-600 rounded-full p-2 opacity-0 group-hover:opacity-100 group-focus-visible/play:opacity-100 transition-opacity">
                     <svg
@@ -77,7 +77,7 @@ export default function MediaListView({ media, onPlay }: MediaListViewProps) {
                     <button
                       type="button"
                       onClick={() => onPlay(item)}
-                      className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 flex items-center space-x-2"
+                      className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 focus:outline-hidden focus:ring-2 focus:ring-red-500 flex items-center space-x-2"
                     >
                       <svg
                         aria-hidden="true"

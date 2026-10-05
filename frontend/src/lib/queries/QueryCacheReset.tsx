@@ -2,7 +2,7 @@
 
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
-import { useAuth } from '../auth/AuthProvider';
+import { useAuth } from '@/lib/auth/AuthProvider';
 
 /**
  * Clears every cached query when the signed-in user changes (sign-out, or another account

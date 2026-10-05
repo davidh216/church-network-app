@@ -1,4 +1,4 @@
-import ViewToggle, { GRID_ICON, LIST_ICON, type ViewOption } from '../ui/ViewToggle';
+import ViewToggle, { GRID_ICON, LIST_ICON, type ViewOption } from '@/components/ui/ViewToggle';
 
 export type ViewMode = 'table' | 'cards';
 
@@ -44,7 +44,7 @@ export default function MemberListHeader({
           <button
             type="button"
             onClick={onAdd}
-            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center space-x-2"
+            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-hidden focus:ring-2 focus:ring-blue-500 flex items-center space-x-2"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path

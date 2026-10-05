@@ -1,4 +1,4 @@
-import type { ApiErrorBody } from '../../types/domain';
+import type { ApiErrorBody } from '@/types/domain';
 
 /** Window event fired when any API call returns 401; the AuthProvider listens for it. */
 export const UNAUTHENTICATED_EVENT = 'embrace:unauthenticated';

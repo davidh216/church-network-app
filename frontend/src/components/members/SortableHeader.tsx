@@ -1,5 +1,5 @@
 import type { UserSortField } from '@embrace/shared';
-import type { MemberSort } from '../../lib/members/filters';
+import type { MemberSort } from '@/lib/members/filters';
 
 interface SortableHeaderProps {
   label: string;
@@ -38,7 +38,7 @@ export default function SortableHeader({
       <button
         type="button"
         onClick={() => onSort(field)}
-        className="-mx-1 flex items-center space-x-1 rounded px-1 uppercase tracking-wider hover:bg-gray-100 hover:text-gray-700"
+        className="-mx-1 flex items-center space-x-1 rounded-sm px-1 uppercase tracking-wider hover:bg-gray-100 hover:text-gray-700"
       >
         <span>{label}</span>
         {active && (

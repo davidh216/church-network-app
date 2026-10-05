@@ -1,4 +1,4 @@
-import type { MemberDetails } from '../../../types/domain';
+import type { MemberDetails } from '@/types/domain';
 import { Field } from './Field';
 
 function OptIn({ on, label }: { on: boolean; label: string }) {

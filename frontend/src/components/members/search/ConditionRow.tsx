@@ -5,7 +5,7 @@ import {
   operatorsFor,
   withField,
   type DraftCondition,
-} from '../../../lib/members/searchQuery';
+} from '@/lib/members/searchQuery';
 import ConditionValue from './ConditionValue';
 
 interface ConditionRowProps {
@@ -19,7 +19,7 @@ interface ConditionRowProps {
 }
 
 const selectClass =
-  'px-3 py-2 text-sm border border-gray-300 rounded-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
+  'px-3 py-2 text-sm border border-gray-300 rounded-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500';
 
 /** One condition of the advanced search: field, an operator allowed for it, and its value. */
 export default function ConditionRow({

@@ -1,5 +1,5 @@
-import type { MemberDetails } from '../../../types/domain';
-import { formatDate, impactClass } from '../../../lib/members/profile';
+import type { MemberDetails } from '@/types/domain';
+import { formatDate, impactClass } from '@/lib/members/profile';
 import { EmptyTab, SectionHeader, pillClass } from './Field';
 
 /** The "Timeline" tab: the member's timeline activities, newest as the API orders them. */

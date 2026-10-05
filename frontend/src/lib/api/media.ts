@@ -1,5 +1,5 @@
 import type { ListMediaParams } from '@embrace/shared';
-import type { ApiEnvelope, CreateMediaInput, MediaItem } from '../../types/domain';
+import type { ApiEnvelope, CreateMediaInput, MediaItem } from '@/types/domain';
 import { apiFetch } from './client';
 import { queryString, type Paged } from './query';
 

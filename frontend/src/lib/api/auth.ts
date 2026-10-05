@@ -1,4 +1,4 @@
-import type { ApiEnvelope, RegisterInput, RegisterResult, User } from '../../types/domain';
+import type { ApiEnvelope, RegisterInput, RegisterResult, User } from '@/types/domain';
 import { apiFetch } from './client';
 
 /** Signs in; the API sets the httpOnly session cookie. */

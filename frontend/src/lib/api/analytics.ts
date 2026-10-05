@@ -1,4 +1,4 @@
-import type { ApiEnvelope, MemberAnalytics } from '../../types/domain';
+import type { ApiEnvelope, MemberAnalytics } from '@/types/domain';
 import { apiFetch } from './client';
 
 /** Staff only. */

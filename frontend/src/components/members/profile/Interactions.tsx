@@ -1,6 +1,6 @@
-import type { MemberDetails } from '../../../types/domain';
-import { formatDateTime, interactionIcon, priorityClass } from '../../../lib/members/profile';
-import { formatStage } from '../../../lib/members/display';
+import type { MemberDetails } from '@/types/domain';
+import { formatDateTime, interactionIcon, priorityClass } from '@/lib/members/profile';
+import { formatStage } from '@/lib/members/display';
 import { EmptyTab, SectionHeader, pillClass } from './Field';
 
 /** The "Interactions" tab: emails, texts, calls and visits logged for the member. */

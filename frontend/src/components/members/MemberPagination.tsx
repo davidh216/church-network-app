@@ -1,4 +1,4 @@
-import Pagination from '../ui/Pagination';
+import Pagination from '@/components/ui/Pagination';
 
 export const MEMBER_PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 

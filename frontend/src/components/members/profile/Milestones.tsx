@@ -1,5 +1,5 @@
-import type { MemberDetails } from '../../../types/domain';
-import { formatDate, impactClass, milestoneIcon } from '../../../lib/members/profile';
+import type { MemberDetails } from '@/types/domain';
+import { formatDate, impactClass, milestoneIcon } from '@/lib/members/profile';
 import { EmptyTab, SectionHeader, pillClass } from './Field';
 
 /** The "Milestones" tab: baptism, confirmation, first volunteering and the like. */

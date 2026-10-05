@@ -2,18 +2,18 @@
 
 import { useState } from 'react';
 import { searchQuery, type SearchQuery } from '@embrace/shared';
-import { getErrorMessage } from '../../lib/errors';
-import { predefinedSearches } from '../../lib/members/predefinedSearches';
-import { describeQuery } from '../../lib/members/searchQuery';
+import { getErrorMessage } from '@/lib/errors';
+import { predefinedSearches } from '@/lib/members/predefinedSearches';
+import { describeQuery } from '@/lib/members/searchQuery';
 import {
   useCreateSavedSearch,
   useDeleteSavedSearch,
   useRecordSavedSearchUse,
   useSavedSearches,
-} from '../../lib/queries/savedSearches';
-import type { SavedSearch } from '../../types/domain';
-import InlineError from '../ui/InlineError';
-import Skeleton from '../ui/Skeleton';
+} from '@/lib/queries/savedSearches';
+import type { SavedSearch } from '@/types/domain';
+import InlineError from '@/components/ui/InlineError';
+import Skeleton from '@/components/ui/Skeleton';
 import SaveSearchForm, { type SaveSearchValues } from './search/SaveSearchForm';
 import SavedSearchItem from './search/SavedSearchItem';
 

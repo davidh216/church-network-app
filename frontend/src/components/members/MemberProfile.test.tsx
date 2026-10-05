@@ -69,6 +69,27 @@ describe('MemberProfile', () => {
     );
   });
 
+  it('leaves out "Member since" without a membership date instead of "Not set"', async () => {
+    detailsApi.getMemberDetails.mockResolvedValue(details);
+    await render(<MemberProfile memberId="u1" />);
+    await screen.findByRole('heading', { level: 1 });
+    expect(screen.queryByText(/Member since/)).toBeNull();
+  });
+
+  it('shows "Member since" with the real membership date', async () => {
+    detailsApi.getMemberDetails.mockResolvedValue({
+      ...details,
+      membershipDate: '2019-04-02T12:00:00.000Z',
+    });
+    await render(<MemberProfile memberId="u1" />);
+    const expected = new Date('2019-04-02T12:00:00.000Z').toLocaleDateString(undefined, {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+    expect(await screen.findByText(`Member since ${expected}`)).toBeTruthy();
+  });
+
   it('switches tabs and shows each panel with its empty states', async () => {
     detailsApi.getMemberDetails.mockResolvedValue(details);
     await render(<MemberProfile memberId="u1" />);

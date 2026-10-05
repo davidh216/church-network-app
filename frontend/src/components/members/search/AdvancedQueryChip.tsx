@@ -1,5 +1,5 @@
 import type { SearchQuery } from '@embrace/shared';
-import { describeQuery } from '../../../lib/members/searchQuery';
+import { describeQuery } from '@/lib/members/searchQuery';
 
 interface AdvancedQueryChipProps {
   query: SearchQuery;

@@ -1,7 +1,7 @@
-import type { MemberDetails } from '../../../types/domain';
-import { initials } from '../../../lib/members/display';
+import type { MemberDetails } from '@/types/domain';
+import { initials } from '@/lib/members/display';
 import { Field, SectionHeader, pillClass } from './Field';
-import AvatarImage from '../../ui/AvatarImage';
+import AvatarImage from '@/components/ui/AvatarImage';
 
 /** The "Family" tab: family role and id, and the linked family members. */
 export default function Family({ member }: { member: MemberDetails }) {

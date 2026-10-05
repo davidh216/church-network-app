@@ -1,6 +1,6 @@
 import type { ListUsersParams, SearchQuery } from '@embrace/shared';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { CreateUserInput, UpdateUserInput } from '../../types/domain';
+import type { CreateUserInput, UpdateUserInput } from '@/types/domain';
 import {
   createUser,
   getUser,
@@ -8,7 +8,7 @@ import {
   listUsers,
   searchUsers,
   updateUser,
-} from '../api/users';
+} from '@/lib/api/users';
 import { queryKeys } from './keys';
 
 /**

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   calculateAge,
   formatDate,
@@ -9,6 +9,7 @@ import {
   milestoneIcon,
   parseJsonList,
   priorityClass,
+  profileDate,
   riskBadgeClass,
 } from './profile';
 
@@ -19,6 +20,14 @@ describe('member profile helpers', () => {
     expect(formatDate('2024-01-05T12:00:00')).toBe('January 5, 2024');
     expect(formatDateTime('')).toBe('Not set');
     expect(formatDateTime('2024-01-05T09:30:00')).toContain('Jan 5, 2024');
+    expect(formatDate('garbage')).toBe('Not set');
+  });
+
+  it("uses the viewer's locale rather than en-US", () => {
+    const spy = vi.spyOn(Date.prototype, 'toLocaleDateString');
+    profileDate('2024-01-05T12:00:00');
+    expect(spy).toHaveBeenCalledWith(undefined, expect.any(Object));
+    expect(profileDate(null)).toBeNull();
   });
 
   it('parses JSON string lists and falls back to an empty list', () => {
@@ -41,7 +50,10 @@ describe('member profile helpers', () => {
     expect(membershipDuration(null, now)).toBe('Unknown');
     expect(membershipDuration('2024-01-15T00:00:00Z', now)).toBe('5 months');
     expect(membershipDuration('2022-03-01T00:00:00Z', now)).toBe('2 years, 3 months');
-    expect(membershipDuration('2023-06-10T00:00:00Z', now)).toBe('1 year, 0 month');
+    expect(membershipDuration('2023-06-10T00:00:00Z', now)).toBe('1 year');
+    expect(membershipDuration('2023-05-10T00:00:00Z', now)).toBe('1 year, 1 month');
+    expect(membershipDuration('2024-06-01T00:00:00Z', now)).toBe('Less than a month');
+    expect(membershipDuration('not a date', now)).toBe('Unknown');
   });
 
   it('maps icons and badge colours with defaults for unknown values', () => {

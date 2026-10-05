@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { formatLocalDate } from '@/lib/format/date';
 import type { User } from '@/types/domain';
 
 /**
@@ -13,10 +14,11 @@ export default function OwnProfile({ user }: { user: User }) {
     ['Phone', user.phone],
     ['About', user.bio],
     ['Roles', user.roles.length ? user.roles.map((r) => r.role.name).join(', ') : 'member'],
-    ['Member since', new Date(user.membershipDate ?? user.createdAt).toLocaleDateString()],
+    // A real membership date or nothing: the account's creation date is not a membership date.
+    ['Member since', formatLocalDate(user.membershipDate)],
   ];
   return (
-    <section className="p-5 border border-gray-200 shadow rounded-md bg-white">
+    <section className="p-5 border border-gray-200 shadow-sm rounded-md bg-white">
       <div className="flex items-start justify-between border-b border-gray-200 pb-4 mb-4">
         <h1 className="text-2xl font-bold text-gray-900">{user.name}</h1>
         <Link href="/" className="text-sm font-medium text-blue-600 hover:text-blue-800">

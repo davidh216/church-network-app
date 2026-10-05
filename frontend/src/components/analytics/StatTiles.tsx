@@ -1,4 +1,4 @@
-import type { MemberAnalytics } from '../../types/domain';
+import type { MemberAnalytics } from '@/types/domain';
 
 interface Tile {
   label: string;
@@ -49,7 +49,7 @@ export default function StatTiles({ analytics }: { analytics: MemberAnalytics })
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
       {tiles(analytics).map((tile) => (
-        <div key={tile.label} className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
+        <div key={tile.label} className="bg-white p-6 rounded-lg border border-gray-200 shadow-xs">
           <div className="flex items-center">
             <div className="shrink-0">
               <div

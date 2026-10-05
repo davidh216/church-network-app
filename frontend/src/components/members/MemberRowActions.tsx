@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import type { Member } from '../../types/domain';
+import type { Member } from '@/types/domain';
 
 interface MemberRowActionsProps {
   member: Member;

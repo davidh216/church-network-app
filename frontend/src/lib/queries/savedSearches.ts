@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import * as savedSearchesApi from '../api/savedSearches';
+import * as savedSearchesApi from '@/lib/api/savedSearches';
 import { queryKeys } from './keys';
 
 export function useSavedSearches() {

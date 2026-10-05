@@ -1,4 +1,4 @@
-import type { ApiEnvelope, CreateSavedSearchInput, SavedSearch } from '../../types/domain';
+import type { ApiEnvelope, CreateSavedSearchInput, SavedSearch } from '@/types/domain';
 import { apiFetch } from './client';
 
 export async function listSavedSearches(): Promise<SavedSearch[]> {

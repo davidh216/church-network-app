@@ -2,15 +2,15 @@
 
 import { DEFAULT_MEDIA_PAGE_SIZE } from '@embrace/shared';
 import { useState } from 'react';
-import { useIsStaff } from '../../lib/auth/AuthProvider';
-import { useDebouncedValue } from '../../lib/hooks/useDebouncedValue';
-import { useResettingPage } from '../../lib/hooks/useResettingPage';
-import { useMedia } from '../../lib/queries/media';
-import type { MediaItem } from '../../types/domain';
-import InlineError from '../ui/InlineError';
-import Pagination from '../ui/Pagination';
-import Skeleton from '../ui/Skeleton';
-import ViewToggle, { GRID_ICON, LIST_ICON, type ViewOption } from '../ui/ViewToggle';
+import { useIsStaff } from '@/lib/auth/AuthProvider';
+import { useDebouncedValue } from '@/lib/hooks/useDebouncedValue';
+import { useResettingPage } from '@/lib/hooks/useResettingPage';
+import { useMedia } from '@/lib/queries/media';
+import type { MediaItem } from '@/types/domain';
+import InlineError from '@/components/ui/InlineError';
+import Pagination from '@/components/ui/Pagination';
+import Skeleton from '@/components/ui/Skeleton';
+import ViewToggle, { GRID_ICON, LIST_ICON, type ViewOption } from '@/components/ui/ViewToggle';
 import AddMediaDialog from './AddMediaDialog';
 import MediaFilters from './MediaFilters';
 import MediaGrid from './MediaGrid';
@@ -28,7 +28,7 @@ const VIEWS: ViewOption<MediaView>[] = [
 ];
 
 const addButtonClass =
-  'bg-red-600 text-white rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500';
+  'bg-red-600 text-white rounded-md hover:bg-red-700 focus:outline-hidden focus:ring-2 focus:ring-red-500';
 
 /** The media library: search, category, grid or list of one server page, and Add Video for staff. */
 export default function MediaLibrary({ onPlayMedia }: MediaLibraryProps) {
@@ -53,7 +53,7 @@ export default function MediaLibrary({ onPlayMedia }: MediaLibraryProps) {
   const play = (item: MediaItem) => onPlayMedia(item, media);
 
   return (
-    <div className="bg-white shadow rounded-lg">
+    <div className="bg-white shadow-sm rounded-lg">
       <div className="px-6 py-4 border-b border-gray-200">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-center space-x-4">

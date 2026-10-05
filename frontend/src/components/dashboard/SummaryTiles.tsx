@@ -2,8 +2,8 @@
 
 import type { UserSummary } from '@/lib/api/users';
 import { useUserSummary } from '@/lib/queries/users';
-import InlineError from '../ui/InlineError';
-import Skeleton from '../ui/Skeleton';
+import InlineError from '@/components/ui/InlineError';
+import Skeleton from '@/components/ui/Skeleton';
 
 interface Tile {
   label: string;
@@ -33,7 +33,7 @@ export default function SummaryTiles() {
         error={error}
         fallback="Failed to load member counts"
         onRetry={() => void refetch()}
-        className="bg-white shadow rounded-lg"
+        className="bg-white shadow-sm rounded-lg"
       />
     );
   }
@@ -45,7 +45,7 @@ export default function SummaryTiles() {
   return (
     <dl className="grid grid-cols-2 lg:grid-cols-4 gap-4">
       {summaryTiles(summary).map((tile) => (
-        <div key={tile.label} className="bg-white shadow rounded-lg p-5">
+        <div key={tile.label} className="bg-white shadow-sm rounded-lg p-5">
           <dt className="text-sm font-medium text-gray-500">{tile.label}</dt>
           <dd className="mt-1 text-3xl font-semibold text-gray-900">{tile.value}</dd>
         </div>
