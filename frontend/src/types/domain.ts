@@ -2,7 +2,25 @@
 // @embrace/shared schemas the API validates with; response shapes stay local because the
 // shared package only describes inputs.
 
-import type { SearchQuery } from '@embrace/shared';
+import type {
+  Channel,
+  Gender,
+  Impact,
+  InteractionCategory,
+  InteractionStatus,
+  InteractionType,
+  MaritalStatus,
+  MediaType,
+  MembershipStage,
+  MembershipType,
+  MilestoneCategory,
+  MilestoneType,
+  NoteType,
+  Priority,
+  RelationshipType,
+  RiskLevel,
+  SearchQuery,
+} from '@embrace/shared';
 
 export type {
   CreateMediaInput,
@@ -27,8 +45,8 @@ interface UserRole {
 
 export interface Engagement {
   engagementScore: number;
-  membershipStage: string;
-  riskLevel: string;
+  membershipStage: MembershipStage;
+  riskLevel: RiskLevel;
   lastActivity?: string | null;
   attendanceScore?: number;
   givingScore?: number;
@@ -77,7 +95,7 @@ export interface MediaItem {
   id: string;
   title: string;
   description?: string | null;
-  type: string;
+  type: MediaType;
   url: string;
   /** The YouTube video id, or null when the stored URL cannot be embedded. */
   videoId?: string | null;
@@ -122,8 +140,8 @@ export interface MemberDetails {
 
   // Enhanced member information
   dateOfBirth?: string;
-  gender?: string;
-  maritalStatus?: string;
+  gender?: Gender;
+  maritalStatus?: MaritalStatus;
   occupation?: string;
   emergencyContact?: string;
   emergencyPhone?: string;
@@ -132,7 +150,7 @@ export interface MemberDetails {
   membershipDate?: string;
   baptismDate?: string;
   confirmationDate?: string;
-  membershipType?: string;
+  membershipType?: MembershipType;
   previousChurch?: string;
   howHeardAboutUs?: string;
 
@@ -171,8 +189,8 @@ export interface MemberDetails {
   // Phase 3: Enhanced data
   engagement?: {
     engagementScore: number;
-    membershipStage: string;
-    riskLevel: string;
+    membershipStage: MembershipStage;
+    riskLevel: RiskLevel;
     lastActivity?: string;
     attendanceScore: number;
     givingScore: number;
@@ -187,18 +205,18 @@ export interface MemberDetails {
     lastName?: string;
     avatar?: string;
     isActive: boolean;
-    relationshipType: string;
+    relationshipType: RelationshipType;
     isPrimary: boolean;
   }>;
   interactions?: Array<{
     id: string;
-    interactionType: string;
+    interactionType: InteractionType;
     subject?: string;
     content?: string;
-    channel: string;
-    status: string;
-    category?: string;
-    priority: string;
+    channel: Channel;
+    status: InteractionStatus;
+    category?: InteractionCategory;
+    priority: Priority;
     responseRequired: boolean;
     responseReceived: boolean;
     createdAt: string;
@@ -206,12 +224,12 @@ export interface MemberDetails {
   }>;
   milestones?: Array<{
     id: string;
-    milestoneType: string;
+    milestoneType: MilestoneType;
     title: string;
     description?: string;
     achievedDate: string;
-    category: string;
-    impact: string;
+    category: MilestoneCategory;
+    impact: Impact;
     isPublic: boolean;
     celebrated: boolean;
   }>;
@@ -219,7 +237,7 @@ export interface MemberDetails {
     id: string;
     title?: string;
     content: string;
-    noteType: string;
+    noteType: NoteType;
     isPrivate: boolean;
     isFollowUp: boolean;
     followUpDate?: string;
@@ -242,10 +260,10 @@ export interface MemberAnalytics {
       avatar?: string;
     };
     engagementScore: number;
-    membershipStage: string;
+    membershipStage: MembershipStage;
   }>;
-  membershipStageDistribution: Record<string, number>;
-  riskLevelDistribution: Record<string, number>;
+  membershipStageDistribution: Partial<Record<MembershipStage, number>>;
+  riskLevelDistribution: Partial<Record<RiskLevel, number>>;
 }
 
 /** Success envelope shared by every API response (`{ success: true, ...payload }`). */

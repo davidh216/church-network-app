@@ -268,7 +268,7 @@ const ROUTES: Route[] = [
     access: 'staff',
     as: 'leader',
     url: () => `/api/analytics/members/${ids.member}/activities`,
-    body: () => ({ activityType: 'attendance', points: 2 }),
+    body: () => ({ activityType: 'service_attendance', points: 2 }),
     status: 200,
   },
   {

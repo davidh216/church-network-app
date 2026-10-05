@@ -1,13 +1,17 @@
 import {
+  MEMBERSHIP_STAGES,
+  RISK_LEVELS,
   SEARCH_FIELD_OPERATORS,
   searchCondition,
   searchQuery,
+  type MembershipStage,
+  type RiskLevel,
   type SearchCondition,
   type SearchField,
   type SearchOperator,
   type SearchQuery,
 } from '@embrace/shared';
-import { stageLabel } from './display';
+import { enumOptions, stageLabel } from './display';
 import { dateRangeError, type MemberFilters } from './filters';
 
 /**
@@ -49,16 +53,6 @@ export const OPERATOR_LABELS: Record<SearchOperator, string> = {
 };
 
 const ROLE_OPTIONS = ['admin', 'leader', 'member'] as const;
-const STAGE_OPTIONS = [
-  'leader',
-  'core_member',
-  'active_member',
-  'new_member',
-  'visitor',
-  'at_risk',
-  'inactive',
-] as const;
-const RISK_OPTIONS = ['low', 'medium', 'high'] as const;
 
 export function fieldKind(field: SearchField): FieldKind {
   return SEARCH_FIELDS.find((f) => f.field === field)?.kind ?? 'text';
@@ -74,9 +68,9 @@ export function operatorsFor(field: SearchField): readonly SearchOperator[] {
 
 /** Choices for the enum-like fields, as [value, label] pairs. */
 export function optionsFor(kind: FieldKind): [string, string][] {
-  if (kind === 'role') return ROLE_OPTIONS.map((r) => [r, stageLabel(r)]);
-  if (kind === 'stage') return STAGE_OPTIONS.map((s) => [s, stageLabel(s)]);
-  if (kind === 'risk') return RISK_OPTIONS.map((r) => [r, stageLabel(r)]);
+  if (kind === 'role') return enumOptions(ROLE_OPTIONS);
+  if (kind === 'stage') return enumOptions(MEMBERSHIP_STAGES);
+  if (kind === 'risk') return enumOptions(RISK_LEVELS);
   if (kind === 'active')
     return [
       ['true', 'Active'],
@@ -217,13 +211,13 @@ export function filtersToQuery(filters: MemberFilters): SearchQuery | null {
     conditions.push({
       field: 'engagement.membershipStage',
       operator: 'equals',
-      value: filters.stage as (typeof STAGE_OPTIONS)[number],
+      value: filters.stage as MembershipStage,
     });
   if (isSet(filters.risk))
     conditions.push({
       field: 'engagement.riskLevel',
       operator: 'equals',
-      value: filters.risk as (typeof RISK_OPTIONS)[number],
+      value: filters.risk as RiskLevel,
     });
   if (filters.status === 'active' || filters.status === 'inactive')
     conditions.push({ field: 'isActive', operator: 'equals', value: filters.status === 'active' });

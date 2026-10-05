@@ -1,12 +1,12 @@
 import { z } from 'zod';
-import { channel, interactionType } from './enums.js';
-import { boundedText, metadata, requiredText } from './primitives.js';
+import { activityType, channel, interactionType } from './enums.js';
+import { boundedText, metadata } from './primitives.js';
 
 const POINTS_MESSAGE = 'Points must be a whole number from -1000 to 1000';
 
 // POST /api/analytics/members/:id/activities (staff)
 export const recordActivityInput = z.object({
-  activityType: requiredText('Activity type', 100),
+  activityType,
   description: boundedText('Description', 1000).optional(),
   metadata,
   points: z

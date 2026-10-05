@@ -450,18 +450,18 @@ describe('GET /api/users', () => {
       'Carol Cruz',
       'Dan Diaz',
     ]);
-    // at_risk < core_member < new_member < visitor
+    // Enum declaration (lifecycle) order: visitor < new_member < core_member < at_risk
     expect(names((await list('sort=membershipStage')).body)).toEqual([
-      'Carol Cruz',
-      'Alice Anders',
-      'Bob Brown',
       'Dan Diaz',
+      'Bob Brown',
+      'Alice Anders',
+      'Carol Cruz',
     ]);
     expect(names((await list('sort=membershipStage&order=desc')).body)).toEqual([
-      'Dan Diaz',
-      'Bob Brown',
-      'Alice Anders',
       'Carol Cruz',
+      'Alice Anders',
+      'Bob Brown',
+      'Dan Diaz',
     ]);
   });
 

@@ -1,4 +1,5 @@
 /** Labels and colours for members, shared by the member list, profile, search and analytics. */
+import { enumLabel, type MembershipStage, type RiskLevel } from '@embrace/shared';
 
 /** Up to the first letter of each word in a name, upper-cased ("Ada Lovelace" -> "AL"). */
 export function initials(name: string): string {
@@ -12,10 +13,15 @@ export function initials(name: string): string {
 
 /** "core_member" -> "Core Member" (stages, risk levels, roles and other snake_case values). */
 export function stageLabel(value: string): string {
-  return value
-    .split('_')
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ');
+  return enumLabel(value);
+}
+
+/** Select options ([value, label] pairs) for a list of enum values from `@embrace/shared`. */
+export function enumOptions(
+  values: readonly string[],
+  label: (value: string) => string = stageLabel,
+): [string, string][] {
+  return values.map((value) => [value, label(value)]);
 }
 
 /** "medium" -> "Medium Risk". */
@@ -25,7 +31,7 @@ export function riskLabel(level: string): string {
 
 const NEUTRAL = 'bg-gray-100 text-gray-800';
 
-const STAGE_CLASSES: Record<string, string> = {
+const STAGE_CLASSES: Record<MembershipStage, string> = {
   leader: 'bg-purple-100 text-purple-800',
   core_member: 'bg-blue-100 text-blue-800',
   active_member: 'bg-green-100 text-green-800',
@@ -37,10 +43,10 @@ const STAGE_CLASSES: Record<string, string> = {
 
 /** Badge colours for a membership stage; an unknown stage is grey. */
 export function stageClass(stage: string): string {
-  return STAGE_CLASSES[stage] ?? NEUTRAL;
+  return STAGE_CLASSES[stage as MembershipStage] ?? NEUTRAL;
 }
 
-const RISK_CLASSES: Record<string, string> = {
+const RISK_CLASSES: Record<RiskLevel, string> = {
   low: 'bg-green-100 text-green-800',
   medium: 'bg-yellow-100 text-yellow-800',
   high: 'bg-red-100 text-red-800',
@@ -48,7 +54,7 @@ const RISK_CLASSES: Record<string, string> = {
 
 /** Badge colours for a risk level; an unknown level is grey. */
 export function riskClass(level: string): string {
-  return RISK_CLASSES[level] ?? NEUTRAL;
+  return RISK_CLASSES[level as RiskLevel] ?? NEUTRAL;
 }
 
 /** Dot colour for a risk level: low green, medium yellow, anything else red. */

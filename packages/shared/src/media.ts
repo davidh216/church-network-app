@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { mediaType } from './enums.js';
 import {
   boundedText,
   MAX_PAGE,
@@ -8,9 +9,6 @@ import {
   requiredText,
   type WithNumericPaging,
 } from './primitives.js';
-
-// Only YouTube videos can be added today; the column also names IMAGE, VIDEO, AUDIO and DOCUMENT.
-export const mediaType = z.enum(['YOUTUBE_VIDEO'], { error: 'Only YouTube videos can be added' });
 
 export const YOUTUBE_VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
 const WATCH_HOSTS = new Set(['youtube.com', 'www.youtube.com', 'm.youtube.com']);
@@ -78,7 +76,6 @@ export const listMediaQuery = z.object({
   pageSize: z.coerce.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_MEDIA_PAGE_SIZE),
 });
 
-export type MediaType = z.infer<typeof mediaType>;
 export type CreateMediaInput = z.input<typeof createMediaInput>;
 export type ListMediaQuery = z.input<typeof listMediaQuery>;
 // GET /api/media parameters as the web app passes them.

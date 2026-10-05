@@ -5,6 +5,7 @@ import {
   interactionCategory,
   interactionType,
   milestoneCategory,
+  milestoneType,
   noteType,
   priority,
 } from './enums.js';
@@ -29,7 +30,7 @@ export const addInteractionInput = z.object({
 
 // POST /api/member-details/:id/milestones (staff)
 export const addMilestoneInput = z.object({
-  milestoneType: requiredText('Milestone type', 100),
+  milestoneType,
   title: requiredText('Title', 200, 'Please enter a title'),
   description: boundedText('Description', 2000).optional(),
   achievedDate: z.coerce.date({ error: DATE_MESSAGE }),

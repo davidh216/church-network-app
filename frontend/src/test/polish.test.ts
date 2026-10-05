@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { PRISMA_ENUMS } from '@embrace/shared';
 
 // Guards for the Phase 2 F7 polish: Tailwind v4 names, built-in line-clamp, light-only colours,
 // browser-locale dates and the `@/` alias for cross-directory imports.
@@ -63,5 +64,33 @@ describe('frontend polish guards', () => {
 
   it('uses only Tailwind type sizes that exist (text-md is not one)', () => {
     expect(offenders(/(?<=[\s"'`])text-md(?=[\s"'`])/)).toEqual([]);
+  });
+
+  it('takes enum lists from @embrace/shared instead of repeating them as string literals', () => {
+    // Three or more values of one shared enum quoted close together are a restated list (select
+    // options, filter choices); iterate the shared tuple instead. A query that names one or two
+    // values, or a record keyed by enum values (bare keys, typed with the shared enum), is fine.
+    const allowed: Record<string, string[]> = {
+      // The engagement score bands are named high/medium/low but are score ranges, not risk or impact.
+      'lib/members/filters.ts': ['RiskLevel', 'Impact'],
+    };
+    const WINDOW = 160;
+    const restated = files.flatMap(({ path, text }) => {
+      const file = path.slice(SRC.length + 1);
+      const quoted = [...text.matchAll(/'([A-Za-z_]+)'|"([A-Za-z_]+)"/g)].map((m) => ({
+        value: m[1] ?? m[2]!,
+        at: m.index,
+      }));
+      return Object.entries(PRISMA_ENUMS)
+        .filter(([name, values]) => values.length >= 3 && !allowed[file]?.includes(name))
+        .filter(([, values]) =>
+          quoted.some(({ at }) => {
+            const near = quoted.filter((q) => q.at >= at && q.at < at + WINDOW).map((q) => q.value);
+            return new Set(near.filter((v) => (values as readonly string[]).includes(v))).size >= 3;
+          }),
+        )
+        .map(([name]) => `${file}: ${name}`);
+    });
+    expect(restated).toEqual([]);
   });
 });

@@ -1,16 +1,14 @@
 import type { MemberInteraction } from '@prisma/client';
 import type { z } from 'zod';
 import type {
-  membershipStage,
+  ActivityType,
+  MembershipStage,
   recordActivityInput,
   recordInteractionInput,
-  riskLevel,
+  RiskLevel,
 } from '@embrace/shared';
 import { prisma } from '../../lib/prisma';
 import { logger } from '../../lib/logger';
-
-type MembershipStage = z.infer<typeof membershipStage>;
-type RiskLevel = z.infer<typeof riskLevel>;
 
 export interface EngagementMetrics {
   attendanceScore: number;
@@ -68,10 +66,10 @@ export async function calculateMemberEngagement(userId: string): Promise<Engagem
   );
   const volunteerScore = Math.min((volunteerActivities.length / 12) * 100, 100);
 
-  // Community (0-100): group participation
+  // Community (0-100): group participation. The legacy 'group_participation' activity type is not
+  // in the ActivityType enum (the D2 migration mapped it to 'other'), so only memberships count.
   const activeGroups = member.groupMembers.length;
-  const groupActivities = member.activities.filter((a) => a.activityType === 'group_participation');
-  const communityScore = Math.min(activeGroups * 20 + groupActivities.length * 2, 100);
+  const communityScore = Math.min(activeGroups * 20, 100);
 
   // Communication (0-100): email/sms engagement
   const communicationInteractions = member.interactions.filter(
@@ -189,10 +187,10 @@ export async function getMemberAnalytics() {
     topEngagedMembers,
     membershipStageDistribution: Object.fromEntries(
       stageDistribution.map((s) => [s.membershipStage, s._count.membershipStage]),
-    ) as Record<string, number>,
+    ) as Partial<Record<MembershipStage, number>>,
     riskLevelDistribution: Object.fromEntries(
       riskDistribution.map((r) => [r.riskLevel, r._count.riskLevel]),
-    ) as Record<string, number>,
+    ) as Partial<Record<RiskLevel, number>>,
   };
 }
 
@@ -336,13 +334,14 @@ async function countActivities(userId: string, startDate: Date) {
   const servicesAttended = await prisma.attendance.count({
     where: { userId, present: true, createdAt: { gte: startDate } },
   });
-  const ofType = (type: string) => activities.filter((a) => a.activityType === type);
+  const ofType = (type: ActivityType) => activities.filter((a) => a.activityType === type);
 
   return {
     servicesAttended,
     eventsAttended: ofType('event_attendance').length,
     volunteerHours: ofType('volunteer').reduce((sum, a) => sum + volunteerHours(a.metadata), 0),
     donationCount: ofType('donation').length,
-    groupMeetings: ofType('group_participation').length,
+    // No activity type records group meetings since the enum migration (see communityScore).
+    groupMeetings: 0,
   };
 }

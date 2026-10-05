@@ -121,11 +121,12 @@ describe('human validation messages', () => {
     expect(
       messages(addMilestoneInput, { milestoneType: '', title: '', achievedDate: 'x' }),
     ).toEqual({
-      milestoneType: 'Milestone type is required',
+      milestoneType: 'Choose a milestone type',
       title: 'Please enter a title',
       achievedDate: 'Enter a valid date',
     });
     expect(messages(recordActivityInput, { activityType: 'x', points: 1.5 })).toEqual({
+      activityType: 'Choose an activity type',
       points: 'Points must be a whole number from -1000 to 1000',
     });
   });

@@ -21,8 +21,8 @@ model User {
   firstName        String?
   lastName         String?
   dateOfBirth      DateTime?
-  gender           String?    // "male", "female", "other", "prefer_not_to_say"
-  maritalStatus    String?    // "single", "married", "divorced", "widowed", "separated"
+  gender           Gender?
+  maritalStatus    MaritalStatus?
   occupation       String?
   emergencyContact String?
   emergencyPhone   String?
@@ -31,7 +31,7 @@ model User {
   membershipDate   DateTime?
   baptismDate      DateTime?
   confirmationDate DateTime?
-  membershipType   String?    // "member", "visitor", "regular_attendee", "inactive"
+  membershipType   MembershipType?
   previousChurch   String?
   howHeardAboutUs  String?
   
@@ -113,7 +113,7 @@ model Media {
   id          String    @id @default(cuid())
   title       String
   description String?
-  type        String    // IMAGE, VIDEO, AUDIO, DOCUMENT, YOUTUBE_VIDEO
+  type        MediaType
   url         String
   thumbnailUrl String?
   fileSize    Int?
@@ -161,7 +161,7 @@ model FamilyRelationship {
   id              String @id @default(cuid())
   primaryUserId   String
   relatedUserId   String
-  relationshipType String // "spouse", "parent", "child", "sibling", "grandparent", "grandchild", "other"
+  relationshipType RelationshipType
   isActive        Boolean @default(true)
   
   // Timestamps
@@ -182,7 +182,7 @@ model Group {
   id          String @id @default(cuid())
   name        String
   description String?
-  type        String  // "ministry", "small_group", "committee", "service_team"
+  type        GroupType
   isActive    Boolean @default(true)
   meetingDay  String? // "monday", "tuesday", etc.
   meetingTime String?
@@ -205,7 +205,7 @@ model GroupMember {
   id       String @id @default(cuid())
   userId   String
   groupId  String
-  role     String @default("member") // "leader", "co-leader", "member"
+  role     GroupMemberRole @default(member)
   joinDate DateTime @default(now())
   isActive Boolean @default(true)
   
@@ -221,7 +221,7 @@ model Attendance {
   id           String   @id @default(cuid())
   userId       String
   serviceDate  DateTime
-  serviceType  String   @default("sunday_service") // "sunday_service", "bible_study", "prayer_meeting", etc.
+  serviceType  ServiceType @default(sunday_service)
   present      Boolean  @default(true)
   notes        String?
   
@@ -256,8 +256,8 @@ model MemberEngagement {
   groupMeetings      Int      @default(0)
   
   // Lifecycle indicators
-  membershipStage    String   @default("visitor") // "visitor", "new_member", "active_member", "core_member", "leader", "at_risk", "inactive"
-  riskLevel          String   @default("low")     // "low", "medium", "high"
+  membershipStage    MembershipStage @default(visitor)
+  riskLevel          RiskLevel       @default(low)
   lastActivity       DateTime?
   
   // Timestamps
@@ -274,7 +274,7 @@ model MemberEngagement {
 model MemberActivity {
   id          String   @id @default(cuid())
   userId      String
-  activityType String  // "service_attendance", "event_attendance", "donation", "volunteer", "communication_open", "profile_update", etc.
+  activityType ActivityType
   description String?
   metadata    String?  // JSON string for additional data
   points      Int      @default(0) // Points awarded for this activity
@@ -291,16 +291,16 @@ model MemberActivity {
 model MemberInteraction {
   id             String   @id @default(cuid())
   userId         String
-  interactionType String  // "email_sent", "email_opened", "sms_sent", "sms_replied", "call_made", "visit_logged", "note_added"
+  interactionType InteractionType
   subject        String?
   content        String?
   staffMemberId  String?  // Who initiated the interaction
-  channel        String   // "email", "sms", "phone", "in_person", "social_media"
-  status         String   @default("completed") // "scheduled", "completed", "failed"
+  channel        Channel
+  status         InteractionStatus @default(completed)
   
   // Phase 3: Enhanced interaction tracking
-  category       String?  // "welcome", "follow_up", "pastoral_care", "event_invitation", "giving_reminder", "volunteer_request"
-  priority       String   @default("normal") // "low", "normal", "high", "urgent"
+  category       InteractionCategory?
+  priority       Priority @default(normal)
   responseRequired Boolean @default(false)
   responseReceived Boolean @default(false)
   
@@ -322,7 +322,7 @@ model MemberInteraction {
 model MemberMilestone {
   id            String   @id @default(cuid())
   userId        String
-  milestoneType String   // "first_visit", "baptism", "confirmation", "wedding", "first_volunteer", "leadership_role", "anniversary"
+  milestoneType MilestoneType
   title         String
   description   String?
   achievedDate  DateTime
@@ -330,8 +330,8 @@ model MemberMilestone {
   celebrated    Boolean  @default(false)
   
   // Phase 3: Enhanced milestone categorization
-  category      String   @default("general") // "spiritual", "service", "family", "personal", "ministry"
-  impact        String   @default("medium")  // "low", "medium", "high"
+  category      MilestoneCategory @default(general)
+  impact        Impact   @default(medium)
   autoGenerated Boolean  @default(false)     // Whether milestone was auto-detected
   
   // Timestamps
@@ -349,7 +349,7 @@ model MemberNote {
   authorId     String   // Staff member who wrote the note
   title        String?
   content      String
-  noteType     String   @default("general") // "general", "pastoral_care", "follow_up", "prayer_request", "concern"
+  noteType     NoteType @default(general)
   isPrivate    Boolean  @default(false)
   isFollowUp   Boolean  @default(false)
   followUpDate DateTime?
@@ -368,7 +368,7 @@ model MemberTag {
   id        String   @id @default(cuid())
   name      String   @unique
   color     String   @default("#3B82F6") // Hex color for UI display
-  category  String   @default("general") // "ministry", "demographic", "interest", "status", "general"
+  category  TagCategory @default(general)
   isActive  Boolean  @default(true)
   
   // Timestamps
@@ -410,4 +410,173 @@ model SavedSearch {
   lastUsed    DateTime?
   
   @@map("saved_searches")
+}
+
+// Enums (PHASE3_SPECS.md 1.1). The value lists mirror packages/shared/src/enums.ts in the same
+// order; backend/test/enums.test.ts keeps them equal.
+
+enum MembershipStage {
+  visitor
+  new_member
+  active_member
+  core_member
+  leader
+  at_risk
+  inactive
+}
+
+enum RiskLevel {
+  low
+  medium
+  high
+}
+
+enum Gender {
+  male
+  female
+  other
+  prefer_not_to_say
+}
+
+enum MaritalStatus {
+  single
+  married
+  divorced
+  widowed
+  separated
+}
+
+enum MembershipType {
+  member
+  visitor
+  regular_attendee
+  inactive
+}
+
+enum MediaType {
+  YOUTUBE_VIDEO
+}
+
+enum RelationshipType {
+  spouse
+  parent
+  child
+  sibling
+  grandparent
+  grandchild
+  other
+}
+
+enum GroupType {
+  ministry
+  small_group
+  committee
+  service_team
+}
+
+enum GroupMemberRole {
+  leader
+  co_leader
+  member
+}
+
+enum ServiceType {
+  sunday_service
+  bible_study
+  prayer_meeting
+  special_event
+  other
+}
+
+enum InteractionType {
+  email_sent
+  email_opened
+  sms_sent
+  sms_replied
+  call_made
+  visit_logged
+  note_added
+}
+
+enum Channel {
+  email
+  sms
+  phone
+  in_person
+  social_media
+}
+
+enum InteractionStatus {
+  scheduled
+  completed
+  failed
+}
+
+enum InteractionCategory {
+  welcome
+  follow_up
+  pastoral_care
+  event_invitation
+  giving_reminder
+  volunteer_request
+}
+
+enum Priority {
+  low
+  normal
+  high
+  urgent
+}
+
+enum MilestoneType {
+  first_visit
+  baptism
+  confirmation
+  wedding
+  first_volunteer
+  leadership_role
+  anniversary
+  other
+}
+
+enum MilestoneCategory {
+  spiritual
+  service
+  family
+  personal
+  ministry
+  general
+}
+
+enum Impact {
+  low
+  medium
+  high
+}
+
+enum NoteType {
+  general
+  pastoral_care
+  follow_up
+  prayer_request
+  concern
+}
+
+enum TagCategory {
+  ministry
+  demographic
+  interest
+  status
+  general
+}
+
+enum ActivityType {
+  service_attendance
+  event_attendance
+  donation
+  volunteer
+  ministry_participation
+  communication_open
+  profile_update
+  other
 }

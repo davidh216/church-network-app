@@ -1,4 +1,5 @@
 /** Formatting helpers for the member profile at `/members/[id]`. */
+import type { Impact, InteractionType, MilestoneType, Priority } from '@embrace/shared';
 import { formatLocalDate, formatLocalDateTime, parseDate } from '@/lib/format/date';
 
 /** A long date in the viewer's locale ("January 5, 2024" in en-US), or null without a real date. */
@@ -66,7 +67,7 @@ export function membershipDuration(membershipDate?: string | null, now: Date = n
   return parts.length ? parts.join(', ') : 'Less than a month';
 }
 
-const INTERACTION_ICONS: Record<string, string> = {
+const INTERACTION_ICONS: Record<InteractionType, string> = {
   email_sent: '📧',
   email_opened: '📬',
   sms_sent: '📱',
@@ -76,9 +77,10 @@ const INTERACTION_ICONS: Record<string, string> = {
   note_added: '📝',
 };
 
-export const interactionIcon = (type: string): string => INTERACTION_ICONS[type] ?? '📋';
+export const interactionIcon = (type: string): string =>
+  INTERACTION_ICONS[type as InteractionType] ?? '📋';
 
-const MILESTONE_ICONS: Record<string, string> = {
+const MILESTONE_ICONS: Partial<Record<MilestoneType, string>> = {
   baptism: '✝️',
   confirmation: '🙏',
   wedding: '💒',
@@ -87,24 +89,25 @@ const MILESTONE_ICONS: Record<string, string> = {
   anniversary: '🎉',
 };
 
-export const milestoneIcon = (type: string): string => MILESTONE_ICONS[type] ?? '🏆';
+export const milestoneIcon = (type: string): string =>
+  MILESTONE_ICONS[type as MilestoneType] ?? '🏆';
 
-const PRIORITY_CLASSES: Record<string, string> = {
+const PRIORITY_CLASSES: Partial<Record<Priority, string>> = {
   urgent: 'bg-red-100 text-red-800',
   high: 'bg-orange-100 text-orange-800',
   normal: 'bg-blue-100 text-blue-800',
 };
 
 export const priorityClass = (priority: string): string =>
-  PRIORITY_CLASSES[priority] ?? 'bg-gray-100 text-gray-800';
+  PRIORITY_CLASSES[priority as Priority] ?? 'bg-gray-100 text-gray-800';
 
-const IMPACT_CLASSES: Record<string, string> = {
+const IMPACT_CLASSES: Partial<Record<Impact, string>> = {
   high: 'bg-purple-100 text-purple-800',
   medium: 'bg-blue-100 text-blue-800',
 };
 
 export const impactClass = (impact: string): string =>
-  IMPACT_CLASSES[impact] ?? 'bg-gray-100 text-gray-800';
+  IMPACT_CLASSES[impact as Impact] ?? 'bg-gray-100 text-gray-800';
 
 /** Risk badge colours: high red, medium yellow, otherwise green. */
 export function riskBadgeClass(risk: string): string {
