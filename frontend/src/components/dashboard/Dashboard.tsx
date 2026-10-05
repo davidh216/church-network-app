@@ -74,6 +74,16 @@ export default function Dashboard() {
             {staff && (
               <li>
                 <Link
+                  href="/services"
+                  className={`${linkClass} bg-green-50 hover:bg-green-100 text-green-700`}
+                >
+                  Services and Attendance
+                </Link>
+              </li>
+            )}
+            {staff && (
+              <li>
+                <Link
                   href="/analytics"
                   className={`${linkClass} bg-indigo-50 hover:bg-indigo-100 text-indigo-700`}
                 >

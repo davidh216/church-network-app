@@ -74,17 +74,26 @@ describe('app shell', () => {
     expect(container.textContent).toContain('Your Profile');
     expect(linkTexts(container, 'nav a')).toEqual(['Dashboard', 'Members', 'Media', 'My Profile']);
     expect(linkTexts(container)).not.toContain('Member Analytics');
+    expect(linkTexts(container)).not.toContain('Services and Attendance');
     expect(container.querySelector('nav a[aria-current="page"]')?.textContent).toBe('Dashboard');
   });
 
-  it('links staff to Analytics from the navigation and the quick links', async () => {
+  it('links staff to Services and Analytics from the navigation and the quick links', async () => {
     usersApi.getUserSummary.mockResolvedValue(staffSummary);
     const container = await renderDashboard(['admin']);
-    expect(linkTexts(container, 'nav a')).toContain('Analytics');
+    expect(linkTexts(container, 'nav a')).toEqual([
+      'Dashboard',
+      'Members',
+      'Media',
+      'Services',
+      'Analytics',
+      'My Profile',
+    ]);
     expect(links(container)).toEqual(
       expect.arrayContaining([
         ['View Members', '/members'],
         ['Media Library', '/media'],
+        ['Services and Attendance', '/services'],
         ['Member Analytics', '/analytics'],
         ['My Profile', '/members/cluser0000000000000000001'],
       ]),
@@ -264,14 +273,21 @@ describe('navigation helpers', () => {
     expect(isCurrent('/', '/')).toBe(true);
   });
 
-  it('lists Analytics for staff only', () => {
+  it('lists Services and Analytics for staff only', () => {
     expect(navItems(false, 'u1').map((i) => i.href)).toEqual([
       '/',
       '/members',
       '/media',
       '/members/u1',
     ]);
-    expect(navItems(true, 'u1').map((i) => i.href)).toContain('/analytics');
+    expect(navItems(true, 'u1').map((i) => i.href)).toEqual([
+      '/',
+      '/members',
+      '/media',
+      '/services',
+      '/analytics',
+      '/members/u1',
+    ]);
   });
 
   it('turns a member summary into one tile and a staff summary into four', () => {

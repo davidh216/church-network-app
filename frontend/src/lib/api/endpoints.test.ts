@@ -306,6 +306,59 @@ describe('services endpoints', () => {
     ).resolves.toEqual({ services: [{ id: 's1' }], total: 9, page: 1, pageSize: 1 });
     expect(call().url).toBe('/api/services?from=2026-10-01&to=2026-10-31&pageSize=1');
   });
+
+  it('create, update and delete send the right method, path and body', async () => {
+    respond({ success: true, service: { id: 's1' } }, { status: 201 });
+    await expect(
+      services.createService({ date: '2026-10-04', type: 'sunday_service' }),
+    ).resolves.toEqual({ id: 's1' });
+    expect(call(0)).toEqual({
+      url: '/api/services',
+      method: 'POST',
+      body: { date: '2026-10-04', type: 'sunday_service' },
+    });
+    respond({ success: true, service: { id: 's1', title: 'Harvest' } });
+    await expect(services.updateService('s1', { title: 'Harvest' })).resolves.toEqual({
+      id: 's1',
+      title: 'Harvest',
+    });
+    expect(call(1)).toEqual({ url: '/api/services/s1', method: 'PUT', body: { title: 'Harvest' } });
+    respond({ success: true });
+    await expect(services.deleteService('s1')).resolves.toBeUndefined();
+    expect(call(2)).toEqual({ url: '/api/services/s1', method: 'DELETE', body: undefined });
+  });
+
+  it('a duplicate service rejects with the 409 message', async () => {
+    respond(
+      { error: 'A service of this type already exists on that date', code: 'CONFLICT' },
+      { status: 409 },
+    );
+    await expect(
+      services.createService({ date: '2026-10-04', type: 'sunday_service' }),
+    ).rejects.toMatchObject({
+      status: 409,
+      code: 'CONFLICT',
+      message: 'A service of this type already exists on that date',
+    });
+  });
+
+  it('reads and saves the attendance sheet', async () => {
+    respond({ success: true, service: { id: 's1' }, members: [{ present: true }] });
+    await expect(services.getServiceAttendance('s1')).resolves.toEqual({
+      service: { id: 's1' },
+      members: [{ present: true }],
+    });
+    expect(call(0).url).toBe('/api/services/s1/attendance');
+    respond({ success: true, present: 2, absent: 1 });
+    await expect(
+      services.saveServiceAttendance('s1', { present: ['a', 'b'], absent: ['c'] }),
+    ).resolves.toEqual({ present: 2, absent: 1 });
+    expect(call(1)).toEqual({
+      url: '/api/services/s1/attendance',
+      method: 'PUT',
+      body: { present: ['a', 'b'], absent: ['c'] },
+    });
+  });
 });
 
 describe('saved searches endpoints', () => {

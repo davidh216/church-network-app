@@ -19,7 +19,12 @@ export function navItems(staff: boolean, userId: string): NavItem[] {
     { href: '/', label: 'Dashboard' },
     { href: '/members', label: 'Members' },
     { href: '/media', label: 'Media' },
-    ...(staff ? [{ href: '/analytics', label: 'Analytics' }] : []),
+    ...(staff
+      ? [
+          { href: '/services', label: 'Services' },
+          { href: '/analytics', label: 'Analytics' },
+        ]
+      : []),
     { href: `/members/${encodeURIComponent(userId)}`, label: 'My Profile' },
   ];
 }

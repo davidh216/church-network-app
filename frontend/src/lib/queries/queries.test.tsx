@@ -9,7 +9,14 @@ import { queryKeys } from './keys';
 import { useCreateMedia, useMedia } from './media';
 import { useMemberAttendance, useMemberDetails, useOwnAttendance } from './memberDetails';
 import { useRoles } from './roles';
-import { useServices } from './services';
+import {
+  useCreateService,
+  useDeleteService,
+  useSaveAttendance,
+  useServiceAttendance,
+  useServices,
+  useUpdateService,
+} from './services';
 import {
   useCreateSavedSearch,
   useDeleteSavedSearch,
@@ -43,7 +50,14 @@ const detailsApi = vi.hoisted(() => ({
   getOwnAttendance: vi.fn(),
 }));
 vi.mock('@/lib/api/memberDetails', () => detailsApi);
-const servicesApi = vi.hoisted(() => ({ listServices: vi.fn() }));
+const servicesApi = vi.hoisted(() => ({
+  listServices: vi.fn(),
+  createService: vi.fn(),
+  updateService: vi.fn(),
+  deleteService: vi.fn(),
+  getServiceAttendance: vi.fn(),
+  saveServiceAttendance: vi.fn(),
+}));
 vi.mock('@/lib/api/services', () => servicesApi);
 const savedApi = vi.hoisted(() => ({
   listSavedSearches: vi.fn(),
@@ -125,6 +139,12 @@ const queryCases: QueryCase[] = [
     api: servicesApi.listServices,
     useHook: () => useServices({ from: '2026-10-01', to: '2026-10-31', pageSize: 1 }),
     args: [{ from: '2026-10-01', to: '2026-10-31', pageSize: 1 }, expect.any(AbortSignal)],
+  },
+  {
+    name: 'useServiceAttendance',
+    api: servicesApi.getServiceAttendance,
+    useHook: () => useServiceAttendance('s1'),
+    args: ['s1', expect.any(AbortSignal)],
   },
   {
     name: 'useMedia',
@@ -265,6 +285,18 @@ it('attendance summaries sit under the member-details prefix, so a member save r
   await waitFor(() => expect(detailsApi.getMemberAttendance).toHaveBeenCalledTimes(2));
 });
 
+it('attendance sheets sit under the services prefix, so a service change refetches them', async () => {
+  servicesApi.getServiceAttendance.mockResolvedValue({ service: {}, members: [] });
+  const client = makeTestQueryClient();
+  const { result } = renderHook(() => useServiceAttendance('s1'), {
+    wrapper: queryWrapper(client),
+  });
+  await waitFor(() => expect(result.current.isSuccess).toBe(true));
+  expect(client.getQueryData(queryKeys.services.attendance('s1'))).toBeDefined();
+  await client.invalidateQueries({ queryKey: queryKeys.services.all });
+  await waitFor(() => expect(servicesApi.getServiceAttendance).toHaveBeenCalledTimes(2));
+});
+
 it('useRoles does not fetch while disabled', async () => {
   const { result } = renderHook(() => useRoles({ enabled: false }), { wrapper: queryWrapper() });
   expect(result.current.fetchStatus).toBe('idle');
@@ -300,6 +332,38 @@ const mutationCases: MutationCase[] = [
     variables: { title: 'T', url: 'https://youtu.be/abcdefghijk', type: 'YOUTUBE_VIDEO' as const },
     args: [{ title: 'T', url: 'https://youtu.be/abcdefghijk', type: 'YOUTUBE_VIDEO' }],
     invalidates: [queryKeys.media.all],
+  },
+  {
+    name: 'useCreateService',
+    api: servicesApi.createService,
+    useHook: useCreateService,
+    variables: { date: '2026-10-04', type: 'sunday_service' },
+    args: [{ date: '2026-10-04', type: 'sunday_service' }],
+    invalidates: [queryKeys.services.all, queryKeys.memberDetails.all],
+  },
+  {
+    name: 'useUpdateService',
+    api: servicesApi.updateService,
+    useHook: useUpdateService,
+    variables: { id: 's1', input: { title: 'Harvest' } },
+    args: ['s1', { title: 'Harvest' }],
+    invalidates: [queryKeys.services.all, queryKeys.memberDetails.all],
+  },
+  {
+    name: 'useDeleteService',
+    api: servicesApi.deleteService,
+    useHook: useDeleteService,
+    variables: 's1',
+    args: ['s1'],
+    invalidates: [queryKeys.services.all, queryKeys.memberDetails.all],
+  },
+  {
+    name: 'useSaveAttendance',
+    api: servicesApi.saveServiceAttendance,
+    useHook: useSaveAttendance,
+    variables: { id: 's1', input: { present: ['u1'], absent: [] } },
+    args: ['s1', { present: ['u1'], absent: [] }],
+    invalidates: [queryKeys.services.all, queryKeys.memberDetails.all],
   },
   {
     name: 'useCreateSavedSearch',

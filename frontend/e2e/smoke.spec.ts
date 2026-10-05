@@ -105,6 +105,21 @@ test('admin navigates the dashboard, members, a profile, media and analytics, th
   await expect(page.getByRole('button', { name: /^Play / }).first()).toBeAttached();
   await expectNoSeriousA11yViolations(page, '/media');
 
+  // Services (staff): the month list, and the New Service dialog passes axe while open.
+  await nav.getByRole('link', { name: 'Services' }).click();
+  await expect(page).toHaveURL(/\/services$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'Services' })).toBeVisible();
+  await expect(page.getByRole('status', { name: 'Loading services' })).toHaveCount(0);
+  await expectNoSeriousA11yViolations(page, '/services');
+  const newService = page.getByRole('button', { name: 'New Service' });
+  await newService.click();
+  const serviceDialog = page.getByRole('dialog', { name: 'New Service' });
+  await expect(serviceDialog.getByLabel('Date *')).toBeFocused();
+  await expectNoSeriousA11yViolations(page, '/services with the New Service dialog');
+  await page.keyboard.press('Escape');
+  await expect(serviceDialog).toHaveCount(0);
+  await expect(newService).toBeFocused();
+
   // Analytics (staff).
   await nav.getByRole('link', { name: 'Analytics' }).click();
   await expect(page).toHaveURL(/\/analytics$/);

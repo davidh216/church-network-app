@@ -34,6 +34,8 @@ export const queryKeys = {
   services: {
     all: ['services'] as const,
     list: (params: ListServicesParams) => ['services', 'list', params] as const,
+    /** The attendance sheet of one service (under `services`, so any service change refetches it). */
+    attendance: (id: string) => ['services', 'attendance', id] as const,
   },
   media: {
     all: ['media'] as const,
