@@ -2,7 +2,8 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { BETWEEN_ORDER_MESSAGE, SEARCH_FIELD_OPERATORS, type SearchField } from '@embrace/shared';
 import { prisma } from '../src/lib/prisma';
-import { endOfDay } from '../src/modules/users/search';
+import { endOfDay, listWhere } from '../src/modules/users/search';
+import { listUsers } from '../src/modules/users/service';
 import { app, backfillEngagementRows, bearer, createUser, login, resetDatabase } from './helpers';
 
 // GET /api/users filters, sorting and paging, and POST /api/users/search (PHASE2_SPECS 1.2, S2).
@@ -518,5 +519,41 @@ describe('endOfDay', () => {
   it('is the last millisecond of the UTC day, also for 9999-12-31', () => {
     expect(endOfDay('2026-03-31').toISOString()).toBe('2026-03-31T23:59:59.999Z');
     expect(endOfDay('9999-12-31').toISOString()).toBe('9999-12-31T23:59:59.999Z');
+  });
+});
+
+describe('member list service ignores the staff-only filters', () => {
+  // Carol's role, status, stage, risk and join date.
+  const staffFilters = {
+    role: 'member',
+    status: 'inactive',
+    stage: 'at_risk',
+    risk: 'high',
+    joinedFrom: '2026-03-01',
+    joinedTo: '2026-03-31',
+  } as const;
+  const paging = { page: 1, pageSize: 25 };
+
+  it('listWhere drops them for members and keeps them for staff', () => {
+    const member = listWhere({ ...staffFilters, q: 'bob', ...paging }, false);
+    expect(member).toEqual({
+      AND: [{ isActive: true }, { name: { contains: 'bob', mode: 'insensitive' } }],
+    });
+    expect(listWhere({ ...staffFilters, ...paging }, false)).toEqual({
+      AND: [{ isActive: true }],
+    });
+    const staff = listWhere({ ...staffFilters, ...paging }, true);
+    // role, status, stage, risk and one createdAt range.
+    expect((staff.AND as object[]).length).toBe(5);
+  });
+
+  it('listUsers returns the active directory to a member whatever the filters say', async () => {
+    const page = await listUsers(false, { ...staffFilters, ...paging });
+    expect(page.users.map((u) => u.name)).toEqual(['Alice Anders', 'Bob Brown', 'Dan Diaz']);
+    expect(page.total).toBe(3);
+    // The same filters as staff select Carol only.
+    expect(
+      (await listUsers(true, { ...staffFilters, ...paging })).users.map((u) => u.name),
+    ).toEqual(['Carol Cruz']);
   });
 });

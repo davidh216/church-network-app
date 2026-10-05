@@ -34,7 +34,7 @@ async function findPage<S extends Prisma.UserSelect>(
 }
 
 // Staff see every account with contact and engagement fields; members see the active directory.
-// The router has already refused the staff-only filters for members.
+// The router has already refused the staff-only filters for members; listWhere ignores them too.
 export function listUsers(staff: boolean, query: z.output<typeof listUsersQuery>) {
   return findPage(
     listWhere(query, staff),

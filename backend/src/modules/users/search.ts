@@ -1,7 +1,7 @@
 import type { Prisma } from '@prisma/client';
 import type { z } from 'zod';
 import type { listUsersQuery, SearchCondition, searchQuery, UserSortField } from '@embrace/shared';
-import { DEFAULT_USER_PAGE_SIZE } from '@embrace/shared';
+import { DEFAULT_USER_PAGE_SIZE, STAFF_ONLY_LIST_FILTERS } from '@embrace/shared';
 import { escapeLike } from '../../lib/like';
 
 // Translates the validated member list query and the advanced search into Prisma arguments.
@@ -84,8 +84,18 @@ export function searchWhere(query: SearchQuery): Prisma.UserWhereInput {
   return query.logic === 'AND' ? { AND: parts } : { OR: parts };
 }
 
-// Filters of GET /api/users. Members see active accounts only and match on the name only.
-export function listWhere(query: ListQuery, staff: boolean): Prisma.UserWhereInput {
+// The list query without the staff-only filters.
+function withoutStaffOnlyFilters(query: ListQuery): ListQuery {
+  const rest = { ...query };
+  for (const key of STAFF_ONLY_LIST_FILTERS) delete rest[key];
+  return rest;
+}
+
+// Filters of GET /api/users. Members see active accounts only and match on the name only. The
+// staff-only filters are ignored for members: the router answers 403 for them, and this keeps
+// any other caller from filtering the directory by them.
+export function listWhere(listQuery: ListQuery, staff: boolean): Prisma.UserWhereInput {
+  const query = staff ? listQuery : withoutStaffOnlyFilters(listQuery);
   const and: Prisma.UserWhereInput[] = [];
   if (!staff) and.push({ isActive: true });
   if (query.q) {
