@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { MAX_PAGE_SIZE } from './primitives';
+import { MAX_PAGE, MAX_PAGE_SIZE, optionalQueryText, type WithNumericPaging } from './primitives';
 
 // Only YouTube videos can be added today; the column also names IMAGE, VIDEO, AUDIO and DOCUMENT.
 export const mediaType = z.enum(['YOUTUBE_VIDEO']);
@@ -61,12 +61,14 @@ export const DEFAULT_MEDIA_PAGE_SIZE = 24;
 // Query string of GET /api/media (all values arrive as strings).
 export const listMediaQuery = z.object({
   type: mediaType.optional(),
-  tag: z.string().trim().max(100).optional(),
-  search: z.string().trim().max(200).optional(),
-  page: z.coerce.number().int().min(1).max(100_000).default(1),
+  tag: optionalQueryText(100),
+  search: optionalQueryText(200),
+  page: z.coerce.number().int().min(1).max(MAX_PAGE).default(1),
   pageSize: z.coerce.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_MEDIA_PAGE_SIZE),
 });
 
 export type MediaType = z.infer<typeof mediaType>;
 export type CreateMediaInput = z.input<typeof createMediaInput>;
 export type ListMediaQuery = z.input<typeof listMediaQuery>;
+// GET /api/media parameters as the web app passes them.
+export type ListMediaParams = WithNumericPaging<ListMediaQuery>;

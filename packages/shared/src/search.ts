@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { membershipStage, riskLevel } from './enums';
-import { MAX_PAGE_SIZE } from './primitives';
+import { MAX_PAGE, MAX_PAGE_SIZE, optionalQueryText, type WithNumericPaging } from './primitives';
 
 // The advanced member search (POST /api/users/search) and the shape stored by saved searches.
 // Each condition names a field, an operator allowed for that field and a value of the right type.
@@ -17,7 +17,16 @@ const isoDate = z.union([z.iso.date(), z.iso.datetime({ offset: true })], {
   error: 'Must be an ISO date (YYYY-MM-DD) or timestamp',
 });
 
-const ordered = <T extends z.ZodType>(item: T) => z.tuple([item, item]);
+// `between` takes [low, high] with low <= high: scores compare as numbers, dates as instants.
+export const BETWEEN_ORDER_MESSAGE = 'The first value must not exceed the second';
+const scoreRange = z
+  .tuple([score, score])
+  .refine(([low, high]) => low <= high, { error: BETWEEN_ORDER_MESSAGE });
+const dateRange = z
+  .tuple([isoDate, isoDate])
+  .refine(([low, high]) => new Date(low).getTime() <= new Date(high).getTime(), {
+    error: BETWEEN_ORDER_MESSAGE,
+  });
 
 const textCondition = z.discriminatedUnion('operator', [
   z.object({ field: textField, operator: z.literal('contains'), value: text }),
@@ -36,7 +45,7 @@ const rolesCondition = z.object({
 const scoreField = z.literal('engagement.engagementScore');
 const scoreCondition = z.discriminatedUnion('operator', [
   z.object({ field: scoreField, operator: z.enum(['gt', 'gte', 'lt', 'lte']), value: score }),
-  z.object({ field: scoreField, operator: z.literal('between'), value: ordered(score) }),
+  z.object({ field: scoreField, operator: z.literal('between'), value: scoreRange }),
 ]);
 
 const enumCondition = <F extends string, E extends z.ZodEnum>(field: F, values: E) => {
@@ -51,7 +60,7 @@ const riskCondition = enumCondition('engagement.riskLevel', riskLevel);
 
 const dateCondition = z.discriminatedUnion('operator', [
   z.object({ field: dateField, operator: z.enum(['before', 'after']), value: isoDate }),
-  z.object({ field: dateField, operator: z.literal('between'), value: ordered(isoDate) }),
+  z.object({ field: dateField, operator: z.literal('between'), value: dateRange }),
 ]);
 
 const activeCondition = z.object({
@@ -102,15 +111,16 @@ export const searchQuery = z.object({
   logic: z.enum(['AND', 'OR']),
   sort: userSortField.optional(),
   order: sortOrder.optional(),
-  page: z.number().int().min(1).optional(),
+  page: z.number().int().min(1).max(MAX_PAGE).optional(),
   pageSize: z.number().int().min(1).max(MAX_PAGE_SIZE).optional(),
 });
 
 // Query string of GET /api/users (all values arrive as strings). Members may only use q, sort=name,
 // order, page and pageSize; the API answers 403 for the staff-only filters and sorts.
 export const listUsersQuery = z.object({
-  q: z.string().trim().min(1).max(200).optional(),
-  role: z.string().trim().min(1).max(100).optional(),
+  // A blank q or role is ignored rather than rejected.
+  q: optionalQueryText(200),
+  role: optionalQueryText(100),
   status: z.enum(['active', 'inactive']).optional(),
   stage: membershipStage.optional(),
   risk: riskLevel.optional(),
@@ -119,7 +129,7 @@ export const listUsersQuery = z.object({
   joinedTo: z.iso.date().optional(),
   sort: userSortField.optional(),
   order: sortOrder.optional(),
-  page: z.coerce.number().int().min(1).max(100_000).default(1),
+  page: z.coerce.number().int().min(1).max(MAX_PAGE).default(1),
   pageSize: z.coerce.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_USER_PAGE_SIZE),
 });
 
@@ -140,3 +150,5 @@ export type UserSortField = z.infer<typeof userSortField>;
 export type SortOrder = z.infer<typeof sortOrder>;
 export type SearchQuery = z.infer<typeof searchQuery>;
 export type ListUsersQuery = z.input<typeof listUsersQuery>;
+// GET /api/users parameters as the web app passes them.
+export type ListUsersParams = WithNumericPaging<ListUsersQuery>;

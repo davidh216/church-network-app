@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
-import { SEARCH_FIELD_OPERATORS, type SearchField } from '@embrace/shared';
+import { BETWEEN_ORDER_MESSAGE, SEARCH_FIELD_OPERATORS, type SearchField } from '@embrace/shared';
 import { prisma } from '../src/lib/prisma';
 import { app, bearer, createUser, login, resetDatabase } from './helpers';
 
@@ -249,6 +249,24 @@ describe('POST /api/users/search', () => {
     expect(res.body.code).toBe('VALIDATION');
   });
 
+  it.each([
+    ['score', { field: 'engagement.engagementScore', operator: 'between', value: [80, 20] }],
+    ['date', { field: 'createdAt', operator: 'between', value: ['2026-03-05', '2026-02-20'] }],
+    [
+      'timestamp',
+      {
+        field: 'lastLoginAt',
+        operator: 'between',
+        value: ['2026-09-15T10:00:01Z', '2026-09-15T10:00:00Z'],
+      },
+    ],
+  ])('rejects a reversed %s between with 400', async (_label, condition) => {
+    const res = await search({ conditions: [condition], logic: 'AND' });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('VALIDATION');
+    expect(res.body.details.conditions).toEqual([BETWEEN_ORDER_MESSAGE]);
+  });
+
   it('rejects a bad logic, sort or page size with 400', async () => {
     const conditions = [{ field: 'isActive', operator: 'equals', value: true }];
     for (const extra of [
@@ -256,6 +274,7 @@ describe('POST /api/users/search', () => {
       { logic: 'AND', sort: 'password' },
       { logic: 'AND', pageSize: 101 },
       { logic: 'AND', page: 0 },
+      { logic: 'AND', page: 100_001 },
     ]) {
       expect((await search({ conditions, ...extra })).status, JSON.stringify(extra)).toBe(400);
     }
@@ -285,10 +304,26 @@ describe('GET /api/users', () => {
   });
 
   it('rejects out-of-range paging and unknown sorts with 400', async () => {
-    for (const query of ['pageSize=101', 'pageSize=0', 'page=0', 'page=x', 'sort=password']) {
+    for (const query of [
+      'pageSize=101',
+      'pageSize=0',
+      'page=0',
+      'page=100001',
+      'page=x',
+      'sort=password',
+    ]) {
       const res = await list(query);
       expect(res.status, query).toBe(400);
       expect(res.body.code).toBe('VALIDATION');
+    }
+  });
+
+  it('ignores a blank q or role and returns the unfiltered page', async () => {
+    for (const query of ['q=', 'role=', 'q=&role=', 'q=%20%20', 'role=%20']) {
+      const res = await list(query);
+      expect(res.status, query).toBe(200);
+      expect(res.body, query).toMatchObject({ total: 4, page: 1, pageSize: 25 });
+      expect(names(res.body), query).toEqual(ALL);
     }
   });
 
@@ -372,6 +407,12 @@ describe('GET /api/users', () => {
         expect(u.email).toBeUndefined();
         expect(u.engagement).toBeUndefined();
       }
+    });
+
+    it('ignores a blank q', async () => {
+      const res = await list('q=', memberToken);
+      expect(res.status).toBe(200);
+      expect(names(res.body)).toEqual(['Alice Anders', 'Bob Brown', 'Dan Diaz']);
     });
 
     it('searches by name only', async () => {

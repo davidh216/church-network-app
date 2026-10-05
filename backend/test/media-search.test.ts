@@ -54,4 +54,14 @@ describe('media search (postgres, case-insensitive)', () => {
   it('returns everything without filters', async () => {
     expect(await titles('')).toEqual(['Sunday Worship Service', 'Youth night']);
   });
+
+  it('ignores a blank search or tag', async () => {
+    for (const query of ['search=', 'tag=', 'search=%20&tag=%20%20'])
+      expect(await titles(query), query).toEqual(['Sunday Worship Service', 'Youth night']);
+  });
+
+  it('rejects a page beyond 100000 with 400', async () => {
+    const res = await request(app).get('/api/media?page=100001').set(bearer(token));
+    expect(res.status).toBe(400);
+  });
 });

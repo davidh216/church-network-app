@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  BETWEEN_ORDER_MESSAGE,
   listUsersQuery,
+  MAX_PAGE,
   SEARCH_FIELD_OPERATORS,
   searchCondition,
   searchQuery,
@@ -82,6 +84,49 @@ describe('searchCondition', () => {
   });
 });
 
+describe('between ranges', () => {
+  const between = (field: string, value: unknown) =>
+    searchCondition.safeParse({ field, operator: 'between', value });
+
+  it.each([
+    ['engagement.engagementScore', [80, 20]],
+    ['engagement.engagementScore', [0.5, -1]],
+    ['createdAt', ['2026-02-01', '2026-01-01']],
+    ['lastLoginAt', ['2026-10-01T12:00:00Z', '2026-10-01T11:59:59Z']],
+    // Compared as instants, not as strings: 23:00 at -02:00 is 01:00 UTC on 2 January.
+    ['createdAt', ['2026-01-01T23:00:00-02:00', '2026-01-02']],
+  ])('rejects a reversed %s range %j', (field, value) => {
+    const result = between(field, value);
+    expect(result.success).toBe(false);
+    expect(result.error?.issues).toEqual([
+      expect.objectContaining({ path: ['value'], message: BETWEEN_ORDER_MESSAGE }),
+    ]);
+  });
+
+  it.each([
+    ['engagement.engagementScore', [20, 80]],
+    ['engagement.engagementScore', [45, 45]],
+    ['createdAt', ['2026-01-01', '2026-01-01']],
+    ['lastLoginAt', ['2026-10-01T11:59:59Z', '2026-10-01T12:00:00Z']],
+    ['createdAt', ['2026-01-02', '2026-01-01T23:00:00-02:00']],
+  ])('accepts an ordered or equal %s range %j', (field, value) => {
+    expect(between(field, value).success).toBe(true);
+  });
+
+  it('reports the order message from searchQuery at the condition path', () => {
+    const result = searchQuery.safeParse({
+      conditions: [{ field: 'engagement.engagementScore', operator: 'between', value: [9, 1] }],
+      logic: 'AND',
+    });
+    expect(result.error?.issues).toEqual([
+      expect.objectContaining({
+        path: ['conditions', 0, 'value'],
+        message: 'The first value must not exceed the second',
+      }),
+    ]);
+  });
+});
+
 describe('searchQuery', () => {
   const condition = {
     field: 'engagement.membershipStage',
@@ -109,9 +154,17 @@ describe('searchQuery', () => {
     ['an unknown sort', { conditions: [condition], logic: 'AND', sort: 'password' }],
     ['an unknown order', { conditions: [condition], logic: 'AND', order: 'up' }],
     ['page 0', { conditions: [condition], logic: 'AND', page: 0 }],
+    ['a page over 100000', { conditions: [condition], logic: 'AND', page: MAX_PAGE + 1 }],
     ['pageSize over 100', { conditions: [condition], logic: 'AND', pageSize: 101 }],
   ])('rejects %s', (_label, query) => {
     expect(searchQuery.safeParse(query).success).toBe(false);
+  });
+
+  it('accepts the last page', () => {
+    expect(MAX_PAGE).toBe(100_000);
+    expect(
+      searchQuery.safeParse({ conditions: [condition], logic: 'AND', page: MAX_PAGE }).success,
+    ).toBe(true);
   });
 });
 
@@ -150,8 +203,19 @@ describe('listUsersQuery', () => {
     });
   });
 
+  it.each([{ q: '' }, { q: '   ' }, { role: '' }, { role: ' \t ' }, { q: '', role: '' }])(
+    'treats a blank q or role as absent: %o',
+    (query) => {
+      expect(listUsersQuery.parse(query)).toEqual({ page: 1, pageSize: 25 });
+      const parsed = listUsersQuery.parse(query);
+      expect(parsed.q).toBeUndefined();
+      expect(parsed.role).toBeUndefined();
+    },
+  );
+
   it.each([
-    { q: '' },
+    { q: 'x'.repeat(201) },
+    { role: 'x'.repeat(101) },
     { status: 'archived' },
     { stage: 'pastor' },
     { risk: 'none' },
@@ -161,6 +225,7 @@ describe('listUsersQuery', () => {
     { order: 'up' },
     { page: '0' },
     { page: '1.5' },
+    { page: '100001' },
     { pageSize: '101' },
     { q: ['a', 'b'] },
   ])('rejects %o', (query) => {

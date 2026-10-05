@@ -14,6 +14,7 @@ import {
   isCommonPassword,
   loginInput,
   membershipStage,
+  optionalQueryText,
   passwordSchema,
   registerInput,
   updateUserInput,
@@ -133,7 +134,34 @@ describe('input schemas', () => {
     });
     expect(listMediaQuery.safeParse({ pageSize: '101' }).success).toBe(false);
     expect(listMediaQuery.safeParse({ page: '0' }).success).toBe(false);
+    expect(listMediaQuery.safeParse({ page: '100001' }).success).toBe(false);
     expect(DEFAULT_MEDIA_PAGE_SIZE).toBe(24);
+  });
+
+  it('treats a blank media search or tag as absent and trims the others', () => {
+    for (const query of [{ search: '' }, { tag: '   ' }, { search: ' ', tag: '' }]) {
+      const parsed = listMediaQuery.parse(query);
+      expect(parsed, JSON.stringify(query)).toEqual({ page: 1, pageSize: 24 });
+      expect(parsed.search).toBeUndefined();
+      expect(parsed.tag).toBeUndefined();
+    }
+    expect(listMediaQuery.parse({ search: ' hymn ', tag: ' Worship ' })).toMatchObject({
+      search: 'hymn',
+      tag: 'Worship',
+    });
+    expect(listMediaQuery.safeParse({ search: 'x'.repeat(201) }).success).toBe(false);
+    expect(listMediaQuery.safeParse({ tag: 'x'.repeat(101) }).success).toBe(false);
+  });
+
+  it('optionalQueryText drops blank values and keeps the max length', () => {
+    const schema = optionalQueryText(5);
+    expect(schema.parse(undefined)).toBeUndefined();
+    expect(schema.parse('')).toBeUndefined();
+    expect(schema.parse(' \t\n ')).toBeUndefined();
+    expect(schema.parse('  abc  ')).toBe('abc');
+    expect(schema.parse('       abcde      ')).toBe('abcde');
+    expect(schema.safeParse('abcdef').success).toBe(false);
+    expect(schema.safeParse(3).success).toBe(false);
   });
 
   it('requires a saved-search query that is a valid searchQuery', () => {
