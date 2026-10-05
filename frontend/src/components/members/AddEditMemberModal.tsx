@@ -1,29 +1,10 @@
 // File: frontend/src/components/members/AddEditMemberModal.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
-import { authService } from '../../lib/auth';
-
-interface Member {
-  id: string;
-  name: string;
-  email: string;
-  phone?: string;
-  bio?: string;
-  isActive: boolean;
-  roles: Array<{
-    role: {
-      id: string;
-      name: string;
-    }
-  }>;
-}
-
-interface Role {
-  id: string;
-  name: string;
-  description?: string;
-}
+import { useState, useEffect, useCallback } from 'react';
+import { API_BASE, authService } from '../../lib/auth';
+import { getErrorMessage, readApiError } from '../../lib/errors';
+import type { Member, Role } from '../../types/domain';
 
 interface AddEditMemberModalProps {
   isOpen: boolean;
@@ -48,13 +29,32 @@ export default function AddEditMemberModal({ isOpen, onClose, onSave, member }: 
 
   const isEditing = !!member;
 
+  const fetchRoles = useCallback(async () => {
+    try {
+      const response = await authService.fetchWithAuth(`${API_BASE}/roles`);
+      const data = await response.json();
+      if (data.success) {
+        setRoles(data.roles);
+        // A new member defaults to the member role unless roles were already picked.
+        if (!member) {
+          const memberRole = (data.roles as Role[]).find((r) => r.name === 'member');
+          if (memberRole) {
+            setSelectedRoles((prev) => (prev.length ? prev : [memberRole.id]));
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching roles:', err);
+    }
+  }, [member]);
+
   useEffect(() => {
     if (isOpen) {
       fetchRoles();
       if (member) {
         setFormData({
           name: member.name,
-          email: member.email,
+          email: member.email ?? '',
           phone: member.phone || '',
           bio: member.bio || '',
           isActive: member.isActive,
@@ -74,26 +74,7 @@ export default function AddEditMemberModal({ isOpen, onClose, onSave, member }: 
       }
       setError('');
     }
-  }, [isOpen, member]);
-
-  const fetchRoles = async () => {
-    try {
-      const response = await authService.fetchWithAuth('http://localhost:5000/api/roles');
-      const data = await response.json();
-      if (data.success) {
-        setRoles(data.roles);
-        // If adding new member and no roles selected, default to member role
-        if (!member && selectedRoles.length === 0) {
-          const memberRole = data.roles.find((r: Role) => r.name === 'member');
-          if (memberRole) {
-            setSelectedRoles([memberRole.id]);
-          }
-        }
-      }
-    } catch (err) {
-      console.error('Error fetching roles:', err);
-    }
-  };
+  }, [isOpen, member, fetchRoles]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -101,44 +82,50 @@ export default function AddEditMemberModal({ isOpen, onClose, onSave, member }: 
     setError('');
 
     try {
-      if (isEditing) {
-        // Update existing member
-        const response = await authService.fetchWithAuth(`http://localhost:5000/api/users/${member!.id}`, {
+      if (isEditing && member) {
+        // Update existing member. Only send role/status changes when they changed,
+        // because those fields need admin (roles) or staff (status) permissions.
+        const originalRoleIds = member.roles.map((ur) => ur.role.id).sort();
+        const nextRoleIds = [...selectedRoles].sort();
+        const rolesChanged = JSON.stringify(originalRoleIds) !== JSON.stringify(nextRoleIds);
+        const response = await authService.fetchWithAuth(`${API_BASE}/users/${member.id}`, {
           method: 'PUT',
           body: JSON.stringify({
             name: formData.name,
-            phone: formData.phone || undefined,
-            bio: formData.bio || undefined,
+            phone: formData.phone || null,
+            bio: formData.bio || null,
+            ...(formData.isActive !== member.isActive ? { isActive: formData.isActive } : {}),
+            ...(rolesChanged ? { roleIds: selectedRoles } : {}),
           }),
         });
 
-        const data = await response.json();
-        if (!data.success) {
-          throw new Error(data.error || 'Failed to update member');
+        if (!response.ok) {
+          throw new Error(await readApiError(response, 'Failed to update member'));
         }
       } else {
-        // Create new member
-        const response = await authService.fetchWithAuth('http://localhost:5000/api/auth/register', {
+        // Create new member (staff only). Self-registration uses /api/auth/register instead.
+        const response = await authService.fetchWithAuth(`${API_BASE}/users`, {
           method: 'POST',
           body: JSON.stringify({
             name: formData.name,
             email: formData.email,
             password: formData.password,
-            phone: formData.phone || undefined,
-            bio: formData.bio || undefined,
+            phone: formData.phone || null,
+            bio: formData.bio || null,
+            isActive: formData.isActive,
+            roleIds: selectedRoles,
           }),
         });
 
-        const data = await response.json();
-        if (!data.success) {
-          throw new Error(data.error || 'Failed to create member');
+        if (!response.ok) {
+          throw new Error(await readApiError(response, 'Failed to create member'));
         }
       }
 
       onSave();
       onClose();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -210,8 +197,9 @@ export default function AddEditMemberModal({ isOpen, onClose, onSave, member }: 
                   value={formData.password}
                   onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
                   required
+                  minLength={8}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Temporary password"
+                  placeholder="Temporary password (at least 8 characters)"
                 />
               </div>
             )}

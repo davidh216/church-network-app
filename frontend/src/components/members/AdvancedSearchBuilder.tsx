@@ -2,16 +2,10 @@
 
 import { useState } from 'react';
 
-interface SearchCondition {
-  id: string;
-  field: string;
-  operator: string;
-  value: string;
-  logic: 'AND' | 'OR';
-}
+import type { SearchCondition, SearchQuery } from '../../types/domain';
 
 interface AdvancedSearchBuilderProps {
-  onApplyQuery: (query: any) => void;
+  onApplyQuery: (query: SearchQuery | null) => void;
   onClose: () => void;
 }
 

@@ -1,8 +1,15 @@
 import express from 'express';
-import { PrismaClient } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { prisma } from '../lib/prisma';
+import { isAdmin } from '../middleware/auth';
 
 const router = express.Router();
-const prisma = new PrismaClient();
+
+// Private notes are visible only to their author and to admins.
+function visibleNotes(req: express.Request): Prisma.MemberNoteWhereInput {
+  const user = req.user!;
+  return isAdmin(user) ? {} : { OR: [{ isPrivate: false }, { authorId: user.id }] };
+}
 
 // Get comprehensive member details with Phase 3 data
 router.get('/:id', async (req, res) => {
@@ -60,6 +67,7 @@ router.get('/:id', async (req, res) => {
           take: 20
         },
         memberNotes: {
+          where: visibleNotes(req),
           orderBy: {
             createdAt: 'desc'
           },
@@ -156,9 +164,9 @@ router.get('/:id/interactions', async (req, res) => {
     const { id } = req.params;
     const { limit = 50, offset = 0, category } = req.query;
     
-    const whereClause: any = { userId: id };
+    const whereClause: Prisma.MemberInteractionWhereInput = { userId: id };
     if (category) {
-      whereClause.category = category;
+      whereClause.category = String(category);
     }
     
     const interactions = await prisma.memberInteraction.findMany({
@@ -186,9 +194,9 @@ router.get('/:id/milestones', async (req, res) => {
     const { id } = req.params;
     const { limit = 20, offset = 0, category } = req.query;
     
-    const whereClause: any = { userId: id };
+    const whereClause: Prisma.MemberMilestoneWhereInput = { userId: id };
     if (category) {
-      whereClause.category = category;
+      whereClause.category = String(category);
     }
     
     const milestones = await prisma.memberMilestone.findMany({
@@ -216,9 +224,9 @@ router.get('/:id/notes', async (req, res) => {
     const { id } = req.params;
     const { limit = 20, offset = 0, noteType } = req.query;
     
-    const whereClause: any = { userId: id };
+    const whereClause: Prisma.MemberNoteWhereInput = { AND: [{ userId: id }, visibleNotes(req)] };
     if (noteType) {
-      whereClause.noteType = noteType;
+      whereClause.noteType = String(noteType);
     }
     
     const notes = await prisma.memberNote.findMany({
@@ -308,7 +316,7 @@ router.post('/:id/notes', async (req, res) => {
     const note = await prisma.memberNote.create({
       data: {
         userId: id,
-        authorId: req.user.id,
+        authorId: req.user!.id,
         title,
         content,
         noteType: noteType || 'general',

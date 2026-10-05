@@ -43,7 +43,7 @@ A comprehensive church management platform built with modern web technologies, d
 - **Express.js**: Fast, unopinionated web framework
 - **TypeScript**: Type-safe server-side development
 - **Prisma**: Next-generation ORM with type safety
-- **SQLite**: Lightweight, serverless database (easily upgradeable to PostgreSQL)
+- **SQLite**: current datastore; the move to PostgreSQL is scheduled in `docs/MODERNIZATION_GAMEPLAN.md`
 
 ### **Security & Authentication**
 - **JWT**: JSON Web Tokens for stateless authentication
@@ -91,30 +91,32 @@ A comprehensive church management platform built with modern web technologies, d
 ## 🚦 Getting Started
 
 ### **Prerequisites**
-- Node.js 18+ and npm
+- Node.js 22 (see `.nvmrc`) and npm 10
 - Git for version control
 
 ### **Installation**
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/church-network-app.git
+   git clone https://github.com/davidh216/church-network-app.git
    cd church-network-app
    ```
 
 2. **Backend Setup**
    ```bash
    cd backend
-   npm install
-   npx prisma migrate dev
-   npx prisma generate
+   cp .env.example .env        # then set JWT_SECRET (32+ random chars) and the SEED_ADMIN_* values
+   npm ci
+   npm run db:migrate          # applies prisma/migrations
+   npm run db:seed             # creates the roles and, if SEED_ADMIN_* are set, the first admin
    npm run dev
    ```
 
 3. **Frontend Setup**
    ```bash
    cd ../frontend
-   npm install
+   cp .env.example .env.local   # NEXT_PUBLIC_API_URL, defaults to http://localhost:5000/api
+   npm ci
    npm run dev
    ```
 
@@ -123,48 +125,74 @@ A comprehensive church management platform built with modern web technologies, d
    - Backend API: http://localhost:5000
    - Health Check: http://localhost:5000/health
 
-### **Default Setup**
-The application automatically creates default roles (Admin, Leader, Member) on first startup. Register your first user to begin managing your church community.
+### **Accounts and Roles**
+- Self-registration creates an **inactive** account. An admin or leader activates it (edit the member and tick Active) before the person can sign in.
+- The first admin comes from the seed (`SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD`, 12+ characters). Change that password after first login.
+- `admin` and `leader` can see member contact details, CRM notes, analytics and exports and can create members. Only `admin` can grant the `leader` or `admin` role, change roles, or edit another staff account. `member` sees a name-only directory and their own profile.
+- Emails are stored lowercase; the `20251004120000_lowercase_emails` migration normalises existing rows (it fails if two accounts differ only by case; merge those by hand first).
+
+### **Quality checks**
+```bash
+# backend
+npm run typecheck && npm test
+# frontend (lint fails on any warning)
+npm run typecheck && npm run lint && npm run build
+```
 
 ## 📁 Project Structure
 
 ```
 church-network-app/
-├── backend/                    # Express.js API server
-│   ├── prisma/                # Database schema and migrations
-│   │   ├── schema.prisma      # Prisma database schema
-│   │   └── migrations/        # Database migration files
-│   ├── src/                   # Source code
-│   │   ├── server.ts          # Main server file
-│   │   └── routes/            # API route handlers
-│   └── package.json           # Backend dependencies
-├── frontend/                  # Next.js React application
-│   ├── src/                   # Source code
-│   │   ├── app/               # Next.js app directory
-│   │   ├── components/        # React components
-│   │   │   ├── auth/          # Authentication components
-│   │   │   ├── members/       # Member management components
-│   │   │   └── media/         # Media library components
-│   │   └── lib/               # Utility libraries
-│   └── package.json           # Frontend dependencies
-└── README.md                  # This file
+├── backend/                    # Express 5 API
+│   ├── prisma/
+│   │   ├── schema.prisma       # Prisma schema (SQLite today, Postgres in Phase 1)
+│   │   ├── migrations/         # Migration history
+│   │   └── seed.ts             # Roles and optional first admin (npm run db:seed)
+│   ├── src/
+│   │   ├── app.ts              # Express app: middleware, routers, 404/error handlers
+│   │   ├── server.ts           # Listen and graceful shutdown
+│   │   ├── config/env.ts       # zod-validated environment
+│   │   ├── lib/                # prisma singleton, user projections, validation helpers
+│   │   ├── middleware/auth.ts  # authenticate, requireRole
+│   │   ├── routes/             # auth, users, saved-searches, roles, media, analytics, member-details
+│   │   ├── services/           # memberAnalytics
+│   │   └── types/              # AuthenticatedUser, Express Request augmentation
+│   ├── test/                   # vitest + supertest
+│   └── .env.example
+├── frontend/                   # Next.js App Router
+│   ├── src/
+│   │   ├── app/                # layout and the dashboard page
+│   │   ├── components/         # auth, members, media, analytics
+│   │   ├── lib/                # auth client, error helpers
+│   │   └── types/domain.ts     # shared domain types
+│   └── .env.example
+├── docs/
+│   ├── MODERNIZATION_GAMEPLAN.md
+│   └── PHASE1_SPECS.md
+└── README.md
 ```
 
 ## 🔧 API Endpoints
 
+All routes except `/health`, `POST /api/auth/register` and `POST /api/auth/login` require a bearer token. Routes marked *staff* require the `admin` or `leader` role.
+
 ### **Authentication**
-- `POST /api/auth/register` - Register new user
+- `POST /api/auth/register` - Register (account stays inactive until approved)
 - `POST /api/auth/login` - User login
 - `GET /api/auth/me` - Get current user profile
 
 ### **User Management**
-- `GET /api/users` - Get all users (members)
-- `GET /api/users/:id` - Get specific user
-- `PUT /api/users/:id` - Update user profile
+- `GET /api/users` - Member directory (full details for staff, name-only for members)
+- `POST /api/users` - Create a member *(staff)*
+- `GET /api/users/:id` - Get a user (full details for staff or self)
+- `PUT /api/users/:id` - Update profile; staff may set `isActive`, admins may set `roleIds`
+- `GET /api/users/export` - CSV export *(staff)*
+- `GET|POST|DELETE /api/users/saved-searches` - Saved searches
+- `GET /api/analytics/...` and `GET /api/member-details/...` - CRM and analytics *(staff)*
 
 ### **Media Management**
 - `GET /api/media` - Get media library content
-- `POST /api/media` - Add new media
+- `POST /api/media` - Add new media *(staff)*
 - `GET /api/media/:id` - Get specific media item
 
 ### **Role Management**

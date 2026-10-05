@@ -1,20 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-
-interface MediaItem {
-  id: string;
-  title: string;
-  description?: string;
-  url: string;
-  type: string;
-  uploadedBy?: {
-    id: string;
-    name: string;
-  };
-  createdAt?: string;
-  tags?: string;
-}
+import type { MediaItem } from '@/types/domain';
 
 interface VideoPlayerProps {
   media: MediaItem | null;
@@ -35,15 +22,10 @@ export default function VideoPlayer({
 }: VideoPlayerProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
-  const [volume, setVolume] = useState(100);
-  const [playbackSpeed, setPlaybackSpeed] = useState(1);
-  const [showSpeedMenu, setShowSpeedMenu] = useState(false);
   const [showPlaylist, setShowPlaylist] = useState(false);
   const playerRef = useRef<HTMLDivElement>(null);
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
-
-  if (!media) return null;
 
   const getEmbedUrl = useCallback((url: string): string => {
     const patterns = [
@@ -174,7 +156,8 @@ export default function VideoPlayer({
     };
   }, [handleKeyDown]);
 
-  const speedOptions = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2];
+  // Hooks above must run on every render; bail out only after them.
+  if (!media) return null;
 
   return (
     <div 

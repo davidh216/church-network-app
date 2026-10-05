@@ -9,6 +9,7 @@ import AddEditMemberModal from '../components/members/AddEditMemberModal';
 import SimpleMediaLibrary from '../components/media/SimpleMediaLibrary';
 import VideoPlayer from '../components/media/VideoPlayer';
 import MemberAnalyticsDashboard from '../components/analytics/MemberAnalyticsDashboard';
+import type { Member, MediaItem } from '../types/domain';
 
 export default function Home() {
   const [user, setUser] = useState<User | null>(null);
@@ -16,11 +17,11 @@ export default function Home() {
   const [showRegister, setShowRegister] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingMember, setEditingMember] = useState(null);
+  const [editingMember, setEditingMember] = useState<Member | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [showMedia, setShowMedia] = useState(false);
-  const [playingMedia, setPlayingMedia] = useState(null);
-  const [mediaPlaylist, setMediaPlaylist] = useState([]);
+  const [playingMedia, setPlayingMedia] = useState<MediaItem | null>(null);
+  const [mediaPlaylist, setMediaPlaylist] = useState<MediaItem[]>([]);
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
   const [showAnalytics, setShowAnalytics] = useState(false);
 
@@ -64,10 +65,7 @@ export default function Home() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4">
         <div>
           {showRegister ? (
-            <RegisterForm
-              onSuccess={handleAuthSuccess}
-              onSwitchToLogin={() => setShowRegister(false)}
-            />
+            <RegisterForm onSwitchToLogin={() => setShowRegister(false)} />
           ) : (
             <LoginForm
               onSuccess={handleAuthSuccess}
@@ -228,7 +226,7 @@ export default function Home() {
                 🎉 Welcome to Embrace!
               </h2>
               <p className="text-gray-600 mb-4">
-                You're successfully logged in! This is your church network platform.
+                You&apos;re successfully logged in! This is your church network platform.
               </p>
               <div className="mt-6 p-4 bg-green-50 rounded-md">
                 <p className="text-sm text-green-800">
@@ -254,7 +252,7 @@ export default function Home() {
               </button>
             </div>
             <MemberList
-              onEditMember={(member: any) => {
+              onEditMember={(member: Member) => {
                 setEditingMember(member);
                 setIsModalOpen(true);
               }}
@@ -296,7 +294,7 @@ export default function Home() {
               </button>
             </div>
             <SimpleMediaLibrary
-              onPlayMedia={(media: any, playlist: any[] = []) => {
+              onPlayMedia={(media: MediaItem, playlist: MediaItem[] = []) => {
                 setPlayingMedia(media);
                 setMediaPlaylist(playlist);
                 const index = playlist.findIndex(item => item.id === media.id);

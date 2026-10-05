@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { authService } from '../../lib/auth';
+import { API_BASE, authService } from '../../lib/auth';
 
 interface MemberAnalytics {
   totalMembers: number;
@@ -40,7 +40,7 @@ export default function MemberAnalyticsDashboard({ onClose }: MemberAnalyticsDas
   const fetchAnalytics = async () => {
     try {
       setLoading(true);
-      const response = await authService.fetchWithAuth('http://localhost:5000/api/analytics/members');
+      const response = await authService.fetchWithAuth(`${API_BASE}/analytics/members`);
       const data = await response.json();
       
       if (data.success) {
@@ -60,7 +60,7 @@ export default function MemberAnalyticsDashboard({ onClose }: MemberAnalyticsDas
     try {
       setRefreshing(true);
       const response = await authService.fetchWithAuth(
-        'http://localhost:5000/api/analytics/members/engagement/refresh-all',
+        `${API_BASE}/analytics/members/engagement/refresh-all`,
         { method: 'POST' }
       );
       const data = await response.json();

@@ -1,23 +1,11 @@
 // File: frontend/src/components/media/SimpleMediaLibrary.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
-import { authService } from '../../lib/auth';
+import { useState, useEffect, useCallback } from 'react';
+import { API_BASE, authService } from '../../lib/auth';
 
-interface MediaItem {
-  id: string;
-  title: string;
-  description?: string;
-  type: string;
-  url: string;
-  thumbnailUrl?: string;
-  tags: string;
-  createdAt: string;
-  uploadedBy: {
-    id: string;
-    name: string;
-  };
-}
+import { getErrorMessage } from '../../lib/errors';
+import type { MediaItem } from '../../types/domain';
 
 interface SimpleMediaLibraryProps {
   onPlayMedia: (media: MediaItem, playlist?: MediaItem[]) => void;
@@ -37,7 +25,7 @@ export default function SimpleMediaLibrary({ onPlayMedia }: SimpleMediaLibraryPr
     'youth', 'baptism', 'communion', 'special-event'
   ];
 
-  const fetchMedia = async () => {
+  const fetchMedia = useCallback(async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
@@ -45,7 +33,7 @@ export default function SimpleMediaLibrary({ onPlayMedia }: SimpleMediaLibraryPr
       if (selectedTag !== 'all') params.append('tag', selectedTag);
       
       const response = await authService.fetchWithAuth(
-        `http://localhost:5000/api/media?${params.toString()}`
+        `${API_BASE}/media?${params.toString()}`
       );
       const data = await response.json();
       
@@ -60,11 +48,11 @@ export default function SimpleMediaLibrary({ onPlayMedia }: SimpleMediaLibraryPr
     } finally {
       setLoading(false);
     }
-  };
+  }, [searchTerm, selectedTag]);
 
   useEffect(() => {
     fetchMedia();
-  }, [searchTerm, selectedTag]);
+  }, [fetchMedia]);
 
   const extractVideoId = (url: string): string => {
     // Handle various YouTube URL formats
@@ -254,7 +242,7 @@ export default function SimpleMediaLibrary({ onPlayMedia }: SimpleMediaLibraryPr
                 </div>
                 
                 <div className="flex justify-between items-center text-sm text-gray-500">
-                  <span className="truncate mr-2">By {item.uploadedBy.name}</span>
+                  <span className="truncate mr-2">By {item.uploadedBy?.name}</span>
                   <span className="whitespace-nowrap">{formatDate(item.createdAt)}</span>
                 </div>
               </div>
@@ -296,7 +284,7 @@ export default function SimpleMediaLibrary({ onPlayMedia }: SimpleMediaLibraryPr
                     <div className="flex-1 min-w-0 mr-4">
                       <h3 className="text-lg font-medium text-gray-900 mb-1 truncate">{item.title}</h3>
                       <div className="flex items-center space-x-3 text-sm text-gray-500 mb-2">
-                        <span>By {item.uploadedBy.name}</span>
+                        <span>By {item.uploadedBy?.name}</span>
                         <span>•</span>
                         <span>{formatDate(item.createdAt)}</span>
                       </div>
@@ -354,7 +342,7 @@ export default function SimpleMediaLibrary({ onPlayMedia }: SimpleMediaLibraryPr
           <div className="max-w-md mx-auto">
             <h3 className="text-lg font-medium text-gray-900 mb-2">Welcome to Embrace Media!</h3>
             <p className="text-gray-500 mb-6">
-              Start building your church's media library by adding videos from your YouTube channel.
+              Start building your church&apos;s media library by adding videos from your YouTube channel.
             </p>
             <button
               onClick={() => setShowAddForm(true)}
@@ -434,7 +422,7 @@ function AddVideoModal({ onClose, onSave }: AddVideoModalProps) {
         throw new Error('Please enter a valid YouTube URL');
       }
 
-      const response = await authService.fetchWithAuth('http://localhost:5000/api/media', {
+      const response = await authService.fetchWithAuth(`${API_BASE}/media`, {
         method: 'POST',
         body: JSON.stringify({
           title: formData.title,
@@ -451,8 +439,8 @@ function AddVideoModal({ onClose, onSave }: AddVideoModalProps) {
       }
 
       onSave();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }

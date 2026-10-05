@@ -1,21 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { authService } from '../../lib/auth';
+import { API_BASE, authService } from '../../lib/auth';
 
-interface SavedSearch {
-  id: string;
-  name: string;
-  description: string;
-  query: any;
-  createdAt: string;
-  isPublic: boolean;
-}
+import type { SavedSearch, SearchQuery } from '../../types/domain';
 
 interface SavedSearchesProps {
-  onLoadSearch: (query: any) => void;
+  onLoadSearch: (query: SearchQuery) => void;
   onClose: () => void;
-  currentQuery: any;
+  currentQuery: SearchQuery | null;
 }
 
 export default function SavedSearches({ onLoadSearch, onClose, currentQuery }: SavedSearchesProps) {
@@ -34,7 +27,7 @@ export default function SavedSearches({ onLoadSearch, onClose, currentQuery }: S
 
   const fetchSavedSearches = async () => {
     try {
-      const response = await authService.fetchWithAuth('http://localhost:5000/api/users/saved-searches');
+      const response = await authService.fetchWithAuth(`${API_BASE}/users/saved-searches`);
       const data = await response.json();
       if (data.success) {
         setSavedSearches(data.searches);
@@ -50,7 +43,7 @@ export default function SavedSearches({ onLoadSearch, onClose, currentQuery }: S
     if (!currentQuery || !saveForm.name.trim()) return;
 
     try {
-      const response = await authService.fetchWithAuth('http://localhost:5000/api/users/saved-searches', {
+      const response = await authService.fetchWithAuth(`${API_BASE}/users/saved-searches`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -75,7 +68,7 @@ export default function SavedSearches({ onLoadSearch, onClose, currentQuery }: S
     if (!confirm('Are you sure you want to delete this saved search?')) return;
 
     try {
-      const response = await authService.fetchWithAuth(`http://localhost:5000/api/users/saved-searches/${searchId}`, {
+      const response = await authService.fetchWithAuth(`${API_BASE}/users/saved-searches/${searchId}`, {
         method: 'DELETE'
       });
 

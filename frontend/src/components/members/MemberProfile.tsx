@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { authService } from '../../lib/auth';
+import { useState, useEffect, useCallback } from 'react';
+import { API_BASE, authService } from '../../lib/auth';
 
 interface Member {
   id: string;
@@ -142,14 +142,10 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState('personal');
 
-  useEffect(() => {
-    fetchMember();
-  }, [memberId]);
-
-  const fetchMember = async () => {
+  const fetchMember = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await authService.fetchWithAuth(`http://localhost:5000/api/member-details/${memberId}`);
+      const response = await authService.fetchWithAuth(`${API_BASE}/member-details/${memberId}`);
       const data = await response.json();
       
       if (data.success) {
@@ -163,7 +159,11 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
     } finally {
       setLoading(false);
     }
-  };
+  }, [memberId]);
+
+  useEffect(() => {
+    fetchMember();
+  }, [fetchMember]);
 
   const formatDate = (dateString?: string): string => {
     if (!dateString) return 'Not set';
