@@ -1,6 +1,31 @@
 import { expect, test, type Page } from '@playwright/test';
 import { seededAdmin } from './admin';
+import {
+  adminRequest,
+  deleteSavedSearches,
+  E2E_MEMBER,
+  ensureE2eMember,
+  ensureOneVideo,
+} from './api';
 import { expectNoSeriousA11yViolations } from './axe';
+
+// The saved search the advanced-query test creates; leftovers from interrupted runs are removed
+// before the suite and the search itself after it, so church_dev does not grow.
+const SAVED_SEARCH_NAME = 'E2E new members';
+
+test.beforeAll(async () => {
+  const admin = await adminRequest();
+  await deleteSavedSearches(admin, SAVED_SEARCH_NAME);
+  // The /media checks (and its axe scan) need at least one card with a play button.
+  await ensureOneVideo(admin);
+  await admin.dispose();
+});
+
+test.afterAll(async () => {
+  const admin = await adminRequest();
+  await deleteSavedSearches(admin, SAVED_SEARCH_NAME);
+  await admin.dispose();
+});
 
 async function signIn(page: Page, email: string, password: string) {
   await page.getByLabel('Email').fill(email);
@@ -75,8 +100,9 @@ test('admin navigates the dashboard, members, a profile, media and analytics, th
   // Media library.
   await nav.getByRole('link', { name: 'Media' }).click();
   await expect(page).toHaveURL(/\/media$/);
-  await expect(page.getByText(/\(\d+ videos\)/)).toBeVisible();
+  await expect(page.getByText(/\([1-9]\d* videos\)/)).toBeVisible();
   await expect(page.getByRole('status', { name: 'Loading videos' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^Play / }).first()).toBeAttached();
   await expectNoSeriousA11yViolations(page, '/media');
 
   // Analytics (staff).
@@ -98,49 +124,31 @@ test('admin navigates the dashboard, members, a profile, media and analytics, th
   await expect(page).toHaveURL(/\/login/);
 });
 
-test('a member visiting /analytics lands on the dashboard with a notice', async ({
-  page,
-  browser,
-}) => {
-  const admin = seededAdmin();
+test('a member visiting /analytics lands on the dashboard with a notice', async ({ page }) => {
+  // The one reusable member account (no staff role), created only if it cannot sign in.
+  const admin = await adminRequest();
+  const user = await ensureE2eMember(admin);
+  await admin.dispose();
+
   await page.goto('/login');
-  await signIn(page, admin.email, admin.password);
-
-  // The admin creates an active member with no staff role (the page shares the session cookie).
-  const member = {
-    name: 'E2E Member',
-    email: `e2e-member-${Date.now()}@example.com`,
-    password: `E2e-member-${Date.now()}-pw`,
-    isActive: true,
-  };
-  const created = await page.request.post('/api/users', { data: member });
-  expect(created.status()).toBe(201);
-  const { user } = (await created.json()) as { user: { id: string } };
-
-  const context = await browser.newContext();
-  const memberPage = await context.newPage();
-  await memberPage.goto('/login');
-  await signIn(memberPage, member.email, member.password);
+  await signIn(page, E2E_MEMBER.email, E2E_MEMBER.password);
   await expect(
-    memberPage.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Analytics' }),
+    page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Analytics' }),
   ).toHaveCount(0);
 
-  await memberPage.goto('/analytics');
-  await expect(memberPage).toHaveURL(/\/\?notice=staff-only$/);
+  await page.goto('/analytics');
+  await expect(page).toHaveURL(/\/\?notice=staff-only$/);
   await expect(
-    memberPage.getByRole('status').filter({ hasText: 'That page is only available to staff.' }),
+    page.getByRole('status').filter({ hasText: 'That page is only available to staff.' }),
   ).toBeVisible();
   // A member's dashboard has the single Members tile.
-  await expect(memberPage.locator('section[aria-label="Member counts"] dt')).toHaveText([
-    'Members',
-  ]);
+  await expect(page.locator('section[aria-label="Member counts"] dt')).toHaveText(['Members']);
 
   // Members may open their own profile, but not anyone else's.
-  await memberPage.goto(`/members/${user.id}`);
-  await expect(memberPage.getByRole('heading', { name: 'E2E Member' })).toBeVisible();
-  await memberPage.goto('/members/clnotme000000000000000000');
-  await expect(memberPage).toHaveURL(/\/\?notice=staff-only$/);
-  await context.close();
+  await page.goto(`/members/${user.id}`);
+  await expect(page.getByRole('heading', { name: E2E_MEMBER.name })).toBeVisible();
+  await page.goto('/members/clnotme000000000000000000');
+  await expect(page).toHaveURL(/\/\?notice=staff-only$/);
 });
 
 test('admin builds an advanced query, saves it, reloads and applies it', async ({ page }) => {
@@ -163,8 +171,8 @@ test('admin builds an advanced query, saves it, reloads and applies it', async (
   await page.getByRole('button', { name: 'Apply Search' }).click();
   await expect(page.getByText('Advanced query active')).toBeVisible();
 
-  // Save it under a unique name.
-  const name = `E2E new members ${Date.now()}`;
+  // Save it (beforeAll removed any leftover of the same name).
+  const name = SAVED_SEARCH_NAME;
   await page.getByRole('button', { name: 'Saved Searches' }).click();
   await page.getByRole('button', { name: 'Save Current Search' }).click();
   await page.getByLabel('Search name').fill(name);
@@ -195,11 +203,5 @@ test('admin builds an advanced query, saves it, reloads and applies it', async (
   await expect(page.getByText(`(${total} total)`)).toBeVisible();
   await expect(page.getByRole('status', { name: 'Loading members' })).toHaveCount(0);
   await expect(page.locator('table tbody tr')).toHaveCount(Math.min(total, 25));
-
-  // Clean up the saved search.
-  const list = await page.request.get('/api/users/saved-searches');
-  const { searches } = (await list.json()) as { searches: { id: string; name: string }[] };
-  const saved = searches.find((s) => s.name === name);
-  expect(saved).toBeDefined();
-  expect((await page.request.delete(`/api/users/saved-searches/${saved!.id}`)).status()).toBe(200);
+  // afterAll deletes the saved search.
 });
