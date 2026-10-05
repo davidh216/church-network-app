@@ -30,6 +30,14 @@ const eslintConfig = [
       '@next/next/no-img-element': 'off',
     },
   },
+  {
+    // Phase 2 (F3): component and route files stay small; tests are exempt.
+    files: ['src/components/**/*.{ts,tsx}', 'src/app/**/*.{ts,tsx}'],
+    ignores: ['**/*.test.{ts,tsx}'],
+    rules: {
+      'max-lines': ['error', { max: 300, skipBlankLines: true, skipComments: true }],
+    },
+  },
 ];
 
 export default eslintConfig;

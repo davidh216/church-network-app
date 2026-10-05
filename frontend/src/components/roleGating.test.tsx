@@ -1,7 +1,7 @@
 import { act } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import LoginForm from '@/components/auth/LoginForm';
-import SimpleMediaLibrary from '@/components/media/SimpleMediaLibrary';
+import MediaLibrary from '@/components/media/MediaLibrary';
 import { AuthProvider } from '@/lib/auth/AuthProvider';
 import { makeUser } from '@/test/fixtures';
 import { buttonTexts, render, settle } from '@/test/render';
@@ -61,16 +61,16 @@ const noop = () => undefined;
 
 // MemberList role gating lives in members/MemberList.test.tsx.
 
-describe('SimpleMediaLibrary role gating', () => {
+describe('MediaLibrary role gating', () => {
   it('hides Add Video from a member', async () => {
-    const container = await renderAs(['member'], <SimpleMediaLibrary onPlayMedia={noop} />);
+    const container = await renderAs(['member'], <MediaLibrary onPlayMedia={noop} />);
     const buttons = buttonTexts(container);
     expect(buttons).not.toContain('Add Video');
     expect(buttons).not.toContain('Add Your First Video');
   });
 
   it('shows Add Video to an admin', async () => {
-    const container = await renderAs(['admin'], <SimpleMediaLibrary onPlayMedia={noop} />);
+    const container = await renderAs(['admin'], <MediaLibrary onPlayMedia={noop} />);
     expect(buttonTexts(container)).toContain('Add Video');
   });
 });

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import SimpleMediaLibrary from './SimpleMediaLibrary';
+import MediaLibrary from './MediaLibrary';
 import VideoPlayer from './VideoPlayer';
 import type { MediaItem } from '@/types/domain';
 
@@ -31,7 +31,7 @@ export default function MediaPage() {
   return (
     <div>
       <h1 className="text-xl font-bold text-gray-900 mb-4">Embrace Media Library</h1>
-      <SimpleMediaLibrary onPlayMedia={play} />
+      <MediaLibrary onPlayMedia={play} />
       {playing && (
         <VideoPlayer
           media={playing.media}

@@ -1,6 +1,6 @@
 import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import SimpleMediaLibrary from '@/components/media/SimpleMediaLibrary';
+import MediaLibrary from '@/components/media/MediaLibrary';
 import { ApiError } from '@/lib/api/client';
 import { AuthProvider } from '@/lib/auth/AuthProvider';
 import { makeUser } from '@/test/fixtures';
@@ -45,7 +45,7 @@ async function renderAs(roleNames: string[]) {
   authApi.me.mockResolvedValue(makeUser(roleNames));
   return render(
     <AuthProvider>
-      <SimpleMediaLibrary onPlayMedia={() => undefined} />
+      <MediaLibrary onPlayMedia={() => undefined} />
     </AuthProvider>,
   );
 }
@@ -55,7 +55,7 @@ beforeEach(() => {
   mediaApi.listMedia.mockResolvedValue(mediaPage([video(1), video(2)], 30));
 });
 
-describe('SimpleMediaLibrary', () => {
+describe('MediaLibrary', () => {
   it('shows the total across pages and pages on the server, 24 at a time', async () => {
     await renderAs(['member']);
     expect(lastParams()).toEqual({ search: '', tag: 'all', page: 1, pageSize: 24 });

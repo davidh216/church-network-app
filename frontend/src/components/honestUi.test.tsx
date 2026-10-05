@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { act } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import MediaPage from '@/components/media/MediaPage';
-import SimpleMediaLibrary from '@/components/media/SimpleMediaLibrary';
+import MediaLibrary from '@/components/media/MediaLibrary';
 import VideoPlayer from '@/components/media/VideoPlayer';
 import BulkActionsToolbar from '@/components/members/BulkActionsToolbar';
 import MemberList from '@/components/members/MemberList';
@@ -71,7 +71,7 @@ function video(n: number): MediaItem {
     id: `v${n}`,
     title: `Sermon ${n}`,
     type: 'YOUTUBE_VIDEO',
-    url: `https://www.youtube.com/watch?v=abc${n}`,
+    url: `https://www.youtube.com/watch?v=abcdefghij${n}`,
     tags: '[]',
     createdAt: '2026-01-01T00:00:00.000Z',
   };
@@ -172,7 +172,7 @@ describe('VideoPlayer playlist', () => {
 describe('media thumbnails', () => {
   it('hides a thumbnail whose fallbacks fail instead of loading a dead placeholder host', async () => {
     mediaApi.listMedia.mockResolvedValue(mediaPage([video(1)]));
-    const container = await renderAs(['member'], <SimpleMediaLibrary onPlayMedia={noop} />);
+    const container = await renderAs(['member'], <MediaLibrary onPlayMedia={noop} />);
     const img = container.querySelector('img')!;
     expect(img.src).toContain('img.youtube.com');
     await act(async () => img.dispatchEvent(new Event('error')));

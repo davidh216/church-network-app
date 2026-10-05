@@ -10,6 +10,7 @@ import {
   useSavedSearches,
 } from '../../lib/queries/savedSearches';
 import InlineError from '../ui/InlineError';
+import { predefinedSearches } from '../../lib/members/predefinedSearches';
 import type { SavedSearch, SearchQuery } from '../../types/domain';
 
 // The quick searches need the advanced-query evaluator; hidden until it exists (gameplan 2.4 / F038).
@@ -69,81 +70,6 @@ export default function SavedSearches({ onLoadSearch, onClose, currentQuery }: S
     // Usage tracking is best effort; a failure must not block loading the search.
     recordUse.mutate(search.id);
   };
-
-  // Predefined searches for common scenarios
-  const predefinedSearches = [
-    {
-      name: 'High Engagement Members',
-      description: 'Members with engagement score above 80%',
-      query: {
-        conditions: [
-          {
-            field: 'engagement.engagementScore',
-            operator: 'greater_than',
-            value: '80',
-            logic: 'AND',
-          },
-        ],
-        type: 'advanced',
-      },
-    },
-    {
-      name: 'At Risk Members',
-      description: 'Members with high or medium risk levels',
-      query: {
-        conditions: [
-          { field: 'engagement.riskLevel', operator: 'in', value: 'high,medium', logic: 'AND' },
-        ],
-        type: 'advanced',
-      },
-    },
-    {
-      name: 'New Members (Last 30 Days)',
-      description: 'Members who joined in the last 30 days',
-      query: {
-        conditions: [
-          {
-            field: 'createdAt',
-            operator: 'after',
-            value: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-            logic: 'AND',
-          },
-        ],
-        type: 'advanced',
-      },
-    },
-    {
-      name: 'Leaders and Core Members',
-      description: 'Members in leadership or core member stages',
-      query: {
-        conditions: [
-          {
-            field: 'engagement.membershipStage',
-            operator: 'in',
-            value: 'leader,core_member',
-            logic: 'AND',
-          },
-        ],
-        type: 'advanced',
-      },
-    },
-    {
-      name: 'Inactive Members',
-      description: "Members who haven't been active recently",
-      query: {
-        conditions: [
-          {
-            field: 'engagement.membershipStage',
-            operator: 'equals',
-            value: 'inactive',
-            logic: 'OR',
-          },
-          { field: 'engagement.riskLevel', operator: 'equals', value: 'high', logic: 'OR' },
-        ],
-        type: 'advanced',
-      },
-    },
-  ];
 
   return (
     <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-6 mb-4">
@@ -239,7 +165,7 @@ export default function SavedSearches({ onLoadSearch, onClose, currentQuery }: S
         <div className="mb-6">
           <h4 className="text-sm font-medium text-gray-900 mb-3">Quick Searches</h4>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {predefinedSearches.map((search, index) => (
+            {predefinedSearches().map((search, index) => (
               <div
                 key={index}
                 className="p-3 border border-gray-200 rounded-lg hover:border-blue-300 cursor-pointer transition-colors"
