@@ -1,6 +1,6 @@
 # Phase 3 implementation specifications: data model and analytics correctness
 
-Companion to `MODERNIZATION_GAMEPLAN.md` section 6, Phase 3. Written by the planner for the implementation agents (Claude Opus 5.5, medium effort). Status: DRAFT, awaiting owner approval. One stream (D) runs sequentially, one agent per item, on branch `modernize/phase-3` cut from `main` after Phases 0 to 2 are merged. The planner verifies and reviews after D1 to D6 (backend) and again after D7 to D8 (frontend and tests).
+Companion to `MODERNIZATION_GAMEPLAN.md` section 6, Phase 3. Written by the planner for the implementation agents (Claude Opus 5.5, medium effort). Status: APPROVED 2026-10-05 with the planner's recommendations (P3-D1 computed only, P3-D2 minimal attendance UI included, P3-D3 giving and volunteer scores removed, P3-D4 CLI job plus endpoint, P3-D5 YOUTUBE_VIDEO only). One stream (D) runs sequentially, one agent per item, on branch `modernize/phase-3` cut from `main` after Phases 0 to 2 are merged. The planner verifies and reviews after D1 to D6 (backend) and again after D7 to D8 (frontend and tests).
 
 ## 0. Rules for every implementation agent
 
@@ -87,7 +87,7 @@ Engagement tiles and profile show three components; stage and risk labels from s
 1. After D1 to D6: root checks, drift check, migration test against a Phase 2 database, adversarial review (data integrity, security, contract), fixes, push.
 2. After D7 to D8: root checks plus Playwright with axe, review (accessibility, regressions, spec compliance), fixes, gameplan update, push, PR #4 into `main`.
 
-## 4. Decisions (recommendations marked)
+## 4. Decisions (taken 2026-10-05: all recommendations accepted)
 | Id | Decision | Options | Recommendation |
 |---|---|---|---|
 | P3-D1 | Stage and risk | Computed only (recommended); computed with a staff override field | Computed only; an override is a Phase 5 feature if staff ask for it |

@@ -1,6 +1,6 @@
 # Church Network App: Modernization Gameplan
 
-Date: 2026-10-03. Status: APPROVED 2026-10-04 (initial scope = Phase 0 + Phase 1). Phase 0 implemented on branch `modernize/phase-0`; Phases 0, 1 and 2 are merged into `main` (PRs #1, #2, #3, merged 2026-10-05). Phase 3 is specified in `PHASE3_SPECS.md` (draft, awaiting owner approval) on branch `modernize/phase-3`.
+Date: 2026-10-03. Status: APPROVED 2026-10-04 (initial scope = Phase 0 + Phase 1). Phase 0 implemented on branch `modernize/phase-0`; Phases 0, 1 and 2 are merged into `main` (PRs #1, #2, #3, merged 2026-10-05). Phase 3 is specified in `PHASE3_SPECS.md` (approved 2026-10-05) and implemented on branch `modernize/phase-3`.
 
 Owner decisions (2026-10-04): D1 Postgres, moved up to the start of Phase 1 (switching the Prisma provider regenerates the migration history, so it follows the Phase 0 security fixes rather than preceding them). D2 registration requires admin approval. D3 httpOnly cookie sessions. D6 delete the lifecycle-automation tables. Remaining decisions take the recommendation unless the owner says otherwise.
 
@@ -234,7 +234,7 @@ Adversarial reviews: Stream S (3 reviewers, 25 confirmed, none blocking, all fix
 
 ### Phase 3: data model and analytics correctness (about 3 weeks)
 
-Goal: a schema that means what the UI says and analytics computed from real data. Detailed item specifications, contracts and decisions are in `PHASE3_SPECS.md` (status: DRAFT, awaiting owner approval). One sequential stream (D1 to D8) on `modernize/phase-3`, cut from `main`.
+Goal: a schema that means what the UI says and analytics computed from real data. Detailed item specifications, contracts and decisions are in `PHASE3_SPECS.md` (approved 2026-10-05 with the planner's recommendations). One sequential stream (D1 to D8) on `modernize/phase-3`, cut from `main`.
 
 - [ ] 3.1 (M) Deletions decided in D6: lifecycle rules, timeline copies, family denormalised counters, engagement automation fields; the member timeline becomes a computed feed. F057, F066, F105, F108. Spec D1.
 - [ ] 3.2 (L) Prisma enums for every stringly-typed column, mirrored in `@embrace/shared` with a parity test; migrations normalise legacy values; frontend selects and labels derived from shared. F026, F052, F058, F106. Spec D2.
