@@ -79,15 +79,15 @@ describe('member timeline', () => {
         createdAt: day('2026-05-01'),
       },
     });
+    const [jan4, jan11] = await Promise.all(
+      ['2026-01-04', '2026-01-11'].map((date) =>
+        prisma.service.create({ data: { date: day(date), type: 'sunday_service' } }),
+      ),
+    );
     await prisma.attendance.createMany({
       data: [
-        { userId: memberId, serviceDate: day('2026-01-04'), serviceType: 'sunday_service' },
-        {
-          userId: memberId,
-          serviceDate: day('2026-01-11'),
-          serviceType: 'sunday_service',
-          present: false,
-        },
+        { userId: memberId, serviceId: jan4!.id },
+        { userId: memberId, serviceId: jan11!.id, present: false },
       ],
     });
   });

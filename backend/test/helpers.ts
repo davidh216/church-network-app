@@ -13,6 +13,8 @@ export async function resetDatabase() {
   await prisma.memberInteraction.deleteMany();
   await prisma.memberMilestone.deleteMany();
   await prisma.memberActivity.deleteMany();
+  await prisma.attendance.deleteMany();
+  await prisma.service.deleteMany();
   await prisma.memberEngagement.deleteMany();
   await prisma.savedSearch.deleteMany();
   await prisma.media.deleteMany();

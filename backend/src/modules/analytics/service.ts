@@ -1,5 +1,6 @@
 import type { MemberInteraction, Prisma } from '@prisma/client';
 import type { z } from 'zod';
+import { DEFAULT_SCORING_SERVICE_TYPES } from '@embrace/shared';
 import type {
   ActivityType,
   MembershipStage,
@@ -44,7 +45,9 @@ export async function calculateMemberEngagement(userId: string): Promise<Engagem
   const member = await prisma.user.findUniqueOrThrow({
     where: { id: userId },
     include: {
-      attendances: { where: { createdAt: { gte: twelveMonthsAgo } } },
+      attendances: {
+        where: { present: true, service: scoringServicesBetween(twelveMonthsAgo, now) },
+      },
       activities: { where: { createdAt: { gte: twelveMonthsAgo } } },
       interactions: { where: { createdAt: { gte: twelveMonthsAgo } } },
       groupMembers: { where: { isActive: true } },
@@ -52,8 +55,10 @@ export async function calculateMemberEngagement(userId: string): Promise<Engagem
   });
 
   // Attendance (0-100)
-  const totalServices = totalServicesInPeriod(twelveMonthsAgo, now);
-  const memberAttendance = member.attendances.filter((a) => a.present).length;
+  const totalServices = await prisma.service.count({
+    where: scoringServicesBetween(twelveMonthsAgo, now),
+  });
+  const memberAttendance = member.attendances.length;
   const attendanceScore =
     totalServices > 0 ? Math.min((memberAttendance / totalServices) * 100, 100) : 0;
 
@@ -264,9 +269,13 @@ export async function getEngagementTrends(userId: string, months: number): Promi
 // Helpers
 
 // There is no services/events table yet: assume about four services a month.
-function totalServicesInPeriod(startDate: Date, endDate: Date): number {
-  const months = Math.ceil((endDate.getTime() - startDate.getTime()) / (DAY_MS * 30));
-  return months * 4;
+// The services attendance is scored against (PHASE3_SPECS.md 1.4): those of the default scoring
+// set held in the window, by Service.date (never Attendance.createdAt).
+function scoringServicesBetween(startDate: Date, endDate: Date): Prisma.ServiceWhereInput {
+  return {
+    date: { gte: startDate, lte: endDate },
+    type: { in: [...DEFAULT_SCORING_SERVICE_TYPES] },
+  };
 }
 
 function responseRate(interactions: MemberInteraction[]): number {
@@ -333,7 +342,7 @@ async function countActivities(userId: string, startDate: Date) {
     where: { userId, createdAt: { gte: startDate } },
   });
   const servicesAttended = await prisma.attendance.count({
-    where: { userId, present: true, createdAt: { gte: startDate } },
+    where: { userId, present: true, service: { date: { gte: startDate } } },
   });
   const ofType = (type: ActivityType) => activities.filter((a) => a.activityType === type);
 

@@ -148,7 +148,7 @@ function byDateDesc(a: FeedItem, b: FeedItem): number {
 
 // The member timeline, computed on read (decision D6): interactions (by createdAt), milestones
 // (by achievedDate), the notes the viewer may see (by createdAt) and attended services (by
-// service date), merged newest first. Each source contributes at most the rows that can land on
+// Service.date), merged newest first. Each source contributes at most the rows that can land on
 // the requested page, so a page costs four indexed queries of `page * pageSize` rows at most.
 export async function listTimeline(
   userId: string,
@@ -186,9 +186,13 @@ export async function listTimeline(
     }),
     prisma.attendance.findMany({
       where: attendanceWhere,
-      orderBy: [{ serviceDate: 'desc' }, { id: 'asc' }],
+      orderBy: [{ service: { date: 'desc' } }, { id: 'asc' }],
       take,
-      select: { id: true, serviceDate: true, serviceType: true, notes: true },
+      select: {
+        id: true,
+        notes: true,
+        service: { select: { date: true, type: true, title: true } },
+      },
     }),
     Promise.all([
       prisma.memberInteraction.count({ where: { userId } }),
@@ -223,8 +227,8 @@ export async function listTimeline(
     ...attendance.map((a) => ({
       kind: 'attendance' as const,
       id: a.id,
-      date: a.serviceDate,
-      title: `Attended ${humanise(a.serviceType).toLowerCase()}`,
+      date: a.service.date,
+      title: `Attended ${a.service.title || humanise(a.service.type).toLowerCase()}`,
       summary: summarise(a.notes),
     })),
   ];

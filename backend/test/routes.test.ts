@@ -60,7 +60,14 @@ type Route = {
 const PASSWORD = 'correct-horse-battery';
 const tokens = {} as Record<RoleName, string>;
 const ids = {} as Record<
-  'member' | 'other' | 'resetTarget' | 'media' | 'search' | 'searchToDelete',
+  | 'member'
+  | 'other'
+  | 'resetTarget'
+  | 'media'
+  | 'search'
+  | 'searchToDelete'
+  | 'service'
+  | 'serviceToDelete',
   string
 >;
 
@@ -295,6 +302,20 @@ const ROUTES: Route[] = [
     status: 200,
   },
   {
+    route: 'GET /api/member-details/:id/attendance',
+    access: 'staff',
+    as: 'leader',
+    url: () => `/api/member-details/${ids.member}/attendance?months=6`,
+    status: 200,
+  },
+  {
+    route: 'GET /api/member-details/me/attendance',
+    access: 'auth',
+    as: 'member',
+    url: () => '/api/member-details/me/attendance',
+    status: 200,
+  },
+  {
     route: 'GET /api/member-details/:id/interactions',
     access: 'staff',
     as: 'leader',
@@ -337,6 +358,59 @@ const ROUTES: Route[] = [
     as: 'leader',
     url: () => `/api/member-details/${ids.member}/notes`,
     body: () => ({ content: 'Pastoral visit' }),
+    status: 200,
+  },
+
+  {
+    route: 'GET /api/services',
+    access: 'staff',
+    as: 'leader',
+    url: () => '/api/services?from=2026-01-01&to=2026-12-31',
+    status: 200,
+  },
+  {
+    route: 'POST /api/services',
+    access: 'staff',
+    as: 'leader',
+    url: () => '/api/services',
+    body: () => ({ date: '2026-09-13', type: 'bible_study' }),
+    status: 201,
+  },
+  {
+    route: 'GET /api/services/:id',
+    access: 'staff',
+    as: 'leader',
+    url: () => `/api/services/${ids.service}`,
+    status: 200,
+  },
+  {
+    route: 'PUT /api/services/:id',
+    access: 'staff',
+    as: 'leader',
+    url: () => `/api/services/${ids.service}`,
+    body: () => ({ title: 'Harvest Sunday' }),
+    status: 200,
+  },
+  {
+    route: 'DELETE /api/services/:id',
+    access: 'admin',
+    as: 'admin',
+    url: () => `/api/services/${ids.serviceToDelete}`,
+    status: 200,
+  },
+  {
+    route: 'GET /api/services/:id/attendance',
+    access: 'staff',
+    as: 'leader',
+    url: () => `/api/services/${ids.service}/attendance`,
+    status: 200,
+  },
+  {
+    route: 'PUT /api/services/:id/attendance',
+    access: 'staff',
+    as: 'leader',
+    url: () => `/api/services/${ids.service}/attendance`,
+    body: () => ({ present: [ids.member], absent: [ids.other] }),
     status: 200,
   },
 ];
@@ -391,6 +465,16 @@ describe('route matrix', () => {
     ids.searchToDelete = (
       await prisma.savedSearch.create({
         data: { name: 'Doomed', query: '{}', createdById: ids.member },
+      })
+    ).id;
+    ids.service = (
+      await prisma.service.create({
+        data: { date: new Date('2026-09-06T00:00:00.000Z'), type: 'sunday_service' },
+      })
+    ).id;
+    ids.serviceToDelete = (
+      await prisma.service.create({
+        data: { date: new Date('2026-08-30T00:00:00.000Z'), type: 'sunday_service' },
       })
     ).id;
     for (const role of ['admin', 'leader', 'member'] as RoleName[])

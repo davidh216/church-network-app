@@ -87,6 +87,8 @@ model User {
   tagsAdded         UserTag[]           @relation("TagAddedBy")
   ledGroups         Group[]
   headedFamilies    Family[]            @relation("FamilyHead")
+  servicesCreated   Service[]           @relation("ServiceCreatedBy")
+  attendanceRecorded Attendance[]       @relation("AttendanceRecordedBy")
   
   @@index([familyId])
   @@index([isActive])
@@ -241,22 +243,47 @@ model GroupMember {
   @@map("group_members")
 }
 
+// A held service (PHASE3_SPECS.md 1.4): one per date and type. Attendance rows point at it, and
+// attendance scores count services in a window by `date`.
+model Service {
+  id          String      @id @default(cuid())
+  date        DateTime    @db.Date
+  type        ServiceType @default(sunday_service)
+  title       String?
+  notes       String?
+  createdById String?
+  createdBy   User?       @relation("ServiceCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime    @default(now())
+
+  // Relations
+  attendance  Attendance[]
+
+  @@unique([date, type])
+  @@index([date])
+  @@index([createdById])
+  @@map("services")
+}
+
 model Attendance {
   id           String   @id @default(cuid())
   userId       String
-  serviceDate  DateTime
-  serviceType  ServiceType @default(sunday_service)
+  serviceId    String
   present      Boolean  @default(true)
   notes        String?
+  recordedById String?  // Staff member who last recorded this row
   
   // Timestamps
   createdAt    DateTime @default(now())
   
   // Relations
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  service      Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  recordedBy   User?    @relation("AttendanceRecordedBy", fields: [recordedById], references: [id], onDelete: SetNull)
   
-  @@unique([userId, serviceDate, serviceType])
+  @@unique([userId, serviceId])
   @@index([userId])
+  @@index([serviceId])
+  @@index([recordedById])
   @@map("attendance")
 }
 

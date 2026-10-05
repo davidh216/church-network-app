@@ -607,3 +607,148 @@ describe('20261006030000_native_column_types (D4)', () => {
     expect(helpers).toEqual([]);
   });
 });
+
+describe('20261006040000_services_and_attendance (D5)', () => {
+  const schema = 'fixture_d5_services';
+  const rows = <T>(sql: string) => prisma.$queryRawUnsafe<T[]>(sql.replaceAll('$s', schema));
+
+  beforeAll(() => {
+    migrateFixture(
+      schema,
+      '20261006040000_services_and_attendance',
+      `
+      INSERT INTO "users" ("id", "email", "password", "name", "updatedAt") VALUES
+        ('u1', 'u1@example.org', 'x', 'U1', now()),
+        ('u2', 'u2@example.org', 'x', 'U2', now());
+      -- a1/a2/a3: one member twice on the same Sunday (morning and evening) plus a third time
+      -- with the same note; a4: another member that Sunday; a5: the same day, another type;
+      -- a6: a bible study; a7: a later Sunday late in the evening (UTC date kept).
+      INSERT INTO "attendance" ("id", "userId", "serviceDate", "serviceType", "present", "notes", "createdAt") VALUES
+        ('a1', 'u1', '2026-01-04 10:00', 'sunday_service', false, 'early', '2026-01-04 10:05'),
+        ('a2', 'u1', '2026-01-04 18:00', 'sunday_service', true, 'evening', '2026-01-04 18:05'),
+        ('a3', 'u1', '2026-01-04 19:00', 'sunday_service', false, ' early ', '2026-01-04 19:05'),
+        ('a4', 'u2', '2026-01-04 10:00', 'sunday_service', true, NULL, '2026-01-04 09:30'),
+        ('a5', 'u1', '2026-01-04 12:00', 'other', true, NULL, '2026-01-04 12:05'),
+        ('a6', 'u2', '2026-01-07 19:00', 'bible_study', false, NULL, '2026-01-07 19:05'),
+        ('a7', 'u1', '2026-01-11 23:30', 'sunday_service', true, '', '2026-01-12 08:00');
+      `,
+    );
+  }, 60_000);
+
+  afterAll(() => dropSchema(schema));
+
+  type ServiceRow = { id: string; date: string; type: string; createdAt: Date };
+  const services = () =>
+    rows<ServiceRow>(
+      `SELECT "id", "date"::text AS date, "type"::text AS type, "createdAt" FROM "$s"."services" ORDER BY "date", "type"`,
+    );
+
+  it('creates one service per legacy date and type, dated by day', async () => {
+    const all = await services();
+    expect(all.map((s) => [s.date, s.type])).toEqual([
+      ['2026-01-04', 'other'],
+      ['2026-01-04', 'sunday_service'],
+      ['2026-01-07', 'bible_study'],
+      ['2026-01-11', 'sunday_service'],
+    ]);
+    // A cuid-shaped id, and the earliest createdAt of the rows the service groups.
+    for (const s of all) expect(s.id).toMatch(/^c[0-9a-f]{24}$/);
+    expect(all[1]!.createdAt.toISOString()).toBe('2026-01-04T09:30:00.000Z');
+  });
+
+  it('repoints every row and collapses same-day duplicates into the oldest row', async () => {
+    const attendance = await rows<{
+      id: string;
+      userId: string;
+      date: string;
+      type: string;
+      present: boolean;
+      notes: string | null;
+      recordedById: string | null;
+    }>(
+      `SELECT a."id", a."userId", s."date"::text AS date, s."type"::text AS type, a."present", a."notes", a."recordedById"
+       FROM "$s"."attendance" a JOIN "$s"."services" s ON s."id" = a."serviceId" ORDER BY a."id"`,
+    );
+    expect(attendance).toEqual([
+      {
+        id: 'a1',
+        userId: 'u1',
+        date: '2026-01-04',
+        type: 'sunday_service',
+        present: true,
+        notes: 'early\nevening',
+        recordedById: null,
+      },
+      {
+        id: 'a4',
+        userId: 'u2',
+        date: '2026-01-04',
+        type: 'sunday_service',
+        present: true,
+        notes: null,
+        recordedById: null,
+      },
+      {
+        id: 'a5',
+        userId: 'u1',
+        date: '2026-01-04',
+        type: 'other',
+        present: true,
+        notes: null,
+        recordedById: null,
+      },
+      {
+        id: 'a6',
+        userId: 'u2',
+        date: '2026-01-07',
+        type: 'bible_study',
+        present: false,
+        notes: null,
+        recordedById: null,
+      },
+      {
+        id: 'a7',
+        userId: 'u1',
+        date: '2026-01-11',
+        type: 'sunday_service',
+        present: true,
+        notes: '',
+        recordedById: null,
+      },
+    ]);
+  });
+
+  it('drops the legacy columns and enforces the new keys and delete rules', async () => {
+    const columns = await rows<{ column_name: string }>(
+      `SELECT column_name FROM information_schema.columns
+       WHERE table_schema = '$s' AND table_name = 'attendance' ORDER BY column_name`,
+    );
+    expect(columns.map((c) => c.column_name)).toEqual([
+      'createdAt',
+      'id',
+      'notes',
+      'present',
+      'recordedById',
+      'serviceId',
+      'userId',
+    ]);
+
+    const sunday = (await services())[1];
+    await expect(
+      prisma.$executeRawUnsafe(
+        `INSERT INTO "${schema}"."attendance" ("id", "userId", "serviceId") VALUES ('dup', 'u1', '${sunday!.id}')`,
+      ),
+    ).rejects.toThrow(/23505/);
+    await expect(
+      prisma.$executeRawUnsafe(
+        `INSERT INTO "${schema}"."services" ("id", "date", "type") VALUES ('cdup', '2026-01-04', 'sunday_service')`,
+      ),
+    ).rejects.toThrow(/23505/);
+
+    await prisma.$executeRawUnsafe(
+      `DELETE FROM "${schema}"."services" WHERE "id" = '${sunday!.id}'`,
+    );
+    const left = await rows<{ id: string }>(`SELECT "id" FROM "$s"."attendance" ORDER BY "id"`);
+    expect(left.map((r) => r.id)).toEqual(['a5', 'a6', 'a7']);
+  });
+});
