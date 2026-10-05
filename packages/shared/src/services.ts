@@ -68,8 +68,9 @@ export const DEFAULT_SCORING_SERVICE_TYPES: readonly ServiceType[] = ['sunday_se
 export const DEFAULT_ATTENDANCE_MONTHS = 12;
 export const MAX_ATTENDANCE_MONTHS = 60;
 
-// `types` arrives as `types=a,b` or as a repeated parameter; either way a list of service types.
-const scoringTypes = z.preprocess(
+// `types` arrives as `types=a,b` or as a repeated parameter; either way a list of service types,
+// returned in enum order.
+export const scoringTypes = z.preprocess(
   (value) =>
     typeof value === 'string'
       ? value

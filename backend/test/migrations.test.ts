@@ -752,3 +752,90 @@ describe('20261006040000_services_and_attendance (D5)', () => {
     expect(left.map((r) => r.id)).toEqual(['a5', 'a6', 'a7']);
   });
 });
+
+describe('20261006050000_engagement_rules_and_snapshots (D6)', () => {
+  const schema = 'fixture_d6_engagement';
+  const rows = <T>(sql: string) => prisma.$queryRawUnsafe<T[]>(sql.replaceAll('$s', schema));
+
+  beforeAll(() => {
+    migrateFixture(
+      schema,
+      '20261006050000_engagement_rules_and_snapshots',
+      `
+      INSERT INTO "users" ("id", "email", "password", "name", "updatedAt") VALUES
+        ('u1', 'u1@example.org', 'x', 'U1', now()),
+        ('u2', 'u2@example.org', 'x', 'U2', now());
+      INSERT INTO "member_engagement" ("userId", "updatedAt", "engagementScore", "attendanceScore",
+        "givingScore", "volunteerScore", "communityScore", "communicationScore",
+        "servicesAttended", "volunteerHours", "donationCount", "groupMeetings",
+        "membershipStage", "riskLevel") VALUES
+        ('u1', now(), 64, 80, 50, 40, 60, 75, 9, 12.5, 4, 0, 'core_member', 'low'),
+        ('u2', now(), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 'visitor', 'medium');
+      `,
+    );
+  }, 60_000);
+
+  afterAll(() => dropSchema(schema));
+
+  it('drops the giving and volunteer columns and keeps every row and the remaining values', async () => {
+    const columns = await rows<{ column_name: string }>(
+      `SELECT column_name FROM information_schema.columns
+       WHERE table_schema = '$s' AND table_name = 'member_engagement'`,
+    );
+    const names = columns.map((c) => c.column_name);
+    for (const gone of [
+      'givingScore',
+      'volunteerScore',
+      'volunteerHours',
+      'donationCount',
+      'groupMeetings',
+    ])
+      expect(names).not.toContain(gone);
+    expect(
+      await rows(
+        `SELECT "userId", "engagementScore", "attendanceScore", "communityScore", "communicationScore",
+                "servicesAttended", "membershipStage"::text AS stage, "riskLevel"::text AS risk
+         FROM "$s"."member_engagement" ORDER BY "userId"`,
+      ),
+    ).toEqual([
+      {
+        userId: 'u1',
+        engagementScore: 64,
+        attendanceScore: 80,
+        communityScore: 60,
+        communicationScore: 75,
+        servicesAttended: 9,
+        stage: 'core_member',
+        risk: 'low',
+      },
+      {
+        userId: 'u2',
+        engagementScore: 0,
+        attendanceScore: 0,
+        communityScore: 0,
+        communicationScore: 0,
+        servicesAttended: 0,
+        stage: 'visitor',
+        risk: 'medium',
+      },
+    ]);
+  });
+
+  it('creates an empty snapshot table keyed by member and month, deleted with the member', async () => {
+    expect(await rows(`SELECT * FROM "$s"."engagement_snapshots"`)).toEqual([]);
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "${schema}"."engagement_snapshots" ("id", "userId", "month", "engagementScore",
+        "attendanceScore", "communityScore", "communicationScore", "membershipStage", "riskLevel", "updatedAt")
+       VALUES ('s1', 'u1', '2026-10-01', 1, 1, 1, 1, 'visitor', 'low', now())`,
+    );
+    await expect(
+      prisma.$executeRawUnsafe(
+        `INSERT INTO "${schema}"."engagement_snapshots" ("id", "userId", "month", "engagementScore",
+          "attendanceScore", "communityScore", "communicationScore", "membershipStage", "riskLevel", "updatedAt")
+         VALUES ('s2', 'u1', '2026-10-01', 2, 2, 2, 2, 'visitor', 'low', now())`,
+      ),
+    ).rejects.toThrow();
+    await prisma.$executeRawUnsafe(`DELETE FROM "${schema}"."users" WHERE "id" = 'u1'`);
+    expect(await rows(`SELECT * FROM "$s"."engagement_snapshots"`)).toEqual([]);
+  });
+});

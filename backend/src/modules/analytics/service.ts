@@ -1,205 +1,445 @@
-import type { MemberInteraction, Prisma } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 import type { z } from 'zod';
-import { DEFAULT_SCORING_SERVICE_TYPES } from '@embrace/shared';
+import {
+  DEFAULT_SCORING_SERVICE_TYPES,
+  ENGAGEMENT_WEIGHTS,
+  MEMBERSHIP_STAGES,
+  RISK_LEVELS,
+} from '@embrace/shared';
 import type {
   ActivityType,
+  EngagementComponents,
+  EngagementTrend,
+  InteractionType,
   MembershipStage,
   recordActivityInput,
   recordInteractionInput,
   RiskLevel,
+  ServiceType,
 } from '@embrace/shared';
 import { prisma } from '../../lib/prisma';
-import { logger } from '../../lib/logger';
+import { HttpError } from '../../lib/http-error';
+import { monthsBefore, today } from '../services/service';
+
+// Engagement, stage and risk (PHASE3_SPECS.md 1.5). Everything is computed from recorded data:
+// attendance at services (windowed by Service.date), group memberships, interactions and
+// activities (by their createdAt). The rules are deterministic for a given `now`; the pure parts
+// (scoreEngagement, determineStage, determineRisk) take the facts gathered by gatherFacts.
+//
+// Windows are whole UTC days ending today: "the last N weeks" is the 7N days up to and including
+// today, "weeks 9 to 26" the days 56 to 181 before today, "12 months" starts on the same day 12
+// calendar months ago.
 
 // Request metadata (a JSON object validated by the shared schema) as a Prisma JSON input.
 const jsonOrUndefined = (value: Record<string, unknown> | undefined) =>
   value as Prisma.InputJsonObject | undefined;
 
-export interface EngagementMetrics {
-  attendanceScore: number;
-  givingScore: number;
-  volunteerScore: number;
-  communityScore: number;
-  communicationScore: number;
-  overallScore: number;
+export const RULES = {
+  /** attendanceScore: attended / scoring services in this many weeks. */
+  scoreWeeks: 12,
+  /** at_risk and the medium risk rate look at this many recent weeks. */
+  recentWeeks: 8,
+  /** inactive: no attendance in this many weeks while there were scoring services. */
+  lapsedWeeks: 26,
+  /** communicationScore and the 12-month counters. */
+  communicationMonths: 12,
+  /** core_member: a volunteer or ministry activity within this many months. */
+  ministryMonths: 12,
+  /** new_member: membershipDate within this many months. */
+  newMemberMonths: 6,
+  /** visitor: no membershipDate and fewer attendances than this, ever. */
+  visitorAttendances: 3,
+  /** medium risk: recent attendance rate below this. */
+  mediumRiskRate: 0.25,
+  /** communicationScore when there were no two-way interactions. */
+  neutralCommunication: 50,
+} as const;
+
+/** Interaction types that expect an answer, and the ones that are an answer. */
+const TWO_WAY_TYPES: InteractionType[] = ['email_sent', 'email_opened', 'sms_sent', 'sms_replied'];
+const RESPONSE_TYPES: InteractionType[] = ['email_opened', 'sms_replied'];
+const MINISTRY_ACTIVITIES: ActivityType[] = ['volunteer', 'ministry_participation'];
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** What the rules read about one member. Attendance counts only rows marked present. */
+export interface EngagementFacts {
+  isActive: boolean;
+  /** Holds the admin or leader role. */
+  hasLeaderRole: boolean;
+  membershipDate: Date | null;
+  /** Scoring services held in the last 12 weeks, and how many of them the member attended. */
+  scoringServices: number;
+  attendedScoring: number;
+  /** The same for the last 8 weeks (the medium risk rate). */
+  recentScoringServices: number;
+  recentAttendedScoring: number;
+  /** Scoring services in the last 26 weeks held on or after the day the account was created. */
+  lapsedWindowScoringServices: number;
+  /** Attendance at services of any type: last 8 weeks, weeks 9 to 26, and ever. */
+  attendedRecent: number;
+  attendedEarlier: number;
+  attendedEver: number;
+  /** Active memberships of active groups. */
+  activeGroups: number;
+  /** volunteer or ministry_participation activities in the last 12 months. */
+  ministryActivities: number;
+  /** Two-way interactions in the last 12 months, and how many of them got a response. */
+  twoWayInteractions: number;
+  respondedInteractions: number;
 }
 
-export interface MonthlyTrend {
-  month: string;
-  activities: number;
-  points: number;
+const percent = (part: number, whole: number) => Math.round(Math.min(part / whole, 1) * 100);
+
+/** The three components (0-100, whole numbers) and their weighted sum. */
+export function scoreEngagement(facts: EngagementFacts): EngagementComponents {
+  const attendanceScore =
+    facts.scoringServices > 0 ? percent(facts.attendedScoring, facts.scoringServices) : 0;
+  const communityScore = facts.activeGroups === 0 ? 0 : facts.activeGroups === 1 ? 60 : 100;
+  const communicationScore =
+    facts.twoWayInteractions > 0
+      ? percent(facts.respondedInteractions, facts.twoWayInteractions)
+      : RULES.neutralCommunication;
+  const engagementScore = Math.round(
+    ENGAGEMENT_WEIGHTS.attendance * attendanceScore +
+      ENGAGEMENT_WEIGHTS.community * communityScore +
+      ENGAGEMENT_WEIGHTS.communication * communicationScore,
+  );
+  return { engagementScore, attendanceScore, communityScore, communicationScore };
 }
 
-const DAY_MS = 1000 * 60 * 60 * 24;
+/** The first rule that matches, in the order of PHASE3_SPECS.md 1.5. */
+export function determineStage(facts: EngagementFacts, now = new Date()): MembershipStage {
+  if (facts.hasLeaderRole) return 'leader';
+  const attended26 = facts.attendedRecent + facts.attendedEarlier;
+  if (!facts.isActive || (attended26 === 0 && facts.lapsedWindowScoringServices > 0))
+    return 'inactive';
+  if (facts.attendedEarlier > 0 && facts.attendedRecent === 0) return 'at_risk';
+  if (!facts.membershipDate && facts.attendedEver < RULES.visitorAttendances) return 'visitor';
+  if (
+    facts.membershipDate &&
+    facts.membershipDate.getTime() >= monthsBefore(today(now), RULES.newMemberMonths).getTime()
+  )
+    return 'new_member';
+  if (facts.activeGroups > 0 || facts.ministryActivities > 0) return 'core_member';
+  return 'active_member';
+}
 
-const twelveMonthsBefore = (date: Date) =>
-  new Date(date.getFullYear() - 1, date.getMonth(), date.getDate());
+export function determineRisk(stage: MembershipStage, facts: EngagementFacts): RiskLevel {
+  if (stage === 'at_risk' || stage === 'inactive') return 'high';
+  const lowRecentRate =
+    facts.recentScoringServices > 0 &&
+    facts.recentAttendedScoring / facts.recentScoringServices < RULES.mediumRiskRate;
+  if (lowRecentRate || stage === 'visitor') return 'medium';
+  return 'low';
+}
 
-/**
- * Calculate engagement score for a specific member. Throws Prisma P2025 (404) for an unknown member.
- */
-export async function calculateMemberEngagement(userId: string): Promise<EngagementMetrics> {
-  const now = new Date();
-  const twelveMonthsAgo = twelveMonthsBefore(now);
+interface Gathered {
+  facts: EngagementFacts;
+  lastActivity: Date | null;
+  servicesAttended: number;
+  eventsAttended: number;
+}
 
-  const member = await prisma.user.findUniqueOrThrow({
+/** Reads the facts for one member. Throws Prisma P2025 (404) for an unknown member. */
+async function gatherFacts(
+  userId: string,
+  types: readonly ServiceType[],
+  now: Date,
+): Promise<Gathered> {
+  const day = today(now);
+  const daysBefore = (n: number) => new Date(day.getTime() - n * DAY_MS);
+  const lastWeeks = (weeks: number) => ({ gte: daysBefore(weeks * 7 - 1), lte: day });
+  const scoring = (date: Prisma.DateTimeFilter): Prisma.ServiceWhereInput => ({
+    date,
+    type: { in: [...types] },
+  });
+  const twelveMonths = monthsBefore(day, RULES.communicationMonths);
+
+  const user = await prisma.user.findUniqueOrThrow({
     where: { id: userId },
-    include: {
-      attendances: {
-        where: { present: true, service: scoringServicesBetween(twelveMonthsAgo, now) },
-      },
-      activities: { where: { createdAt: { gte: twelveMonthsAgo } } },
-      interactions: { where: { createdAt: { gte: twelveMonthsAgo } } },
-      groupMembers: { where: { isActive: true } },
+    select: {
+      isActive: true,
+      membershipDate: true,
+      createdAt: true,
+      lastLoginAt: true,
+      roles: { select: { role: { select: { name: true } } } },
     },
   });
-
-  // Attendance (0-100)
-  const totalServices = await prisma.service.count({
-    where: scoringServicesBetween(twelveMonthsAgo, now),
+  const lapsedStart = new Date(
+    Math.max(daysBefore(RULES.lapsedWeeks * 7 - 1).getTime(), today(user.createdAt).getTime()),
+  );
+  const present = (service?: Prisma.ServiceWhereInput): Prisma.AttendanceWhereInput => ({
+    userId,
+    present: true,
+    ...(service ? { service } : {}),
   });
-  const memberAttendance = member.attendances.length;
-  const attendanceScore =
-    totalServices > 0 ? Math.min((memberAttendance / totalServices) * 100, 100) : 0;
+  const interactionWindow = { userId, createdAt: { gte: twelveMonths } };
+  const twoWay: Prisma.MemberInteractionWhereInput = {
+    OR: [{ interactionType: { in: TWO_WAY_TYPES } }, { responseRequired: true }],
+  };
 
-  // Giving (0-100): consistency (months with a donation), not amount
-  const givingActivities = member.activities.filter((a) => a.activityType === 'donation');
-  const givingMonths = new Set(
-    givingActivities.map((a) => `${a.createdAt.getFullYear()}-${a.createdAt.getMonth()}`),
-  ).size;
-  const givingScore = Math.min((givingMonths / 12) * 100, 100);
+  const [
+    scoringServices,
+    attendedScoring,
+    recentScoringServices,
+    recentAttendedScoring,
+    lapsedWindowScoringServices,
+    attendedRecent,
+    attendedEarlier,
+    attendedEver,
+    activeGroups,
+    ministryActivities,
+    twoWayInteractions,
+    respondedInteractions,
+    servicesAttended,
+    eventsAttended,
+    lastAttended,
+    lastInteraction,
+    lastMemberActivity,
+  ] = await Promise.all([
+    prisma.service.count({ where: scoring(lastWeeks(RULES.scoreWeeks)) }),
+    prisma.attendance.count({ where: present(scoring(lastWeeks(RULES.scoreWeeks))) }),
+    prisma.service.count({ where: scoring(lastWeeks(RULES.recentWeeks)) }),
+    prisma.attendance.count({ where: present(scoring(lastWeeks(RULES.recentWeeks))) }),
+    prisma.service.count({ where: scoring({ gte: lapsedStart, lte: day }) }),
+    prisma.attendance.count({ where: present({ date: lastWeeks(RULES.recentWeeks) }) }),
+    prisma.attendance.count({
+      where: present({
+        date: {
+          gte: daysBefore(RULES.lapsedWeeks * 7 - 1),
+          lte: daysBefore(RULES.recentWeeks * 7),
+        },
+      }),
+    }),
+    prisma.attendance.count({ where: present() }),
+    prisma.groupMember.count({ where: { userId, isActive: true, group: { isActive: true } } }),
+    prisma.memberActivity.count({
+      where: {
+        userId,
+        activityType: { in: MINISTRY_ACTIVITIES },
+        createdAt: { gte: monthsBefore(day, RULES.ministryMonths) },
+      },
+    }),
+    prisma.memberInteraction.count({ where: { ...interactionWindow, ...twoWay } }),
+    prisma.memberInteraction.count({
+      where: {
+        ...interactionWindow,
+        AND: [
+          twoWay,
+          {
+            OR: [
+              { interactionType: { in: RESPONSE_TYPES } },
+              { responseReceived: true },
+              { responseTime: { not: null } },
+            ],
+          },
+        ],
+      },
+    }),
+    prisma.attendance.count({ where: present({ date: { gte: twelveMonths, lte: day } }) }),
+    prisma.memberActivity.count({
+      where: { userId, activityType: 'event_attendance', createdAt: { gte: twelveMonths } },
+    }),
+    prisma.attendance.findFirst({
+      where: present({ date: { lte: day } }),
+      orderBy: { service: { date: 'desc' } },
+      select: { service: { select: { date: true } } },
+    }),
+    prisma.memberInteraction.findFirst({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      select: { createdAt: true },
+    }),
+    prisma.memberActivity.findFirst({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      select: { createdAt: true },
+    }),
+  ]);
 
-  // Volunteering (0-100)
-  const volunteerActivities = member.activities.filter(
-    (a) => a.activityType === 'volunteer' || a.activityType === 'ministry_participation',
-  );
-  const volunteerScore = Math.min((volunteerActivities.length / 12) * 100, 100);
-
-  // Community (0-100): group participation. The legacy 'group_participation' activity type is not
-  // in the ActivityType enum (the D2 migration mapped it to 'other'), so only memberships count.
-  const activeGroups = member.groupMembers.length;
-  const communityScore = Math.min(activeGroups * 20, 100);
-
-  // Communication (0-100): email/sms engagement
-  const communicationInteractions = member.interactions.filter(
-    (i) => i.interactionType.includes('email') || i.interactionType.includes('sms'),
-  );
-  const communicationScore = responseRate(communicationInteractions) * 100;
-
-  const overallScore =
-    attendanceScore * 0.3 +
-    givingScore * 0.2 +
-    volunteerScore * 0.2 +
-    communityScore * 0.15 +
-    communicationScore * 0.15;
+  const candidates = [
+    lastAttended?.service.date,
+    lastInteraction?.createdAt,
+    lastMemberActivity?.createdAt,
+    user.lastLoginAt,
+  ].filter((d): d is Date => d instanceof Date);
+  const lastActivity = candidates.length
+    ? new Date(Math.max(...candidates.map((d) => d.getTime())))
+    : null;
 
   return {
-    attendanceScore: Math.round(attendanceScore),
-    givingScore: Math.round(givingScore),
-    volunteerScore: Math.round(volunteerScore),
-    communityScore: Math.round(communityScore),
-    communicationScore: Math.round(communicationScore),
-    overallScore: Math.round(overallScore),
+    facts: {
+      isActive: user.isActive,
+      hasLeaderRole: user.roles.some((r) => r.role.name === 'admin' || r.role.name === 'leader'),
+      membershipDate: user.membershipDate,
+      scoringServices,
+      attendedScoring,
+      recentScoringServices,
+      recentAttendedScoring,
+      lapsedWindowScoringServices,
+      attendedRecent,
+      attendedEarlier,
+      attendedEver,
+      activeGroups,
+      ministryActivities,
+      twoWayInteractions,
+      respondedInteractions,
+    },
+    lastActivity,
+    servicesAttended,
+    eventsAttended,
   };
 }
 
-/**
- * Recalculate and store the engagement row for a member.
- */
-export async function updateMemberEngagement(userId: string): Promise<void> {
-  const metrics = await calculateMemberEngagement(userId);
-  const now = new Date();
-  const membershipStage = await determineMembershipStage(userId, metrics.overallScore);
-  const lastActivity = await lastActivityDate(userId);
-  const riskLevel = determineRiskLevel(lastActivity, metrics.overallScore);
-  const activityCounts = await countActivities(userId, twelveMonthsBefore(now));
+export interface MemberEngagement extends EngagementComponents {
+  membershipStage: MembershipStage;
+  riskLevel: RiskLevel;
+  lastActivity: Date | null;
+  types: ServiceType[];
+}
 
-  const data = {
-    engagementScore: metrics.overallScore,
-    lastCalculated: now,
-    attendanceScore: metrics.attendanceScore,
-    givingScore: metrics.givingScore,
-    volunteerScore: metrics.volunteerScore,
-    communityScore: metrics.communityScore,
-    communicationScore: metrics.communicationScore,
-    ...activityCounts,
+/**
+ * A member's engagement computed now (nothing is stored). `types` is the scoring set of the
+ * attendance rules. Throws Prisma P2025 (404) for an unknown member.
+ */
+export async function calculateMemberEngagement(
+  userId: string,
+  types: readonly ServiceType[] = DEFAULT_SCORING_SERVICE_TYPES,
+  now = new Date(),
+): Promise<MemberEngagement> {
+  const { facts, lastActivity } = await gatherFacts(userId, types, now);
+  const membershipStage = determineStage(facts, now);
+  return {
+    ...scoreEngagement(facts),
+    membershipStage,
+    riskLevel: determineRisk(membershipStage, facts),
+    lastActivity,
+    types: [...types],
+  };
+}
+
+/** The first day (UTC) of `now`'s month, as a `date` column value. */
+export function snapshotMonth(now = new Date()): Date {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+}
+
+/**
+ * Recalculates and stores a member's engagement row (default scoring set) and upserts the
+ * snapshot of the current month. Throws Prisma P2025 (404) for an unknown member.
+ */
+export async function updateMemberEngagement(userId: string, now = new Date()): Promise<void> {
+  const { facts, lastActivity, servicesAttended, eventsAttended } = await gatherFacts(
+    userId,
+    DEFAULT_SCORING_SERVICE_TYPES,
+    now,
+  );
+  const components = scoreEngagement(facts);
+  const membershipStage = determineStage(facts, now);
+  const riskLevel = determineRisk(membershipStage, facts);
+  const row = {
+    ...components,
+    servicesAttended,
+    eventsAttended,
     membershipStage,
     riskLevel,
     lastActivity,
+    lastCalculated: now,
   };
-  await prisma.memberEngagement.upsert({
-    where: { userId },
-    update: data,
-    create: { userId, ...data },
-  });
+  const snapshot = { ...components, membershipStage, riskLevel };
+  const month = snapshotMonth(now);
+  await prisma.$transaction([
+    prisma.memberEngagement.upsert({
+      where: { userId },
+      update: row,
+      create: { userId, ...row },
+    }),
+    prisma.engagementSnapshot.upsert({
+      where: { userId_month: { userId, month } },
+      update: snapshot,
+      create: { userId, month, ...snapshot },
+    }),
+  ]);
 }
 
-/**
- * Recalculate engagement for every active member. Failures are logged and skipped.
- */
-export async function refreshAllEngagement(): Promise<{ updated: number; total: number }> {
-  const members = await prisma.user.findMany({ where: { isActive: true }, select: { id: true } });
-  let updated = 0;
-  for (const member of members) {
-    try {
-      await updateMemberEngagement(member.id);
-      updated++;
-    } catch (err) {
-      logger.error({ err, userId: member.id }, 'engagement refresh failed');
-    }
-  }
-  return { updated, total: members.length };
-}
+const zeroed = <K extends string>(keys: readonly K[]) =>
+  Object.fromEntries(keys.map((k) => [k, 0])) as Record<K, number>;
 
 /**
- * Member analytics for the dashboard.
+ * Member analytics for the dashboard, over active accounts and their stored engagement rows.
  */
 export async function getMemberAnalytics() {
   const now = new Date();
   const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const activeAccount: Prisma.MemberEngagementWhereInput = { user: { isActive: true } };
 
-  const totalMembers = await prisma.user.count({ where: { isActive: true } });
-  const activeMembers = await prisma.memberEngagement.count({
-    where: { membershipStage: { in: ['active_member', 'core_member', 'leader'] } },
-  });
-  const newMembersThisMonth = await prisma.user.count({
-    where: { isActive: true, createdAt: { gte: firstOfMonth } },
-  });
-  const atRiskMembers = await prisma.memberEngagement.count({
-    where: { riskLevel: { in: ['medium', 'high'] } },
-  });
-  const engagementAgg = await prisma.memberEngagement.aggregate({
-    _avg: { engagementScore: true },
-  });
+  const [
+    totalMembers,
+    activeMembers,
+    newMembersThisMonth,
+    atRiskMembers,
+    averages,
+    topEngagedMembers,
+    stageDistribution,
+    riskDistribution,
+  ] = await Promise.all([
+    prisma.user.count({ where: { isActive: true } }),
+    prisma.memberEngagement.count({
+      where: {
+        ...activeAccount,
+        membershipStage: { in: ['active_member', 'core_member', 'leader'] },
+      },
+    }),
+    prisma.user.count({ where: { isActive: true, createdAt: { gte: firstOfMonth } } }),
+    prisma.memberEngagement.count({ where: { ...activeAccount, riskLevel: 'high' } }),
+    prisma.memberEngagement.aggregate({
+      where: activeAccount,
+      _avg: {
+        engagementScore: true,
+        attendanceScore: true,
+        communityScore: true,
+        communicationScore: true,
+      },
+    }),
+    prisma.memberEngagement.findMany({
+      where: activeAccount,
+      take: 10,
+      orderBy: [{ engagementScore: 'desc' }, { userId: 'asc' }],
+      include: { user: { select: { id: true, name: true, email: true, avatar: true } } },
+    }),
+    prisma.memberEngagement.groupBy({
+      by: ['membershipStage'],
+      where: activeAccount,
+      _count: { _all: true },
+    }),
+    prisma.memberEngagement.groupBy({
+      by: ['riskLevel'],
+      where: activeAccount,
+      _count: { _all: true },
+    }),
+  ]);
 
-  const topEngagedMembers = await prisma.memberEngagement.findMany({
-    take: 10,
-    orderBy: { engagementScore: 'desc' },
-    include: { user: { select: { id: true, name: true, email: true, avatar: true } } },
-  });
-
-  const stageDistribution = await prisma.memberEngagement.groupBy({
-    by: ['membershipStage'],
-    _count: { membershipStage: true },
-  });
-  const riskDistribution = await prisma.memberEngagement.groupBy({
-    by: ['riskLevel'],
-    _count: { riskLevel: true },
-  });
+  const membershipStageDistribution = zeroed(MEMBERSHIP_STAGES);
+  for (const s of stageDistribution) membershipStageDistribution[s.membershipStage] = s._count._all;
+  const riskLevelDistribution = zeroed(RISK_LEVELS);
+  for (const r of riskDistribution) riskLevelDistribution[r.riskLevel] = r._count._all;
+  const avg = (value: number | null) => Math.round(value ?? 0);
 
   return {
     totalMembers,
     activeMembers,
     newMembersThisMonth,
     atRiskMembers,
-    averageEngagementScore: Math.round(engagementAgg._avg.engagementScore ?? 0),
+    averageEngagementScore: avg(averages._avg.engagementScore),
+    averageScores: {
+      engagementScore: avg(averages._avg.engagementScore),
+      attendanceScore: avg(averages._avg.attendanceScore),
+      communityScore: avg(averages._avg.communityScore),
+      communicationScore: avg(averages._avg.communicationScore),
+    },
     topEngagedMembers,
-    membershipStageDistribution: Object.fromEntries(
-      stageDistribution.map((s) => [s.membershipStage, s._count.membershipStage]),
-    ) as Partial<Record<MembershipStage, number>>,
-    riskLevelDistribution: Object.fromEntries(
-      riskDistribution.map((r) => [r.riskLevel, r._count.riskLevel]),
-    ) as Partial<Record<RiskLevel, number>>,
+    membershipStageDistribution,
+    riskLevelDistribution,
   };
 }
 
@@ -245,113 +485,31 @@ export async function recordInteraction(
 }
 
 /**
- * Monthly activity counts and points for a member over the last `months` months.
+ * The member's engagement snapshots of the last `months` months (the current month included),
+ * oldest first. Months without a refresh have no entry.
  */
-export async function getEngagementTrends(userId: string, months: number): Promise<MonthlyTrend[]> {
-  const endDate = new Date();
-  const startDate = new Date(endDate.getFullYear(), endDate.getMonth() - months, 1);
-  const activities = await prisma.memberActivity.findMany({
-    where: { userId, createdAt: { gte: startDate, lte: endDate } },
-    orderBy: { createdAt: 'asc' },
-  });
-
-  const monthly = new Map<string, MonthlyTrend>();
-  for (const activity of activities) {
-    const month = `${activity.createdAt.getFullYear()}-${String(activity.createdAt.getMonth() + 1).padStart(2, '0')}`;
-    const entry = monthly.get(month) ?? { month, activities: 0, points: 0 };
-    entry.activities++;
-    entry.points += activity.points;
-    monthly.set(month, entry);
-  }
-  return [...monthly.values()];
-}
-
-// Helpers
-
-// There is no services/events table yet: assume about four services a month.
-// The services attendance is scored against (PHASE3_SPECS.md 1.4): those of the default scoring
-// set held in the window, by Service.date (never Attendance.createdAt).
-function scoringServicesBetween(startDate: Date, endDate: Date): Prisma.ServiceWhereInput {
-  return {
-    date: { gte: startDate, lte: endDate },
-    type: { in: [...DEFAULT_SCORING_SERVICE_TYPES] },
-  };
-}
-
-function responseRate(interactions: MemberInteraction[]): number {
-  if (interactions.length === 0) return 0;
-  const responses = interactions.filter(
-    (i) =>
-      i.interactionType.includes('opened') ||
-      i.interactionType.includes('replied') ||
-      i.responseTime !== null,
-  ).length;
-  return responses / interactions.length;
-}
-
-async function determineMembershipStage(
+export async function getEngagementTrends(
   userId: string,
-  engagementScore: number,
-): Promise<MembershipStage> {
-  const member = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { createdAt: true, membershipDate: true, roles: { include: { role: true } } },
-  });
-  if (!member) return 'visitor';
-
-  const daysSinceJoining = Math.floor(
-    (Date.now() - (member.membershipDate ?? member.createdAt).getTime()) / DAY_MS,
+  months: number,
+  now = new Date(),
+): Promise<EngagementTrend[]> {
+  const exists = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+  if (!exists) throw new HttpError(404, 'User not found');
+  const current = snapshotMonth(now);
+  const from = new Date(
+    Date.UTC(current.getUTCFullYear(), current.getUTCMonth() - (months - 1), 1),
   );
-  const hasLeadershipRole = member.roles.some((ur) => ['admin', 'leader'].includes(ur.role.name));
-
-  if (hasLeadershipRole) return 'leader';
-  if (engagementScore >= 80 && daysSinceJoining > 180) return 'core_member';
-  if (engagementScore >= 60 && daysSinceJoining > 90) return 'active_member';
-  if (daysSinceJoining > 30) return 'new_member';
-  return 'visitor';
-}
-
-function determineRiskLevel(lastActivity: Date | null, engagementScore: number): RiskLevel {
-  const daysSinceActivity = lastActivity
-    ? Math.floor((Date.now() - lastActivity.getTime()) / DAY_MS)
-    : 999;
-  if (engagementScore < 30 || daysSinceActivity > 60) return 'high';
-  if (engagementScore < 50 || daysSinceActivity > 30) return 'medium';
-  return 'low';
-}
-
-async function lastActivityDate(userId: string): Promise<Date | null> {
-  const lastActivity = await prisma.memberActivity.findFirst({
-    where: { userId },
-    orderBy: { createdAt: 'desc' },
+  const snapshots = await prisma.engagementSnapshot.findMany({
+    where: { userId, month: { gte: from, lte: current } },
+    orderBy: { month: 'asc' },
   });
-  return lastActivity?.createdAt ?? null;
-}
-
-// Hours recorded in a volunteer activity's metadata; one hour when absent or unreadable.
-function volunteerHours(metadata: Prisma.JsonValue): number {
-  const hours =
-    metadata && typeof metadata === 'object' && !Array.isArray(metadata)
-      ? metadata.hours
-      : undefined;
-  return typeof hours === 'number' && hours > 0 ? hours : 1;
-}
-
-async function countActivities(userId: string, startDate: Date) {
-  const activities = await prisma.memberActivity.findMany({
-    where: { userId, createdAt: { gte: startDate } },
-  });
-  const servicesAttended = await prisma.attendance.count({
-    where: { userId, present: true, service: { date: { gte: startDate } } },
-  });
-  const ofType = (type: ActivityType) => activities.filter((a) => a.activityType === type);
-
-  return {
-    servicesAttended,
-    eventsAttended: ofType('event_attendance').length,
-    volunteerHours: ofType('volunteer').reduce((sum, a) => sum + volunteerHours(a.metadata), 0),
-    donationCount: ofType('donation').length,
-    // No activity type records group meetings since the enum migration (see communityScore).
-    groupMeetings: 0,
-  };
+  return snapshots.map((s) => ({
+    month: s.month.toISOString().slice(0, 7),
+    engagementScore: s.engagementScore,
+    attendanceScore: s.attendanceScore,
+    communityScore: s.communityScore,
+    communicationScore: s.communicationScore,
+    membershipStage: s.membershipStage,
+    riskLevel: s.riskLevel,
+  }));
 }

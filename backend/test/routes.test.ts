@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import express from 'express';
 import type { Express } from 'express';
 import request from 'supertest';
@@ -67,7 +67,8 @@ const ids = {} as Record<
   | 'search'
   | 'searchToDelete'
   | 'service'
-  | 'serviceToDelete',
+  | 'serviceToDelete'
+  | 'job',
   string
 >;
 
@@ -247,6 +248,13 @@ const ROUTES: Route[] = [
     access: 'staff',
     as: 'leader',
     url: () => '/api/analytics/members/engagement/refresh-all',
+    status: 202,
+  },
+  {
+    route: 'GET /api/analytics/jobs/:id',
+    access: 'staff',
+    as: 'leader',
+    url: () => `/api/analytics/jobs/${ids.job}`,
     status: 200,
   },
   {
@@ -477,8 +485,16 @@ describe('route matrix', () => {
         data: { date: new Date('2026-08-30T00:00:00.000Z'), type: 'sunday_service' },
       })
     ).id;
+    const jobs = await import('../src/modules/analytics/jobs.js');
+    ids.job = jobs.startEngagementRefresh().job.jobId;
+    await jobs.engagementRefreshIdle();
     for (const role of ['admin', 'leader', 'member'] as RoleName[])
       tokens[role] = await helpers.login(`routes-${role}@routes.test.local`);
+  });
+
+  // The refresh-all happy path starts a background job; let it finish before the next file.
+  afterAll(async () => {
+    await (await import('../src/modules/analytics/jobs.js')).engagementRefreshIdle();
   });
 
   it('lists every route mounted by the app, and only those', () => {

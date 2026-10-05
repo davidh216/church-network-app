@@ -29,7 +29,7 @@ export function toDay(date: Date): string {
 }
 
 /** Today (UTC) as a `date` column value. */
-function today(now = new Date()): Date {
+export function today(now = new Date()): Date {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 }
 

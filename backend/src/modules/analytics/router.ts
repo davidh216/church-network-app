@@ -1,8 +1,15 @@
 import express from 'express';
-import { recordActivityInput, recordInteractionInput } from '@embrace/shared';
+import {
+  engagementQuery,
+  engagementTrendsQuery,
+  recordActivityInput,
+  recordInteractionInput,
+} from '@embrace/shared';
 import { validate } from '../../middleware/validate';
-import { idParams, noInputQuery, trendsQuery } from './schemas';
+import { HttpError } from '../../lib/http-error';
+import { idParams, jobParams, noInputQuery } from './schemas';
 import * as analytics from './service';
+import { getJob, startEngagementRefresh, toJobResponse } from './jobs';
 
 // Mounted behind authenticate + requireRole(staff) in app.ts.
 const router = express.Router();
@@ -11,21 +18,36 @@ router.get('/members', validate({ query: noInputQuery }), async (_req, res) => {
   res.json({ success: true, analytics: await analytics.getMemberAnalytics() });
 });
 
-router.post(
-  '/members/engagement/refresh-all',
-  validate({ query: noInputQuery }),
-  async (_req, res) => {
-    const { updated, total } = await analytics.refreshAllEngagement();
+// Starts the refresh-all job (or reports the one already running) and answers at once.
+router.post('/members/engagement/refresh-all', validate({ query: noInputQuery }), (_req, res) => {
+  const { job, started } = startEngagementRefresh();
+  res.status(202).json({
+    success: true,
+    ...toJobResponse(job),
+    message: started ? 'Engagement refresh started' : 'An engagement refresh is already running',
+  });
+});
+
+router.get('/jobs/:id', validate({ params: jobParams }), (req, res) => {
+  const job = getJob(req.params.id);
+  if (!job) throw new HttpError(404, 'Job not found');
+  res.json({ success: true, ...toJobResponse(job) });
+});
+
+router.get(
+  '/members/:id/engagement',
+  validate({ params: idParams, query: engagementQuery }),
+  async (req, res) => {
+    const { lastActivity, ...engagement } = await analytics.calculateMemberEngagement(
+      req.params.id,
+      req.query.types,
+    );
     res.json({
       success: true,
-      message: `Updated engagement scores for ${updated} out of ${total} members`,
+      engagement: { ...engagement, lastActivity: lastActivity?.toISOString() ?? null },
     });
   },
 );
-
-router.get('/members/:id/engagement', validate({ params: idParams }), async (req, res) => {
-  res.json({ success: true, engagement: await analytics.calculateMemberEngagement(req.params.id) });
-});
 
 router.post('/members/:id/engagement/refresh', validate({ params: idParams }), async (req, res) => {
   await analytics.updateMemberEngagement(req.params.id);
@@ -34,7 +56,7 @@ router.post('/members/:id/engagement/refresh', validate({ params: idParams }), a
 
 router.get(
   '/members/:id/trends',
-  validate({ params: idParams, query: trendsQuery }),
+  validate({ params: idParams, query: engagementTrendsQuery }),
   async (req, res) => {
     res.json({
       success: true,

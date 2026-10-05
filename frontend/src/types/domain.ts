@@ -49,8 +49,6 @@ export interface Engagement {
   riskLevel: RiskLevel;
   lastActivity?: string | null;
   attendanceScore?: number;
-  givingScore?: number;
-  volunteerScore?: number;
   communityScore?: number;
   communicationScore?: number;
 }
@@ -197,8 +195,6 @@ export interface MemberDetails {
     riskLevel: RiskLevel;
     lastActivity?: string;
     attendanceScore: number;
-    givingScore: number;
-    volunteerScore: number;
     communityScore: number;
     communicationScore: number;
   };
@@ -259,6 +255,13 @@ export interface MemberAnalytics {
   newMembersThisMonth: number;
   atRiskMembers: number;
   averageEngagementScore: number;
+  /** Averages of the stored engagement rows of active accounts. */
+  averageScores?: {
+    engagementScore: number;
+    attendanceScore: number;
+    communityScore: number;
+    communicationScore: number;
+  };
   topEngagedMembers: Array<{
     user: {
       id: string;

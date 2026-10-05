@@ -43,8 +43,6 @@ export const staffSelect = {
       riskLevel: true,
       lastActivity: true,
       attendanceScore: true,
-      givingScore: true,
-      volunteerScore: true,
       communityScore: true,
       communicationScore: true,
     },

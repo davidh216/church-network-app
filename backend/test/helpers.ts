@@ -4,11 +4,15 @@ import bcrypt from 'bcryptjs';
 import request from 'supertest';
 import { prisma } from '../src/lib/prisma';
 import { createApp } from '../src/app';
+import { engagementRefreshIdle } from '../src/modules/analytics/jobs';
 import type { RoleName } from '../src/types/auth';
 
 export const app = createApp();
 
 export async function resetDatabase() {
+  // A refresh-all job started by an earlier test must not write while the tables are emptied.
+  await engagementRefreshIdle();
+  await prisma.engagementSnapshot.deleteMany();
   await prisma.memberNote.deleteMany();
   await prisma.memberInteraction.deleteMany();
   await prisma.memberMilestone.deleteMany();

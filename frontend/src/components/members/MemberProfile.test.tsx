@@ -31,8 +31,6 @@ const details = {
     membershipStage: 'core_member',
     riskLevel: 'medium',
     attendanceScore: 0,
-    givingScore: 0,
-    volunteerScore: 0,
     communityScore: 0,
     communicationScore: 0,
   },

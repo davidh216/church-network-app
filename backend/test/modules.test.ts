@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { app, bearer, createUser, login, resetDatabase } from './helpers';
 import { prisma } from '../src/lib/prisma';
+import { engagementRefreshIdle } from '../src/modules/analytics/jobs';
 
 // Happy paths of the routes moved into src/modules/* (analytics, member-details, saved searches, media).
 let staff: string;
@@ -116,8 +117,8 @@ describe('modules', () => {
       const stored = await prisma.memberEngagement.findUniqueOrThrow({
         where: { userId: memberId },
       });
-      expect(stored.volunteerHours).toBe(3);
-      expect(stored.riskLevel).toMatch(/^(low|medium|high)$/);
+      // A visitor (no membership date, no attendance) with no services held yet.
+      expect(stored).toMatchObject({ membershipStage: 'visitor', riskLevel: 'medium' });
 
       const interaction = await request(app)
         .post(`/api/analytics/members/${memberId}/interactions`)
@@ -129,13 +130,28 @@ describe('modules', () => {
         .get(`/api/analytics/members/${memberId}/engagement`)
         .set(bearer(staff));
       expect(engagement.status).toBe(200);
-      expect(engagement.body.engagement.communicationScore).toBe(100);
+      expect(engagement.body.engagement).toMatchObject({
+        attendanceScore: 0,
+        communityScore: 0,
+        communicationScore: 100,
+        engagementScore: 20,
+        membershipStage: 'visitor',
+        types: ['sunday_service'],
+      });
+      expect(engagement.body.engagement).not.toHaveProperty('givingScore');
 
       const trends = await request(app)
         .get(`/api/analytics/members/${memberId}/trends?months=3`)
         .set(bearer(staff));
       expect(trends.status).toBe(200);
-      expect(trends.body.trends).toEqual([expect.objectContaining({ activities: 1, points: 5 })]);
+      // The activity's refresh wrote this month's snapshot (before the interaction was recorded).
+      expect(trends.body.trends).toEqual([
+        expect.objectContaining({
+          month: new Date().toISOString().slice(0, 7),
+          communicationScore: 50,
+          membershipStage: 'visitor',
+        }),
+      ]);
 
       expect(
         (
@@ -147,8 +163,12 @@ describe('modules', () => {
       const all = await request(app)
         .post('/api/analytics/members/engagement/refresh-all')
         .set(bearer(staff));
-      expect(all.status).toBe(200);
-      expect(all.body.message).toBe('Updated engagement scores for 2 out of 2 members');
+      expect(all.status).toBe(202);
+      await engagementRefreshIdle();
+      const job = await request(app)
+        .get(`/api/analytics/jobs/${all.body.jobId}`)
+        .set(bearer(staff));
+      expect(job.body).toMatchObject({ status: 'completed', processed: 2, failed: 0, total: 2 });
 
       const totals = await request(app).get('/api/analytics/members').set(bearer(staff));
       expect(totals.status).toBe(200);
@@ -229,6 +249,18 @@ describe('modules', () => {
       expect(res.status).toBe(200);
       expect(res.body.data).toHaveLength(1);
       expect(res.body.data[0].Email).toBe('modules-member@modules.test.local');
+      // The three engagement components only (P3-D3 removed giving and volunteer scores).
+      expect(Object.keys(res.body.data[0]).filter((k) => k.endsWith('Score'))).toEqual([
+        'Engagement Score',
+        'Attendance Score',
+        'Community Score',
+        'Communication Score',
+      ]);
+      const csv = await request(app)
+        .get(`/api/users/export?format=csv&members=${memberId}`)
+        .set(bearer(staff));
+      expect(csv.status).toBe(200);
+      expect(csv.text.split('\n')[0]).not.toMatch(/Giving|Volunteer Score/);
     });
   });
 });

@@ -70,6 +70,7 @@ model User {
   
   // CRM Relations
   engagement     MemberEngagement?
+  engagementSnapshots EngagementSnapshot[]
   activities     MemberActivity[]
   interactions   MemberInteraction[]
   milestones     MemberMilestone[]
@@ -292,20 +293,16 @@ model MemberEngagement {
   engagementScore    Float    @default(0)    // 0-100 engagement score
   lastCalculated     DateTime @default(now())
   
-  // Engagement metrics
-  attendanceScore    Float    @default(0)    // Based on service attendance
-  givingScore        Float    @default(0)    // Based on giving consistency
-  volunteerScore     Float    @default(0)    // Based on volunteer participation
-  communityScore     Float    @default(0)    // Based on group participation
-  communicationScore Float    @default(0)    // Based on email/sms engagement
-  
+  // Engagement components (PHASE3_SPECS.md 1.5), each 0-100. engagementScore weighs them
+  // 0.6 / 0.2 / 0.2. Giving and volunteer scores were removed in P3-D3 (no data source).
+  attendanceScore    Float    @default(0)    // Attended / scoring services, last 12 weeks
+  communityScore     Float    @default(0)    // Active group memberships: 0, 60 or 100
+  communicationScore Float    @default(0)    // Response rate on two-way interactions, 12 months
+
   // Activity counters (rolling 12 months)
   servicesAttended   Int      @default(0)
   eventsAttended     Int      @default(0)
-  volunteerHours     Float    @default(0)
-  donationCount      Int      @default(0)
-  groupMeetings      Int      @default(0)
-  
+
   // Lifecycle indicators
   membershipStage    MembershipStage @default(visitor)
   riskLevel          RiskLevel       @default(low)
@@ -322,6 +319,27 @@ model MemberEngagement {
   @@index([membershipStage])
   @@index([riskLevel])
   @@map("member_engagement")
+}
+
+// The engagement row as it stood in a month (PHASE3_SPECS.md 1.5): every refresh upserts the row
+// of the current month, so the last refresh of a month is what that month keeps.
+model EngagementSnapshot {
+  id                 String          @id @default(cuid())
+  userId             String
+  month              DateTime        @db.Date // First day of the month (UTC)
+  engagementScore    Float
+  attendanceScore    Float
+  communityScore     Float
+  communicationScore Float
+  membershipStage    MembershipStage
+  riskLevel          RiskLevel
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  user               User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, month])
+  @@map("engagement_snapshots")
 }
 
 model MemberActivity {

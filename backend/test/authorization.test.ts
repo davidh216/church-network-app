@@ -268,7 +268,7 @@ describe('authorization', () => {
       expect(lines).toHaveLength(1);
       expect(lines[0]).toMatch(/^"Name","Email","Phone","Bio","Status","Roles",/);
       expect(lines[0]).toMatch(/"Last Login"$/);
-      expect(lines[0]!.split(',')).toHaveLength(18);
+      expect(lines[0]!.split(',')).toHaveLength(16);
     });
 
     it('can create members but cannot grant the admin or leader role', async () => {
