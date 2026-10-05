@@ -1,11 +1,18 @@
 'use client';
 
 import { useId, useState, type FormEvent } from 'react';
-import { youtubeVideoId } from '@embrace/shared';
-import { getErrorMessage } from '../../lib/errors';
+import { createMediaInput } from '@embrace/shared';
+import {
+  apiErrorsFor,
+  fieldA11y,
+  FORM_ERROR_KEY,
+  validateForm,
+  type FieldErrors,
+} from '../../lib/forms/validate';
 import { MEDIA_TAGS } from '../../lib/media/format';
 import { useCreateMedia } from '../../lib/queries/media';
 import Dialog from '../ui/Dialog';
+import FieldError from '../ui/FieldError';
 
 interface AddMediaDialogProps {
   onClose: () => void;
@@ -16,11 +23,13 @@ interface AddMediaDialogProps {
 const inputClass =
   'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500';
 const labelClass = 'block text-sm font-medium text-gray-700 mb-1';
+const FIELDS = ['title', 'url', 'description', 'tags'] as const;
 
 /** Staff form for adding a YouTube video to the library. */
 export default function AddMediaDialog({ onClose, onSaved }: AddMediaDialogProps) {
   const [form, setForm] = useState({ title: '', description: '', url: '', tags: [] as string[] });
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const createMedia = useCreateMedia();
   const loading = createMedia.isPending;
   const titleId = useId();
@@ -36,23 +45,22 @@ export default function AddMediaDialog({ onClose, onSaved }: AddMediaDialogProps
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    // The API's createMediaInput: same YouTube URL rule and messages; sends the canonical URL.
+    const checked = validateForm(createMediaInput, { ...form, type: 'YOUTUBE_VIDEO' });
+    if (!checked.ok) {
+      setFieldErrors(checked.errors);
+      setError(checked.errors[FORM_ERROR_KEY] ?? '');
+      return;
+    }
+    setFieldErrors({});
     setError('');
-    if (!form.title.trim()) return setError('Title is required');
-    if (!form.url.trim()) return setError('YouTube URL is required');
-    // Same strict watch/share-URL check the API applies; the API stays the authority.
-    if (youtubeVideoId(form.url.trim()) === null)
-      return setError('Please enter a valid YouTube URL');
     try {
-      await createMedia.mutateAsync({
-        title: form.title,
-        description: form.description,
-        type: 'YOUTUBE_VIDEO',
-        url: form.url.trim(),
-        tags: form.tags,
-      });
+      await createMedia.mutateAsync(checked.data);
       onSaved();
     } catch (err: unknown) {
-      setError(getErrorMessage(err));
+      const failed = apiErrorsFor(err, FIELDS, 'Failed to add the video');
+      setFieldErrors(failed.fieldErrors);
+      setError(failed.message);
     }
   };
 
@@ -72,13 +80,14 @@ export default function AddMediaDialog({ onClose, onSaved }: AddMediaDialogProps
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} noValidate className="space-y-4">
           <div>
             <label htmlFor="media-title" className={labelClass}>
               Video Title *
             </label>
             <input
               id="media-title"
+              {...fieldA11y('media-title', fieldErrors.title)}
               type="text"
               value={form.title}
               onChange={(e) => update('title', e.target.value)}
@@ -86,6 +95,7 @@ export default function AddMediaDialog({ onClose, onSaved }: AddMediaDialogProps
               className={inputClass}
               placeholder="Sunday Service - January 2025"
             />
+            <FieldError fieldId="media-title" message={fieldErrors.title} />
           </div>
 
           <div>
@@ -94,6 +104,7 @@ export default function AddMediaDialog({ onClose, onSaved }: AddMediaDialogProps
             </label>
             <input
               id="media-url"
+              {...fieldA11y('media-url', fieldErrors.url)}
               type="url"
               value={form.url}
               onChange={(e) => update('url', e.target.value)}
@@ -101,6 +112,7 @@ export default function AddMediaDialog({ onClose, onSaved }: AddMediaDialogProps
               className={inputClass}
               placeholder="https://www.youtube.com/watch?v=..."
             />
+            <FieldError fieldId="media-url" message={fieldErrors.url} />
             <p className="text-xs text-gray-500 mt-1">
               Paste the URL from your Embrace Church YouTube channel
             </p>
@@ -112,12 +124,14 @@ export default function AddMediaDialog({ onClose, onSaved }: AddMediaDialogProps
             </label>
             <textarea
               id="media-description"
+              {...fieldA11y('media-description', fieldErrors.description)}
               value={form.description}
               onChange={(e) => update('description', e.target.value)}
               rows={3}
               className={inputClass}
               placeholder="Brief description of the video content..."
             />
+            <FieldError fieldId="media-description" message={fieldErrors.description} />
           </div>
 
           <fieldset>
@@ -137,6 +151,7 @@ export default function AddMediaDialog({ onClose, onSaved }: AddMediaDialogProps
                 </label>
               ))}
             </div>
+            <FieldError fieldId="media-tags" message={fieldErrors.tags} />
           </fieldset>
 
           <div className="flex justify-end space-x-3 pt-4">

@@ -1,4 +1,4 @@
-import type { ApiEnvelope, RegisterResult, User } from '../../types/domain';
+import type { ApiEnvelope, RegisterInput, RegisterResult, User } from '../../types/domain';
 import { apiFetch } from './client';
 
 /** Signs in; the API sets the httpOnly session cookie. */
@@ -22,11 +22,6 @@ export async function me(): Promise<User> {
 }
 
 /** Creates an account that an administrator must approve. Does not sign in. */
-export async function register(input: {
-  email: string;
-  password: string;
-  name: string;
-  phone?: string;
-}): Promise<RegisterResult> {
+export async function register(input: RegisterInput): Promise<RegisterResult> {
   return apiFetch<ApiEnvelope<RegisterResult>>('/auth/register', { method: 'POST', json: input });
 }

@@ -1,9 +1,18 @@
-// Shared domain types for the frontend. Mirrors the backend API responses.
-// Phase 2 moves these into a shared package with zod schemas used by both sides.
+// Domain types for the frontend. Request bodies are the inferred input types of the
+// @embrace/shared schemas the API validates with; response shapes stay local because the
+// shared package only describes inputs.
 
 import type { SearchQuery } from '@embrace/shared';
 
-export type { CreateSavedSearchInput, SearchQuery } from '@embrace/shared';
+export type {
+  CreateMediaInput,
+  CreateSavedSearchInput,
+  CreateUserInput,
+  LoginInput,
+  RegisterInput,
+  SearchQuery,
+  UpdateUserInput,
+} from '@embrace/shared';
 
 export interface Role {
   id: string;
@@ -265,36 +274,6 @@ export interface RegisterResult {
   message: string;
 }
 
-/** Body of POST /api/users (staff only). */
-export interface CreateUserInput {
-  email: string;
-  password: string;
-  name: string;
-  phone?: string | null;
-  bio?: string | null;
-  isActive?: boolean;
-  roleIds?: string[];
-}
-
-/** Body of PUT /api/users/:id. Omitted fields are left unchanged. */
-export interface UpdateUserInput {
-  name?: string;
-  phone?: string | null;
-  bio?: string | null;
-  isActive?: boolean;
-  roleIds?: string[];
-}
-
-/** Body of POST /api/media (staff only). Only YouTube videos are supported. */
-export interface CreateMediaInput {
-  title: string;
-  description?: string;
-  type: 'YOUTUBE_VIDEO';
-  url: string;
-  tags: string[];
-}
-
-/** Body of POST /api/users/saved-searches. */
 export function hasRole(user: Pick<User, 'roles'> | null | undefined, ...names: string[]): boolean {
   return !!user?.roles?.some((ur) => names.includes(ur.role.name));
 }
