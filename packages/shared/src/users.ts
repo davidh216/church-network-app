@@ -1,28 +1,28 @@
 import { z } from 'zod';
 import { passwordNotEmail, passwordSchema } from './password-policy.js';
-import { cuid, optionalText } from './primitives.js';
+import { cuid, emailAddress, optionalText, requiredText } from './primitives.js';
 
-const roleIds = z.array(cuid).max(10);
+const roleIds = z.array(cuid).max(10, 'Choose at most 10 roles');
 
 // POST /api/users (staff)
 export const createUserInput = z
   .object({
-    name: z.string().trim().min(1).max(200),
-    email: z.email().max(254),
+    name: requiredText('Name', 200),
+    email: emailAddress,
     password: passwordSchema,
-    phone: optionalText(50),
-    bio: optionalText(2000),
-    isActive: z.boolean().optional(),
+    phone: optionalText('Phone', 50),
+    bio: optionalText('Bio', 2000),
+    isActive: z.boolean({ error: 'Status must be true or false' }).optional(),
     roleIds: roleIds.optional(),
   })
   .superRefine(passwordNotEmail);
 
 // PUT /api/users/:id
 export const updateUserInput = z.object({
-  name: z.string().trim().min(1).max(200).optional(),
-  phone: optionalText(50),
-  bio: optionalText(2000),
-  isActive: z.boolean().optional(),
+  name: requiredText('Name', 200).optional(),
+  phone: optionalText('Phone', 50),
+  bio: optionalText('Bio', 2000),
+  isActive: z.boolean({ error: 'Status must be true or false' }).optional(),
   roleIds: roleIds.optional(),
 });
 

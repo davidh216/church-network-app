@@ -41,7 +41,10 @@ describe('LoginForm', () => {
     expect(auth.login).not.toHaveBeenCalled();
     expect(screen.getByLabelText('Email')).toHaveAttribute('aria-invalid', 'true');
     expect(screen.getByLabelText('Password')).toHaveAttribute('aria-invalid', 'true');
-    expect(screen.getByLabelText('Email')).toHaveAccessibleDescription(/.+/);
+    expect(screen.getByLabelText('Email')).toHaveAccessibleDescription(
+      'Enter a valid email address',
+    );
+    expect(screen.getByLabelText('Password')).toHaveAccessibleDescription('Enter your password');
   });
 
   it('shows the API error as an alert when the credentials are wrong', async () => {

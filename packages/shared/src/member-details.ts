@@ -8,13 +8,14 @@ import {
   noteType,
   priority,
 } from './enums.js';
+import { boundedText, DATE_MESSAGE, requiredText } from './primitives.js';
 
 // POST /api/member-details/:id/interactions (staff)
 export const addInteractionInput = z.object({
   interactionType,
   channel,
-  subject: z.string().trim().max(200).optional(),
-  content: z.string().trim().max(10_000).optional(),
+  subject: boundedText('Subject', 200).optional(),
+  content: boundedText('Content', 10_000).optional(),
   category: interactionCategory.optional(),
   priority: priority.default('normal'),
   responseRequired: z.boolean().default(false),
@@ -22,22 +23,22 @@ export const addInteractionInput = z.object({
 
 // POST /api/member-details/:id/milestones (staff)
 export const addMilestoneInput = z.object({
-  milestoneType: z.string().trim().min(1).max(100),
-  title: z.string().trim().min(1).max(200),
-  description: z.string().trim().max(2000).optional(),
-  achievedDate: z.coerce.date(),
+  milestoneType: requiredText('Milestone type', 100),
+  title: requiredText('Title', 200, 'Please enter a title'),
+  description: boundedText('Description', 2000).optional(),
+  achievedDate: z.coerce.date({ error: DATE_MESSAGE }),
   category: milestoneCategory.default('general'),
   impact: impact.default('medium'),
 });
 
 // POST /api/member-details/:id/notes (staff)
 export const addNoteInput = z.object({
-  title: z.string().trim().max(200).optional(),
-  content: z.string().trim().min(1).max(10_000),
+  title: boundedText('Title', 200).optional(),
+  content: requiredText('Note', 10_000, 'Please enter the note'),
   noteType: noteType.default('general'),
   isPrivate: z.boolean().default(false),
   isFollowUp: z.boolean().default(false),
-  followUpDate: z.coerce.date().optional(),
+  followUpDate: z.coerce.date({ error: DATE_MESSAGE }).optional(),
 });
 
 export type AddInteractionInput = z.input<typeof addInteractionInput>;

@@ -57,7 +57,12 @@ describe('authentication', () => {
       .post('/api/auth/register')
       .send({ email: 'not-an-email', password: 'short', name: '' });
     expect(res.status).toBe(400);
-    expect(res.body.details).toBeDefined();
+    // The shared schema's human messages, the same text the register form shows inline.
+    expect(res.body.details).toMatchObject({
+      email: ['Enter a valid email address'],
+      password: ['Password must be at least 12 characters'],
+      name: ['Name is required'],
+    });
   });
 
   it('inactive accounts cannot log in', async () => {

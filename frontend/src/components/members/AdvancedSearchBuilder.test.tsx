@@ -1,5 +1,6 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import { MAX_SEARCH_CONDITIONS } from '@embrace/shared';
 import { render } from '@/test/render';
 import AdvancedSearchBuilder from './AdvancedSearchBuilder';
 
@@ -96,5 +97,13 @@ describe('AdvancedSearchBuilder', () => {
     expect(onClear).toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Close advanced search' }));
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it('allows at most MAX_SEARCH_CONDITIONS conditions', async () => {
+    await setup();
+    const add = screen.getByRole('button', { name: 'Add Condition' });
+    for (let i = 1; i < MAX_SEARCH_CONDITIONS; i++) fireEvent.click(add);
+    expect(screen.getByLabelText(`Condition ${MAX_SEARCH_CONDITIONS} field`)).toBeInTheDocument();
+    expect(add).toBeDisabled();
   });
 });

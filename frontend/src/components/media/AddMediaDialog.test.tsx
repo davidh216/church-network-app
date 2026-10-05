@@ -65,6 +65,9 @@ describe('AddMediaDialog', () => {
     await submit();
     expect(mediaApi.createMedia).not.toHaveBeenCalled();
     expect(screen.getByLabelText('Video Title *')).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByLabelText('Video Title *')).toHaveAccessibleDescription(
+      'Please enter a title',
+    );
     expect(screen.getByLabelText('YouTube URL *')).not.toHaveAttribute('aria-invalid');
   });
 

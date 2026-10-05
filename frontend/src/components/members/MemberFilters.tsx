@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { SearchQuery } from '@embrace/shared';
+import { MAX_QUERY_TEXT, type SearchQuery } from '@embrace/shared';
 import { formatStage } from '@/lib/members/display';
 import type { MemberFilters as Filters, MemberSort } from '@/lib/members/filters';
 import AdvancedQueryChip from './search/AdvancedQueryChip';
@@ -108,6 +108,7 @@ export default function MemberFilters({
                   canManage ? 'Search by name, email, phone, or bio...' : 'Search by name...'
                 }
                 aria-label="Search members"
+                maxLength={MAX_QUERY_TEXT}
                 value={filters.search}
                 onChange={(e) => onFilterChange('search', e.target.value)}
                 className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-hidden focus:ring-2 focus:ring-blue-500"

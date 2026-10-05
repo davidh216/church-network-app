@@ -12,7 +12,7 @@ export function isCommonPassword(password: string): boolean {
 }
 
 export const passwordSchema = z
-  .string()
+  .string({ error: 'Enter a password' })
   .min(MIN_PASSWORD_LENGTH, `Password must be at least ${MIN_PASSWORD_LENGTH} characters`)
   .max(MAX_PASSWORD_LENGTH, `Password must be at most ${MAX_PASSWORD_LENGTH} characters`)
   .refine((password) => !isCommonPassword(password), 'This password is too common');

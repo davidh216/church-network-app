@@ -154,7 +154,7 @@ describe('input schemas', () => {
   });
 
   it('optionalQueryText drops blank values and keeps the max length', () => {
-    const schema = optionalQueryText(5);
+    const schema = optionalQueryText('Search', 5);
     expect(schema.parse(undefined)).toBeUndefined();
     expect(schema.parse('')).toBeUndefined();
     expect(schema.parse(' \t\n ')).toBeUndefined();

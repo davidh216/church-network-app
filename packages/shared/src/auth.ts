@@ -1,25 +1,33 @@
 import { z } from 'zod';
 import { MAX_PASSWORD_LENGTH, passwordNotEmail, passwordSchema } from './password-policy.js';
+import { boundedText, emailAddress, requiredText, tooLong } from './primitives.js';
 
 // POST /api/auth/register
 export const registerInput = z
   .object({
-    email: z.email().max(254),
+    email: emailAddress,
     password: passwordSchema,
-    name: z.string().trim().min(1).max(200),
-    phone: z.string().trim().max(50).optional(),
+    name: requiredText('Name', 200),
+    phone: boundedText('Phone', 50).optional(),
   })
   .superRefine(passwordNotEmail);
 
+// A password the user types to prove who they are (not checked against the policy).
+const enteredPassword = (required: string) =>
+  z
+    .string({ error: required })
+    .min(1, required)
+    .max(MAX_PASSWORD_LENGTH, tooLong('Password', MAX_PASSWORD_LENGTH));
+
 // POST /api/auth/login
 export const loginInput = z.object({
-  email: z.email().max(254),
-  password: z.string().min(1).max(MAX_PASSWORD_LENGTH),
+  email: emailAddress,
+  password: enteredPassword('Enter your password'),
 });
 
 // POST /api/auth/change-password
 export const changePasswordInput = z.object({
-  currentPassword: z.string().min(1).max(MAX_PASSWORD_LENGTH),
+  currentPassword: enteredPassword('Enter your current password'),
   newPassword: passwordSchema,
 });
 

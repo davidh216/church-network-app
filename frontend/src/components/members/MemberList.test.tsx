@@ -144,6 +144,11 @@ describe('MemberList', () => {
       'placeholder',
       'Search by name...',
     );
+    // The API rejects longer search terms (MAX_QUERY_TEXT).
+    expect(screen.getByRole('textbox', { name: 'Search members' })).toHaveAttribute(
+      'maxLength',
+      '200',
+    );
   });
 
   it('offers staff the full search placeholder', async () => {

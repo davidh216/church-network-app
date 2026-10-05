@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import type { SearchQuery } from '@embrace/shared';
+import { MAX_SEARCH_CONDITIONS, type SearchQuery } from '@embrace/shared';
 import {
   buildSearchQuery,
   draftsFromQuery,
@@ -9,8 +9,6 @@ import {
   type DraftCondition,
 } from '@/lib/members/searchQuery';
 import ConditionRow from './search/ConditionRow';
-
-const MAX_CONDITIONS = 10;
 
 interface AdvancedSearchBuilderProps {
   /** The query to start from: the active advanced query, or the quick filters as conditions. */
@@ -121,7 +119,7 @@ export default function AdvancedSearchBuilder({
         <button
           type="button"
           onClick={() => setDrafts((prev) => [...prev, newDraft()])}
-          disabled={drafts.length >= MAX_CONDITIONS}
+          disabled={drafts.length >= MAX_SEARCH_CONDITIONS}
           className="px-3 py-2 border border-gray-300 shadow-xs text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
         >
           Add Condition

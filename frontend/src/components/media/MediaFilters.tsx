@@ -1,3 +1,4 @@
+import { MAX_QUERY_TEXT } from '@embrace/shared';
 import { MEDIA_TAGS, tagLabel } from '@/lib/media/format';
 
 interface MediaFiltersProps {
@@ -24,6 +25,7 @@ export default function MediaFilters({
           type="text"
           placeholder="Search videos..."
           aria-label="Search videos"
+          maxLength={MAX_QUERY_TEXT}
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
           className={`w-full ${inputClass}`}

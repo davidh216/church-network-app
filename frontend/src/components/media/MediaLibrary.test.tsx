@@ -73,6 +73,7 @@ describe('MediaLibrary', () => {
     const callsBefore = mediaApi.listMedia.mock.calls.length;
 
     const input = screen.getByPlaceholderText('Search videos...');
+    expect(input).toHaveAttribute('maxLength', '200');
     input.focus();
     fireEvent.change(input, { target: { value: 'gr' } });
     fireEvent.change(input, { target: { value: 'grace' } });

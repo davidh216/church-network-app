@@ -3,7 +3,9 @@ import { membershipStage, riskLevel } from './enums.js';
 import {
   MAX_PAGE,
   MAX_PAGE_SIZE,
+  MAX_QUERY_TEXT,
   optionalQueryText,
+  requiredText,
   type WithNumericPaging,
 } from './primitives.js';
 
@@ -13,10 +15,13 @@ import {
 export const TEXT_SEARCH_FIELDS = ['name', 'email', 'phone', 'bio'] as const;
 export const DATE_SEARCH_FIELDS = ['createdAt', 'lastLoginAt'] as const;
 
+// One query combines at most this many conditions.
+export const MAX_SEARCH_CONDITIONS = 10;
+
 const textField = z.enum(TEXT_SEARCH_FIELDS);
 const dateField = z.enum(DATE_SEARCH_FIELDS);
-const text = z.string().trim().min(1).max(200);
-const score = z.number().finite();
+const text = requiredText('The value', MAX_QUERY_TEXT, 'Enter a value');
+const score = z.number({ error: 'Enter a number' }).finite('Enter a number');
 // A calendar date (2026-01-31) or a full ISO timestamp with an offset.
 const isoDate = z.union([z.iso.date(), z.iso.datetime({ offset: true })], {
   error: 'Must be an ISO date (YYYY-MM-DD) or timestamp',
@@ -44,7 +49,7 @@ const textCondition = z.discriminatedUnion('operator', [
 const rolesCondition = z.object({
   field: z.literal('roles'),
   operator: z.literal('includes'),
-  value: z.string().trim().min(1).max(100),
+  value: requiredText('The role', 100, 'Choose a role'),
 });
 
 const scoreField = z.literal('engagement.engagementScore');
@@ -57,7 +62,11 @@ const enumCondition = <F extends string, E extends z.ZodEnum>(field: F, values: 
   const fieldSchema = z.literal(field);
   return z.discriminatedUnion('operator', [
     z.object({ field: fieldSchema, operator: z.literal('equals'), value: values }),
-    z.object({ field: fieldSchema, operator: z.literal('in'), value: z.array(values).min(1) }),
+    z.object({
+      field: fieldSchema,
+      operator: z.literal('in'),
+      value: z.array(values).min(1, 'Choose at least one value'),
+    }),
   ]);
 };
 const stageCondition = enumCondition('engagement.membershipStage', membershipStage);
@@ -71,7 +80,7 @@ const dateCondition = z.discriminatedUnion('operator', [
 const activeCondition = z.object({
   field: z.literal('isActive'),
   operator: z.literal('equals'),
-  value: z.boolean(),
+  value: z.boolean({ error: 'Choose active or inactive' }),
 });
 
 export const searchCondition = z.discriminatedUnion('field', [
@@ -112,8 +121,11 @@ export const sortOrder = z.enum(['asc', 'desc']);
 export const DEFAULT_USER_PAGE_SIZE = 25;
 
 export const searchQuery = z.object({
-  conditions: z.array(searchCondition).min(1).max(10),
-  logic: z.enum(['AND', 'OR']),
+  conditions: z
+    .array(searchCondition)
+    .min(1, 'Add at least one condition')
+    .max(MAX_SEARCH_CONDITIONS, `Use at most ${MAX_SEARCH_CONDITIONS} conditions`),
+  logic: z.enum(['AND', 'OR'], { error: 'Choose AND or OR' }),
   sort: userSortField.optional(),
   order: sortOrder.optional(),
   page: z.number().int().min(1).max(MAX_PAGE).optional(),
@@ -124,8 +136,8 @@ export const searchQuery = z.object({
 // order, page and pageSize; the API answers 403 for the staff-only filters and sorts.
 export const listUsersQuery = z.object({
   // A blank q or role is ignored rather than rejected.
-  q: optionalQueryText(200),
-  role: optionalQueryText(100),
+  q: optionalQueryText('Search', MAX_QUERY_TEXT),
+  role: optionalQueryText('Role', 100),
   status: z.enum(['active', 'inactive']).optional(),
   stage: membershipStage.optional(),
   risk: riskLevel.optional(),

@@ -1,21 +1,28 @@
 import { z } from 'zod';
 import { channel, interactionType } from './enums.js';
-import { metadata } from './primitives.js';
+import { boundedText, metadata, requiredText } from './primitives.js';
+
+const POINTS_MESSAGE = 'Points must be a whole number from -1000 to 1000';
 
 // POST /api/analytics/members/:id/activities (staff)
 export const recordActivityInput = z.object({
-  activityType: z.string().trim().min(1).max(100),
-  description: z.string().trim().max(1000).optional(),
+  activityType: requiredText('Activity type', 100),
+  description: boundedText('Description', 1000).optional(),
   metadata,
-  points: z.number().int().min(-1000).max(1000).default(0),
+  points: z
+    .number({ error: POINTS_MESSAGE })
+    .int(POINTS_MESSAGE)
+    .min(-1000, POINTS_MESSAGE)
+    .max(1000, POINTS_MESSAGE)
+    .default(0),
 });
 
 // POST /api/analytics/members/:id/interactions (staff)
 export const recordInteractionInput = z.object({
   interactionType,
   channel,
-  subject: z.string().trim().max(200).optional(),
-  content: z.string().trim().max(10_000).optional(),
+  subject: boundedText('Subject', 200).optional(),
+  content: boundedText('Content', 10_000).optional(),
   metadata,
 });
 
