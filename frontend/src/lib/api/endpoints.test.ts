@@ -84,6 +84,23 @@ describe('users endpoints', () => {
     expect(call(1).url).toBe('/api/users/u1');
   });
 
+  it('getUserSummary returns the staff counts, or only total for a member', async () => {
+    respond({ success: true, total: 9, active: 7, pendingApproval: 1, newThisMonth: 2 });
+    await expect(users.getUserSummary()).resolves.toEqual({
+      total: 9,
+      active: 7,
+      pendingApproval: 1,
+      newThisMonth: 2,
+    });
+    expect(call(0)).toMatchObject({ url: '/api/users/summary', method: 'GET' });
+
+    respond({ success: true, total: 7 });
+    const member = await users.getUserSummary();
+    expect(member.total).toBe(7);
+    expect(member.active).toBeUndefined();
+    expect(member).not.toHaveProperty('success');
+  });
+
   it('createUser posts the payload including roleIds and isActive', async () => {
     respond({ success: true, user: { id: 'u3' } }, { status: 201 });
     const input = { email: 'c@d.e', password: 'pw', name: 'C', isActive: true, roleIds: ['r1'] };

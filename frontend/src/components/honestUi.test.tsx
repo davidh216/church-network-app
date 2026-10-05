@@ -4,7 +4,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { act } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import Home from '@/app/page';
+import MediaPage from '@/components/media/MediaPage';
 import SimpleMediaLibrary from '@/components/media/SimpleMediaLibrary';
 import VideoPlayer from '@/components/media/VideoPlayer';
 import BulkActionsToolbar from '@/components/members/BulkActionsToolbar';
@@ -147,11 +147,9 @@ describe('VideoPlayer playlist', () => {
     expect(onSelect).toHaveBeenCalledTimes(1);
   });
 
-  it('switches the playing video when a playlist item is chosen on the dashboard', async () => {
+  it('switches the playing video when a playlist item is chosen on the media page', async () => {
     mediaApi.listMedia.mockResolvedValue(playlist);
-    const container = await renderAs(['member'], <Home />);
-    await act(async () => button(container, 'Media Library').click());
-    await settle();
+    const container = await renderAs(['member'], <MediaPage />);
     // Play the first video, then pick the third from the playlist.
     const play = container.querySelectorAll<HTMLButtonElement>('.group > button')[0]!;
     await act(async () => play.click());
@@ -181,21 +179,6 @@ describe('media thumbnails', () => {
   });
 });
 
-describe('dashboard', () => {
-  it('has no placeholder actions or hard-coded overview', async () => {
-    const container = await renderAs(['admin'], <Home />);
-    const text = container.textContent ?? '';
-    expect(text).toContain('Your Profile');
-    expect(text).not.toContain('Upcoming Events');
-    expect(text).not.toContain('Slack Workspace');
-    expect(text).not.toContain('Membership Overview');
-    expect(text).not.toContain('Active System');
-    expect(
-      buttonTexts(container).filter((b) => b.includes('Members') || b.includes('Media')),
-    ).toEqual(['👥 View Members', '🎵 Media Library']);
-  });
-});
-
 describe('BulkActionsToolbar', () => {
   it('offers only CSV export and clearing the selection', async () => {
     const onExport = vi.fn();
@@ -222,10 +205,7 @@ describe('MemberList', () => {
   }
 
   it('hides Advanced Search and Saved Searches until the evaluator exists', async () => {
-    const container = await renderAs(
-      ['admin'],
-      <MemberList onEditMember={noop} onAddMember={noop} refreshTrigger={0} />,
-    );
+    const container = await renderAs(['admin'], <MemberList />);
     const buttons = buttonTexts(container);
     expect(buttons).not.toContain('Advanced Search');
     expect(buttons).not.toContain('Saved Searches');
@@ -246,10 +226,7 @@ describe('MemberList', () => {
       filename: 'members-2026-10-04.csv',
     });
 
-    const container = await renderAs(
-      ['admin'],
-      <MemberList onEditMember={noop} onAddMember={noop} refreshTrigger={0} />,
-    );
+    const container = await renderAs(['admin'], <MemberList />);
     await selectFirstRow(container);
     await act(async () => button(container, 'Export CSV').click());
     await settle();
@@ -263,10 +240,7 @@ describe('MemberList', () => {
 
   it('shows a dismissible error toast when the export fails', async () => {
     usersApi.exportUsers.mockRejectedValue(new ApiError(403, 'Insufficient permissions'));
-    const container = await renderAs(
-      ['admin'],
-      <MemberList onEditMember={noop} onAddMember={noop} refreshTrigger={0} />,
-    );
+    const container = await renderAs(['admin'], <MemberList />);
     await selectFirstRow(container);
     await act(async () => button(container, 'Export Selected (1)').click());
     await settle();
@@ -281,20 +255,14 @@ describe('MemberList', () => {
 
   it('shows members only the directory columns and filters', async () => {
     usersApi.listUsers.mockResolvedValue(directoryRows);
-    const container = await renderAs(
-      ['member'],
-      <MemberList onEditMember={noop} onAddMember={noop} refreshTrigger={0} />,
-    );
+    const container = await renderAs(['member'], <MemberList />);
     expect(headers(container)).toEqual(['Member', 'Role', 'Joined']);
     expect(container.textContent).not.toContain('Inactive');
     expect(container.querySelectorAll('select')).toHaveLength(1); // roles only
   });
 
   it('shows staff the contact, engagement, stage and status columns', async () => {
-    const container = await renderAs(
-      ['leader'],
-      <MemberList onEditMember={noop} onAddMember={noop} refreshTrigger={0} />,
-    );
+    const container = await renderAs(['leader'], <MemberList />);
     expect(headers(container)).toEqual([
       '',
       'Member',

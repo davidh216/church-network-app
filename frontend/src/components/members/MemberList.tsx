@@ -2,9 +2,10 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import Link from 'next/link';
 import { exportUsers, listUsers } from '../../lib/api/users';
 import { useIsStaff } from '../../lib/auth/AuthProvider';
-import MemberProfile from './MemberProfile';
+import AddEditMemberModal from './AddEditMemberModal';
 import AdvancedSearchBuilder from './AdvancedSearchBuilder';
 import SavedSearches from './SavedSearches';
 import BulkActionsToolbar from './BulkActionsToolbar';
@@ -35,13 +36,8 @@ function getNestedValue(obj: unknown, path: string): unknown {
   }, obj);
 }
 
-interface MemberListProps {
-  onEditMember: (member: Member) => void;
-  onAddMember: () => void;
-  refreshTrigger: number;
-}
-
-export default function MemberList({ onEditMember, onAddMember, refreshTrigger }: MemberListProps) {
+/** The `/members` route body; staff add and edit members in place, profiles are links. */
+export default function MemberList() {
   // Selection, export, profiles and editing are staff-only; members get the directory.
   const canManage = useIsStaff();
   const [members, setMembers] = useState<Member[]>([]);
@@ -54,7 +50,8 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
   const [riskLevelFilter, setRiskLevelFilter] = useState('all');
   const [dateRangeFilter, setDateRangeFilter] = useState({ start: '', end: '' });
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
-  const [selectedMember, setSelectedMember] = useState<string | null>(null);
+  // The member form: closed (null), adding ({ member: null }) or editing a member.
+  const [editing, setEditing] = useState<{ member: Member | null } | null>(null);
   const [selectedMembers, setSelectedMembers] = useState<Set<string>>(new Set());
   const [showAdvancedSearch, setShowAdvancedSearch] = useState(false);
   const [showSavedSearches, setShowSavedSearches] = useState(false);
@@ -78,7 +75,7 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
 
   useEffect(() => {
     fetchMembers();
-  }, [refreshTrigger]);
+  }, []);
 
   useEffect(() => {
     if (!toast) return;
@@ -301,7 +298,7 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
 
             {canManage && (
               <button
-                onClick={onAddMember}
+                onClick={() => setEditing({ member: null })}
                 className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center space-x-2"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -835,15 +832,15 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
                   {canManage && (
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex space-x-2">
-                        <button
-                          onClick={() => setSelectedMember(member.id)}
+                        <Link
+                          href={`/members/${encodeURIComponent(member.id)}`}
                           className="text-green-600 hover:text-green-900"
                           title="View Profile"
                         >
                           View
-                        </button>
+                        </Link>
                         <button
-                          onClick={() => onEditMember(member)}
+                          onClick={() => setEditing({ member })}
                           className="text-blue-600 hover:text-blue-900"
                           title="Edit Member"
                         >
@@ -943,14 +940,14 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
                     </span>
                     {canManage && (
                       <div className="flex space-x-2">
-                        <button
-                          onClick={() => setSelectedMember(member.id)}
+                        <Link
+                          href={`/members/${encodeURIComponent(member.id)}`}
                           className="text-green-600 hover:text-green-900 text-sm font-medium"
                         >
                           View
-                        </button>
+                        </Link>
                         <button
-                          onClick={() => onEditMember(member)}
+                          onClick={() => setEditing({ member })}
                           className="text-blue-600 hover:text-blue-900 text-sm font-medium"
                         >
                           Edit
@@ -1103,15 +1100,12 @@ export default function MemberList({ onEditMember, onAddMember, refreshTrigger }
         </div>
       )}
 
-      {/* Member Profile Modal */}
-      {canManage && selectedMember && (
-        <MemberProfile
-          memberId={selectedMember}
-          onClose={() => setSelectedMember(null)}
-          onEdit={(member) => {
-            setSelectedMember(null);
-            onEditMember(member);
-          }}
+      {canManage && (
+        <AddEditMemberModal
+          isOpen={editing !== null}
+          onClose={() => setEditing(null)}
+          onSave={() => void fetchMembers()}
+          member={editing?.member ?? null}
         />
       )}
     </div>

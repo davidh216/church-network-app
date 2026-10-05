@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { act, fireEvent, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import MemberList from '@/components/members/MemberList';
 import { AuthProvider } from '@/lib/auth/AuthProvider';
@@ -17,8 +17,16 @@ const authApi = vi.hoisted(() => ({
 }));
 vi.mock('@/lib/api/auth', () => authApi);
 
-const usersApi = vi.hoisted(() => ({ listUsers: vi.fn(), exportUsers: vi.fn() }));
+const usersApi = vi.hoisted(() => ({
+  listUsers: vi.fn(),
+  exportUsers: vi.fn(),
+  createUser: vi.fn(),
+  updateUser: vi.fn(),
+}));
 vi.mock('@/lib/api/users', () => usersApi);
+
+const rolesApi = vi.hoisted(() => ({ listRoles: vi.fn() }));
+vi.mock('@/lib/api/roles', () => rolesApi);
 
 function member(id: string, name: string, roleName: string, extra: Partial<Member> = {}): Member {
   return {
@@ -48,13 +56,11 @@ const staffRows: Member[] = [
   }),
 ];
 
-const noop = () => undefined;
-
 async function renderAs(roleNames: string[]) {
   authApi.me.mockResolvedValue(makeUser(roleNames));
   return render(
     <AuthProvider>
-      <MemberList onEditMember={noop} onAddMember={noop} refreshTrigger={0} />
+      <MemberList />
     </AuthProvider>,
   );
 }
@@ -147,12 +153,39 @@ describe('MemberList', () => {
     usersApi.listUsers.mockResolvedValue(staffRows);
     await renderAs(['leader']);
     expect(screen.getByRole('button', { name: 'Add Member' })).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: 'View' })).toHaveLength(3);
+    // Profiles are routes now: "View" is a link to /members/[id].
+    expect(screen.queryByRole('button', { name: 'View' })).not.toBeInTheDocument();
+    expect(
+      screen.getAllByRole('link', { name: 'View' }).map((a) => a.getAttribute('href')),
+    ).toEqual(['/members/m1', '/members/m2', '/members/m3']);
     expect(screen.getAllByRole('button', { name: 'Edit' })).toHaveLength(3);
     expect(screen.queryByRole('button', { name: /Export Selected/ })).not.toBeInTheDocument();
 
     const body = screen.getAllByRole('rowgroup')[1]!;
     fireEvent.click(within(body).getAllByRole('checkbox')[0]!);
     expect(screen.getByRole('button', { name: 'Export Selected (1)' })).toBeInTheDocument();
+  });
+
+  it('opens the member form in place for Add Member and Edit, and reloads after saving', async () => {
+    usersApi.listUsers.mockResolvedValue(staffRows);
+    rolesApi.listRoles.mockResolvedValue([]);
+    usersApi.updateUser.mockResolvedValue(staffRows[1]);
+    await renderAs(['admin']);
+    expect(screen.queryByText('Add New Member')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add Member' }));
+    expect(screen.getByText('Add New Member')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByText('Add New Member')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Edit' })[1]!);
+    expect(screen.getByRole('heading', { name: 'Edit Member' })).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Ann Example')).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Update|Save/ }));
+    });
+    expect(usersApi.updateUser).toHaveBeenCalledWith('m2', expect.any(Object));
+    expect(usersApi.listUsers).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole('heading', { name: 'Edit Member' })).not.toBeInTheDocument();
   });
 });

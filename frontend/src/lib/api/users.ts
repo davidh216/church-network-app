@@ -6,6 +6,23 @@ export async function listUsers(): Promise<Member[]> {
   return data.users;
 }
 
+/**
+ * GET /api/users/summary. Staff get every count; members get only `total`, the size of the
+ * active directory they can see (Phase 2 spec 1.2).
+ */
+export interface UserSummary {
+  total: number;
+  active?: number;
+  pendingApproval?: number;
+  newThisMonth?: number;
+}
+
+export async function getUserSummary(): Promise<UserSummary> {
+  const { total, active, pendingApproval, newThisMonth } =
+    await apiFetch<ApiEnvelope<UserSummary>>('/users/summary');
+  return { total, active, pendingApproval, newThisMonth };
+}
+
 export async function getUser(id: string): Promise<Member> {
   const data = await apiFetch<ApiEnvelope<{ user: Member }>>(`/users/${encodeURIComponent(id)}`);
   return data.user;

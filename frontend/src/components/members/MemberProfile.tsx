@@ -1,18 +1,22 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
+import AddEditMemberModal from './AddEditMemberModal';
 import { getMemberDetails } from '../../lib/api/memberDetails';
 import { getErrorMessage } from '../../lib/errors';
 import type { MemberDetails } from '../../types/domain';
 
 interface MemberProfileProps {
   memberId: string;
-  onClose: () => void;
-  onEdit: (member: MemberDetails) => void;
 }
 
-export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfileProps) {
+const backLinkClass = 'text-sm font-medium text-blue-600 hover:text-blue-800';
+
+/** Staff view of one member at `/members/[id]`, with Edit opening the member form in place. */
+export default function MemberProfile({ memberId }: MemberProfileProps) {
   const [member, setMember] = useState<MemberDetails | null>(null);
+  const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState('personal');
@@ -20,6 +24,7 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
   const fetchMember = useCallback(async () => {
     try {
       setLoading(true);
+      setError('');
       setMember(await getMemberDetails(memberId));
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to load member details'));
@@ -169,8 +174,8 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
 
   if (loading) {
     return (
-      <div className="fixed inset-0 bg-gray-600/50 overflow-y-auto h-full w-full z-50">
-        <div className="relative top-20 mx-auto p-5 border max-w-4xl shadow-lg rounded-md bg-white">
+      <div>
+        <div className="p-5 border border-gray-200 shadow rounded-md bg-white">
           <div className="flex justify-center items-center h-64">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
           </div>
@@ -181,16 +186,13 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
 
   if (error || !member) {
     return (
-      <div className="fixed inset-0 bg-gray-600/50 overflow-y-auto h-full w-full z-50">
-        <div className="relative top-20 mx-auto p-5 border max-w-4xl shadow-lg rounded-md bg-white">
+      <div>
+        <div className="p-5 border border-gray-200 shadow rounded-md bg-white">
           <div className="text-center">
             <div className="text-red-600 mb-4">{error || 'Member not found'}</div>
-            <button
-              onClick={onClose}
-              className="bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-gray-600"
-            >
-              Close
-            </button>
+            <Link href="/members" className={backLinkClass}>
+              ← Back to members
+            </Link>
           </div>
         </div>
       </div>
@@ -209,8 +211,8 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
   ];
 
   return (
-    <div className="fixed inset-0 bg-gray-600/50 overflow-y-auto h-full w-full z-50">
-      <div className="relative top-10 mx-auto p-5 border max-w-7xl shadow-lg rounded-md bg-white mb-10">
+    <div>
+      <div className="p-5 border border-gray-200 shadow rounded-md bg-white">
         {/* Header */}
         <div className="flex justify-between items-start border-b border-gray-200 pb-4 mb-6">
           <div className="flex items-center space-x-4">
@@ -232,7 +234,7 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
               )}
             </div>
             <div>
-              <h2 className="text-2xl font-bold text-gray-900">{member.name}</h2>
+              <h1 className="text-2xl font-bold text-gray-900">{member.name}</h1>
               <div className="flex items-center space-x-4 mt-1">
                 <span
                   className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
@@ -283,17 +285,15 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
 
           <div className="flex items-center space-x-3">
             <button
-              onClick={() => onEdit(member)}
+              type="button"
+              onClick={() => setEditing(true)}
               className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               Edit Member
             </button>
-            <button
-              onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 text-2xl font-bold leading-none p-1 hover:bg-gray-100 rounded transition-colors"
-            >
-              ×
-            </button>
+            <Link href="/members" className={backLinkClass}>
+              ← Back to members
+            </Link>
           </div>
         </div>
 
@@ -915,6 +915,12 @@ export default function MemberProfile({ memberId, onClose, onEdit }: MemberProfi
           )}
         </div>
       </div>
+      <AddEditMemberModal
+        isOpen={editing}
+        onClose={() => setEditing(false)}
+        onSave={() => void fetchMember()}
+        member={member}
+      />
     </div>
   );
 }

@@ -5,11 +5,8 @@ import { getAnalytics, refreshAllEngagement } from '../../lib/api/analytics';
 import { getErrorMessage } from '../../lib/errors';
 import type { MemberAnalytics } from '../../types/domain';
 
-interface MemberAnalyticsDashboardProps {
-  onClose: () => void;
-}
-
-export default function MemberAnalyticsDashboard({ onClose }: MemberAnalyticsDashboardProps) {
+/** The `/analytics` route body (staff only; the page wraps it in RequireStaff). */
+export default function MemberAnalyticsDashboard() {
   const [analytics, setAnalytics] = useState<MemberAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -81,8 +78,8 @@ export default function MemberAnalyticsDashboard({ onClose }: MemberAnalyticsDas
 
   if (loading) {
     return (
-      <div className="fixed inset-0 bg-gray-600/50 overflow-y-auto h-full w-full z-50">
-        <div className="relative top-20 mx-auto p-5 border max-w-7xl shadow-lg rounded-md bg-white">
+      <div>
+        <div className="p-5 border border-gray-200 shadow rounded-md bg-white">
           <div className="flex justify-center items-center h-64">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
           </div>
@@ -93,15 +90,19 @@ export default function MemberAnalyticsDashboard({ onClose }: MemberAnalyticsDas
 
   if (error || !analytics) {
     return (
-      <div className="fixed inset-0 bg-gray-600/50 overflow-y-auto h-full w-full z-50">
-        <div className="relative top-20 mx-auto p-5 border max-w-7xl shadow-lg rounded-md bg-white">
+      <div>
+        <div className="p-5 border border-gray-200 shadow rounded-md bg-white">
           <div className="text-center">
             <div className="text-red-600 mb-4">{error || 'Analytics not available'}</div>
             <button
-              onClick={onClose}
+              type="button"
+              onClick={() => {
+                setError('');
+                void fetchAnalytics();
+              }}
               className="bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-gray-600"
             >
-              Close
+              Retry
             </button>
           </div>
         </div>
@@ -110,12 +111,12 @@ export default function MemberAnalyticsDashboard({ onClose }: MemberAnalyticsDas
   }
 
   return (
-    <div className="fixed inset-0 bg-gray-600/50 overflow-y-auto h-full w-full z-50">
-      <div className="relative top-10 mx-auto p-5 border max-w-7xl shadow-lg rounded-md bg-white mb-10">
+    <div>
+      <div className="p-5 border border-gray-200 shadow rounded-md bg-white">
         {/* Header */}
         <div className="flex justify-between items-center border-b border-gray-200 pb-4 mb-6">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">Member Analytics Dashboard</h2>
+            <h1 className="text-2xl font-bold text-gray-900">Member Analytics Dashboard</h1>
             <p className="text-gray-600">Comprehensive insights into your church community</p>
           </div>
           <div className="flex items-center space-x-3">
@@ -138,12 +139,6 @@ export default function MemberAnalyticsDashboard({ onClose }: MemberAnalyticsDas
                 />
               </svg>
               <span>{refreshing ? 'Refreshing...' : 'Refresh Scores'}</span>
-            </button>
-            <button
-              onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 text-2xl font-bold leading-none p-1 hover:bg-gray-100 rounded transition-colors"
-            >
-              ×
             </button>
           </div>
         </div>
