@@ -53,7 +53,9 @@ export default function MemberTable({
             {canManage && (
               <SortableHeader label="Contact" field="email" sort={sort} onSort={onSort} />
             )}
-            <th className={thClass}>Role</th>
+            <th scope="col" className={thClass}>
+              Role
+            </th>
             {canManage && (
               <>
                 <SortableHeader
@@ -63,7 +65,9 @@ export default function MemberTable({
                   onSort={onSort}
                 />
                 <SortableHeader label="Stage" field="membershipStage" sort={sort} onSort={onSort} />
-                <th className={thClass}>Status</th>
+                <th scope="col" className={thClass}>
+                  Status
+                </th>
               </>
             )}
             <SortableHeader
@@ -73,7 +77,11 @@ export default function MemberTable({
               onSort={onSort}
               sortable={canManage}
             />
-            {canManage && <th className={thClass}>Actions</th>}
+            {canManage && (
+              <th scope="col" className={thClass}>
+                Actions
+              </th>
+            )}
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
@@ -86,6 +94,7 @@ export default function MemberTable({
                 <td className={tdClass}>
                   <input
                     type="checkbox"
+                    aria-label={`Select ${member.name}`}
                     checked={selected.has(member.id)}
                     onChange={() => onToggleSelect(member.id)}
                     className={checkboxClass}
@@ -108,7 +117,7 @@ export default function MemberTable({
                   <div className="text-sm text-gray-900">{member.email}</div>
                   {member.phone && <div className="text-sm text-gray-500">{member.phone}</div>}
                   {member.lastLoginAt && (
-                    <div className="text-xs text-gray-400">
+                    <div className="text-xs text-gray-500">
                       Last login: {new Date(member.lastLoginAt).toLocaleDateString()}
                     </div>
                   )}
@@ -135,7 +144,7 @@ export default function MemberTable({
               <td className={`${tdClass} text-sm text-gray-500`}>
                 <div>{new Date(member.createdAt).toLocaleDateString()}</div>
                 {member.membershipDate && member.membershipDate !== member.createdAt && (
-                  <div className="text-xs text-gray-400">
+                  <div className="text-xs text-gray-500">
                     Member: {new Date(member.membershipDate).toLocaleDateString()}
                   </div>
                 )}

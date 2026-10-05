@@ -29,8 +29,14 @@ export default function MemberListHeader({
     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
       <div className="flex items-center space-x-4">
         <h2 className="text-lg font-medium text-gray-900">Church Members</h2>
-        <span className="text-sm text-gray-500">({total} total)</span>
-        {selection && <span className="text-sm text-blue-600 font-medium">{selection}</span>}
+        <span aria-live="polite" className="text-sm text-gray-500">
+          ({total} total)
+        </span>
+        {selection && (
+          <span aria-live="polite" className="text-sm text-blue-700 font-medium">
+            {selection}
+          </span>
+        )}
       </div>
       <div className="flex items-center space-x-3">
         <ViewToggle value={viewMode} onChange={onViewModeChange} options={VIEWS} />

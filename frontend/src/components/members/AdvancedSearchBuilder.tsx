@@ -109,8 +109,19 @@ export default function AdvancedSearchBuilder({
     <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-6 mb-4">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-medium text-gray-900">Advanced Search Builder</h3>
-        <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-gray-500 hover:text-gray-700"
+          aria-label="Close advanced search"
+        >
+          <svg
+            aria-hidden="true"
+            className="w-6 h-6"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -126,6 +137,7 @@ export default function AdvancedSearchBuilder({
           <div key={condition.id} className="flex items-center space-x-3 p-3 bg-gray-50 rounded-md">
             {index > 0 && (
               <select
+                aria-label={`Condition ${index + 1} logic`}
                 value={condition.logic}
                 onChange={(e) =>
                   updateCondition(condition.id, { logic: e.target.value as 'AND' | 'OR' })
@@ -138,6 +150,7 @@ export default function AdvancedSearchBuilder({
             )}
 
             <select
+              aria-label={`Condition ${index + 1} field`}
               value={condition.field}
               onChange={(e) =>
                 updateCondition(condition.id, {
@@ -155,6 +168,7 @@ export default function AdvancedSearchBuilder({
             </select>
 
             <select
+              aria-label={`Condition ${index + 1} operator`}
               value={condition.operator}
               onChange={(e) => updateCondition(condition.id, { operator: e.target.value })}
               className="px-3 py-2 border border-gray-300 rounded"
@@ -168,6 +182,7 @@ export default function AdvancedSearchBuilder({
 
             {getFieldType(condition.field) === 'date' ? (
               <input
+                aria-label={`Condition ${index + 1} value`}
                 type="date"
                 value={condition.value}
                 onChange={(e) => updateCondition(condition.id, { value: e.target.value })}
@@ -175,6 +190,7 @@ export default function AdvancedSearchBuilder({
               />
             ) : getFieldType(condition.field) === 'number' ? (
               <input
+                aria-label={`Condition ${index + 1} value`}
                 type="number"
                 value={condition.value}
                 onChange={(e) => updateCondition(condition.id, { value: e.target.value })}
@@ -184,6 +200,7 @@ export default function AdvancedSearchBuilder({
             ) : getFieldType(condition.field) === 'select' &&
               condition.field === 'engagement.membershipStage' ? (
               <select
+                aria-label={`Condition ${index + 1} value`}
                 value={condition.value}
                 onChange={(e) => updateCondition(condition.id, { value: e.target.value })}
                 className="px-3 py-2 border border-gray-300 rounded"
@@ -200,6 +217,7 @@ export default function AdvancedSearchBuilder({
             ) : getFieldType(condition.field) === 'select' &&
               condition.field === 'engagement.riskLevel' ? (
               <select
+                aria-label={`Condition ${index + 1} value`}
                 value={condition.value}
                 onChange={(e) => updateCondition(condition.id, { value: e.target.value })}
                 className="px-3 py-2 border border-gray-300 rounded"
@@ -211,6 +229,7 @@ export default function AdvancedSearchBuilder({
               </select>
             ) : getFieldType(condition.field) === 'select' && condition.field === 'isActive' ? (
               <select
+                aria-label={`Condition ${index + 1} value`}
                 value={condition.value}
                 onChange={(e) => updateCondition(condition.id, { value: e.target.value })}
                 className="px-3 py-2 border border-gray-300 rounded"
@@ -221,6 +240,7 @@ export default function AdvancedSearchBuilder({
               </select>
             ) : (
               <input
+                aria-label={`Condition ${index + 1} value`}
                 type="text"
                 value={condition.value}
                 onChange={(e) => updateCondition(condition.id, { value: e.target.value })}
@@ -230,11 +250,19 @@ export default function AdvancedSearchBuilder({
             )}
 
             <button
+              type="button"
+              aria-label={`Remove condition ${index + 1}`}
               onClick={() => removeCondition(condition.id)}
               disabled={conditions.length === 1}
               className="text-red-600 hover:text-red-800 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg
+                aria-hidden="true"
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -249,6 +277,7 @@ export default function AdvancedSearchBuilder({
 
       <div className="flex items-center justify-between mt-6">
         <button
+          type="button"
           onClick={addCondition}
           className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
         >
@@ -260,12 +289,14 @@ export default function AdvancedSearchBuilder({
 
         <div className="flex space-x-3">
           <button
+            type="button"
             onClick={handleClear}
             className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
           >
             Clear Search
           </button>
           <button
+            type="button"
             onClick={handleApply}
             className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
           >

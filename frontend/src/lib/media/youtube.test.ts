@@ -24,8 +24,8 @@ describe('mediaVideoId', () => {
 
 describe('thumbnailUrl', () => {
   it('builds hq and maxres thumbnails', () => {
-    expect(thumbnailUrl(ID)).toBe(`https://img.youtube.com/vi/${ID}/hqdefault.jpg`);
-    expect(thumbnailUrl(ID, 'maxres')).toBe(`https://img.youtube.com/vi/${ID}/maxresdefault.jpg`);
+    expect(thumbnailUrl(ID)).toBe(`https://i.ytimg.com/vi/${ID}/hqdefault.jpg`);
+    expect(thumbnailUrl(ID, 'maxres')).toBe(`https://i.ytimg.com/vi/${ID}/maxresdefault.jpg`);
   });
 
   it('returns an empty string without a valid id', () => {

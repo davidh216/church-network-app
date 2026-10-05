@@ -44,6 +44,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[60] focus:rounded-md focus:bg-white focus:px-4 focus:py-2 focus:text-blue-700 focus:shadow-lg focus:ring-2 focus:ring-blue-500"
+      >
+        Skip to main content
+      </a>
       <header className="bg-white shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-6">
@@ -80,7 +86,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </div>
         <AppNav staff={staff} userId={user.id} />
       </header>
-      <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">{children}</main>
+      {/* tabIndex -1 lets the skip link move focus here, not only scroll. */}
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8 focus:outline-none"
+      >
+        {children}
+      </main>
     </div>
   );
 }

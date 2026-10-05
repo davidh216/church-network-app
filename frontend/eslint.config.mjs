@@ -22,12 +22,15 @@ const eslintConfig = [
     ],
   },
   ...compat.extends('next/core-web-vitals', 'next/typescript'),
+  // Phase 2 (F4): the full jsx-a11y recommended set, as errors.
+  ...compat.extends('plugin:jsx-a11y/recommended'),
   {
     rules: {
       '@typescript-eslint/no-explicit-any': 'error',
       'react-hooks/rules-of-hooks': 'error',
-      // Phase 2 (gameplan 2.3): replace <img> with next/image
-      '@next/next/no-img-element': 'off',
+      // Avatars stay <img loading="lazy" alt> because their hosts are user-supplied (decision
+      // P2-3); YouTube thumbnails use next/image. Each remaining <img> carries a disable comment.
+      '@next/next/no-img-element': 'error',
     },
   },
   {

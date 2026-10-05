@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { seededAdmin } from './admin';
+import { expectNoSeriousA11yViolations } from './axe';
 
 async function signIn(page: Page, email: string, password: string) {
   await page.getByLabel('Email').fill(email);
@@ -16,6 +17,8 @@ test('admin navigates the dashboard, members, a profile, media and analytics, th
   // Without a session cookie every page redirects to the login form.
   await page.goto('/');
   await expect(page).toHaveURL(/\/login/);
+  await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible();
+  await expectNoSeriousA11yViolations(page, '/login');
   await signIn(page, admin.email, admin.password);
 
   // Dashboard: real counts from /api/users/summary.
@@ -23,6 +26,16 @@ test('admin navigates the dashboard, members, a profile, media and analytics, th
   await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
   await expect(page.getByText('Total members')).toBeVisible();
   await expect(page.getByText('Pending approval')).toBeVisible();
+  await expectNoSeriousA11yViolations(page, '/');
+
+  // On a fresh load the skip link is the first Tab stop and moves focus to the main region.
+  await page.reload();
+  await expect(page.getByText('Pending approval')).toBeVisible();
+  await page.keyboard.press('Tab');
+  const skip = page.getByRole('link', { name: 'Skip to main content' });
+  await expect(skip).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('main#main-content')).toBeFocused();
 
   // Members: find the admin's own row and open the profile route.
   const nav = page.getByRole('navigation', { name: 'Main' });
@@ -34,6 +47,19 @@ test('admin navigates the dashboard, members, a profile, media and analytics, th
   await search.fill(admin.email);
   await expect(page.getByText('(1 total)')).toBeVisible();
   await expect(search).toBeFocused();
+  await expectNoSeriousA11yViolations(page, '/members');
+
+  // Add Member opens a modal dialog: focus moves in, axe passes with it open, Escape closes it
+  // and focus returns to the button.
+  const addMember = page.getByRole('button', { name: 'Add Member' });
+  await addMember.click();
+  const dialog = page.getByRole('dialog', { name: 'Add New Member' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByLabel('Full Name *')).toBeFocused();
+  await expectNoSeriousA11yViolations(page, '/members with the Add Member dialog');
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await expect(addMember).toBeFocused();
   const row = page.getByRole('row').filter({ hasText: admin.email });
   await row.getByRole('link', { name: 'View', exact: true }).click();
   await expect(page).toHaveURL(/\/members\/[^/]+$/);
@@ -42,6 +68,7 @@ test('admin navigates the dashboard, members, a profile, media and analytics, th
   // The profile is a real URL: reloading keeps it, Back returns to the list.
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Basic Information' })).toBeVisible();
+  await expectNoSeriousA11yViolations(page, '/members/[id]');
   await page.goBack();
   await expect(page).toHaveURL(/\/members$/);
 
@@ -49,11 +76,15 @@ test('admin navigates the dashboard, members, a profile, media and analytics, th
   await nav.getByRole('link', { name: 'Media' }).click();
   await expect(page).toHaveURL(/\/media$/);
   await expect(page.getByText(/\(\d+ videos\)/)).toBeVisible();
+  await expect(page.getByRole('status', { name: 'Loading videos' })).toHaveCount(0);
+  await expectNoSeriousA11yViolations(page, '/media');
 
   // Analytics (staff).
   await nav.getByRole('link', { name: 'Analytics' }).click();
   await expect(page).toHaveURL(/\/analytics$/);
   await expect(page.getByRole('heading', { name: 'Member Analytics Dashboard' })).toBeVisible();
+  await expect(page.getByRole('status', { name: 'Loading analytics' })).toHaveCount(0);
+  await expectNoSeriousA11yViolations(page, '/analytics');
 
   // Unknown routes get the not-found page.
   await page.goto('/no-such-page');

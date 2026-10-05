@@ -19,7 +19,7 @@ export default function MemberRowActions({
     <div className="flex space-x-2">
       <Link
         href={`/members/${encodeURIComponent(member.id)}`}
-        className={`text-green-600 hover:text-green-900${size}`}
+        className={`text-green-700 hover:text-green-900${size}`}
         title="View Profile"
       >
         View

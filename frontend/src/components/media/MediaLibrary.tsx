@@ -58,7 +58,9 @@ export default function MediaLibrary({ onPlayMedia }: MediaLibraryProps) {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-center space-x-4">
             <h2 className="text-lg font-medium text-gray-900">Embrace Media Library</h2>
-            <span className="text-sm text-gray-500">({total} videos)</span>
+            <span aria-live="polite" className="text-sm text-gray-500">
+              ({total} videos)
+            </span>
           </div>
           <div className="flex items-center space-x-3">
             <ViewToggle value={viewMode} onChange={setViewMode} options={VIEWS} />

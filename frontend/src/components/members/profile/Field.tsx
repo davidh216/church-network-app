@@ -12,7 +12,8 @@ export function Field({
 }) {
   return (
     <div>
-      <label className="block text-sm font-medium text-gray-700">{label}</label>
+      {/* A read-only value, so the caption is text rather than a form <label>. */}
+      <span className="block text-sm font-medium text-gray-700">{label}</span>
       <p className={className}>{children}</p>
     </div>
   );

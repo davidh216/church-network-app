@@ -170,15 +170,19 @@ describe('VideoPlayer playlist', () => {
 });
 
 describe('media thumbnails', () => {
-  it('hides a thumbnail whose fallbacks fail instead of loading a dead placeholder host', async () => {
+  it('loads thumbnails from i.ytimg.com through next/image and hides one whose fallbacks fail', async () => {
     mediaApi.listMedia.mockResolvedValue(mediaPage([video(1)]));
     const container = await renderAs(['member'], <MediaLibrary onPlayMedia={noop} />);
-    const img = container.querySelector('img')!;
-    expect(img.src).toContain('img.youtube.com');
-    await act(async () => img.dispatchEvent(new Event('error')));
-    expect(img.src).toContain('hqdefault.jpg');
-    await act(async () => img.dispatchEvent(new Event('error')));
-    expect(img.style.visibility).toBe('hidden');
+    const img = () => container.querySelector('img');
+    const src = () => decodeURIComponent(img()!.getAttribute('src')!);
+    // next/image serves the remote file through its optimiser (/_next/image?url=...).
+    expect(src()).toContain(
+      '/_next/image?url=https://i.ytimg.com/vi/abcdefghij1/maxresdefault.jpg',
+    );
+    await act(async () => img()!.dispatchEvent(new Event('error')));
+    expect(src()).toContain('https://i.ytimg.com/vi/abcdefghij1/hqdefault.jpg');
+    await act(async () => img()!.dispatchEvent(new Event('error')));
+    expect(img()).toBeNull();
     expect(container.innerHTML).not.toContain('placeholder.com');
   });
 });

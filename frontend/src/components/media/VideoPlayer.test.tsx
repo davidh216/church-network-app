@@ -68,4 +68,59 @@ describe('VideoPlayer', () => {
     expect(onPlayNext).toHaveBeenCalledTimes(2);
     expect(onPlayPrevious).not.toHaveBeenCalled();
   });
+
+  it('is a modal dialog named by the video title, with labelled icon buttons', async () => {
+    const items = [
+      video('https://youtu.be/dQw4w9WgXcQ'),
+      { ...video('https://youtu.be/dQw4w9WgXcQ'), id: 'v2' },
+    ];
+    await render(
+      <VideoPlayer media={items[0]!} onClose={vi.fn()} playlist={items} currentIndex={0} />,
+    );
+    const dialog = screen.getByRole('dialog', { name: 'Sunday sermon' });
+    expect(dialog).toHaveAttribute('aria-modal', 'true');
+    for (const name of [
+      'Toggle playlist',
+      'Fullscreen',
+      'Close player',
+      'Previous video',
+      'Next video',
+    ]) {
+      expect(screen.getByRole('button', { name })).toBeInTheDocument();
+    }
+    expect(
+      screen.getByRole('link', { name: 'Watch on YouTube (opens in a new tab)' }),
+    ).toBeInTheDocument();
+  });
+
+  it('leaves Space to a focused button instead of treating it as a shortcut', async () => {
+    const onClose = vi.fn();
+    await render(<VideoPlayer media={video('https://youtu.be/dQw4w9WgXcQ')} onClose={onClose} />);
+    const close = screen.getByRole('button', { name: 'Close player' });
+    close.focus();
+    const event = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
+    close.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  it('leaves fullscreen on Escape before closing', async () => {
+    const onClose = vi.fn();
+    const exitFullscreen = vi.fn();
+    Object.defineProperty(document, 'exitFullscreen', {
+      value: exitFullscreen,
+      configurable: true,
+    });
+    Object.defineProperty(document, 'fullscreenElement', {
+      value: document.body,
+      configurable: true,
+    });
+    try {
+      await render(<VideoPlayer media={video('https://youtu.be/dQw4w9WgXcQ')} onClose={onClose} />);
+      fireEvent.keyDown(document, { key: 'Escape' });
+      expect(exitFullscreen).toHaveBeenCalledTimes(1);
+      expect(onClose).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(document, 'fullscreenElement', { value: null, configurable: true });
+    }
+  });
 });

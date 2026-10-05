@@ -1,6 +1,7 @@
 import type { MediaItem } from '../../types/domain';
 import { formatMediaDate, parseTags } from '../../lib/media/format';
-import { mediaVideoId, thumbnailUrl } from '../../lib/media/youtube';
+import { mediaVideoId } from '../../lib/media/youtube';
+import VideoThumbnail from './VideoThumbnail';
 
 interface MediaGridProps {
   media: MediaItem[];
@@ -23,28 +24,28 @@ export default function MediaGrid({ media, onPlay }: MediaGridProps) {
           >
             <div className="relative group bg-gray-200 h-48">
               {videoId && (
-                <img
-                  src={thumbnailUrl(videoId, 'maxres')}
+                <VideoThumbnail
+                  videoId={videoId}
                   alt={item.title}
-                  className="w-full h-48 object-cover"
-                  onError={(e) => {
-                    const target = e.target as HTMLImageElement;
-                    target.src = thumbnailUrl(videoId);
-                    // Last resort: hide the broken image and let the grey frame show.
-                    target.onerror = () => {
-                      target.style.visibility = 'hidden';
-                    };
-                  }}
+                  large
+                  sizes="(min-width: 1280px) 25vw, (min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw"
                 />
               )}
-              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors duration-200" />
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 group-focus-within:bg-black/30 transition-colors duration-200" />
+              {/* A real button: always reachable by Tab and shown on keyboard focus, not only on hover. */}
               <button
                 type="button"
                 onClick={() => onPlay(item)}
-                className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                aria-label={`Play ${item.title}`}
+                className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-blue-500 transition-opacity duration-200"
               >
                 <div className="bg-red-600 rounded-full p-4 hover:bg-red-700 transition-colors shadow-lg">
-                  <svg className="w-8 h-8 text-white ml-1" fill="currentColor" viewBox="0 0 20 20">
+                  <svg
+                    className="w-8 h-8 text-white ml-1"
+                    fill="currentColor"
+                    viewBox="0 0 20 20"
+                    aria-hidden="true"
+                  >
                     <path d="M8 5v10l8-5-8-5z" />
                   </svg>
                 </div>
@@ -68,7 +69,7 @@ export default function MediaGrid({ media, onPlay }: MediaGridProps) {
                   </span>
                 ))}
                 {tags.length > MAX_TAGS && (
-                  <span className="text-xs text-gray-400">+{tags.length - MAX_TAGS}</span>
+                  <span className="text-xs text-gray-500">+{tags.length - MAX_TAGS}</span>
                 )}
               </div>
               <div className="flex justify-between items-center text-sm text-gray-500">

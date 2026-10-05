@@ -1,6 +1,7 @@
 import type { MemberDetails } from '../../../types/domain';
 import { initials } from '../../../lib/members/display';
 import { Field, SectionHeader, pillClass } from './Field';
+import AvatarImage from '../../ui/AvatarImage';
 
 /** The "Family" tab: family role and id, and the linked family members. */
 export default function Family({ member }: { member: MemberDetails }) {
@@ -28,7 +29,7 @@ export default function Family({ member }: { member: MemberDetails }) {
                 >
                   <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center">
                     {relative.avatar ? (
-                      <img
+                      <AvatarImage
                         src={relative.avatar}
                         alt={relative.name}
                         className="w-8 h-8 rounded-full object-cover"

@@ -1,10 +1,18 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useId, useRef, useCallback } from 'react';
 import type { MediaItem } from '@/types/domain';
 import { embedUrl, mediaVideoId } from '@/lib/media/youtube';
 import PlayerControls from './PlayerControls';
 import PlaylistPanel from './PlaylistPanel';
+import Dialog from '../ui/Dialog';
+
+/** True when a key press belongs to the focused control: Space presses a button, typing types. */
+function ownedByControl(e: KeyboardEvent): boolean {
+  if (!(e.target instanceof Element)) return false;
+  if (e.target.closest('input, select, textarea')) return true;
+  return e.key === ' ' && !!e.target.closest('button, a');
+}
 
 interface VideoPlayerProps {
   media: MediaItem | null;
@@ -31,23 +39,13 @@ export default function VideoPlayer({
   const playerRef = useRef<HTMLDivElement>(null);
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const titleId = useId();
 
-  const handleBackdropClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget && !isFullscreen) {
-      onClose();
-    }
-  };
-
+  // Escape is handled by the Dialog (onEscape below); these are the player's own shortcuts.
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
+      if (e.altKey || e.ctrlKey || e.metaKey || ownedByControl(e)) return;
       switch (e.key) {
-        case 'Escape':
-          if (isFullscreen) {
-            exitFullscreen();
-          } else {
-            onClose();
-          }
-          break;
         case 'f':
         case 'F':
           toggleFullscreen();
@@ -68,7 +66,7 @@ export default function VideoPlayer({
           break;
       }
     },
-    [isFullscreen, onClose, onPlayNext, onPlayPrevious, currentIndex, playlist.length],
+    [onPlayNext, onPlayPrevious, currentIndex, playlist.length],
   );
 
   const togglePlayPause = () => {
@@ -130,22 +128,25 @@ export default function VideoPlayer({
   const embed = embedUrl(mediaVideoId(media), window.location.origin);
 
   return (
-    <div
-      ref={playerRef}
-      className={`fixed inset-0 bg-black z-50 flex items-center justify-center video-player-modal ${
+    <Dialog
+      labelledBy={titleId}
+      onClose={onClose}
+      onEscape={() => (document.fullscreenElement ? exitFullscreen() : onClose())}
+      closeOnBackdrop={!isFullscreen}
+      panelRef={playerRef}
+      overlayClassName={`fixed inset-0 bg-black z-50 flex items-center justify-center video-player-modal ${
         isFullscreen ? 'p-0' : 'p-4'
       }`}
-      onClick={handleBackdropClick}
-      onMouseMove={handleMouseMove}
+      className={`bg-black relative w-full h-full flex ${
+        isFullscreen ? '' : 'max-w-7xl max-h-[90vh] rounded-lg overflow-hidden'
+      }`}
     >
-      <div
-        className={`bg-black relative w-full h-full flex ${
-          isFullscreen ? '' : 'max-w-7xl max-h-[90vh] rounded-lg overflow-hidden'
-        }`}
-      >
+      {/* Moving the mouse brings the fullscreen controls back (focus does too, see PlayerControls). */}
+      <div className="flex w-full h-full" onMouseMove={handleMouseMove}>
         {/* Main Video Area */}
         <div className="flex-1 relative">
           <PlayerControls
+            titleId={titleId}
             media={media}
             visible={showControls}
             playlistLength={playlist.length}
@@ -186,6 +187,6 @@ export default function VideoPlayer({
           />
         )}
       </div>
-    </div>
+    </Dialog>
   );
 }

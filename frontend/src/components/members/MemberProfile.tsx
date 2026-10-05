@@ -15,7 +15,7 @@ import Milestones from './profile/Milestones';
 import Notes from './profile/Notes';
 import PersonalInfo from './profile/PersonalInfo';
 import ProfileHeader, { backLinkClass } from './profile/ProfileHeader';
-import Tabs, { type ProfileTabId } from './profile/Tabs';
+import Tabs, { panelId, tabId, type ProfileTabId } from './profile/Tabs';
 import Timeline from './profile/Timeline';
 
 interface MemberProfileProps {
@@ -70,7 +70,13 @@ export default function MemberProfile({ memberId }: MemberProfileProps) {
       <div className={cardClass}>
         <ProfileHeader member={member} onEdit={() => setEditing(true)} />
         <Tabs active={activeTab} onChange={setActiveTab} />
-        <div className="space-y-6">
+        <div
+          role="tabpanel"
+          id={panelId(activeTab)}
+          aria-labelledby={tabId(activeTab)}
+          tabIndex={0}
+          className="space-y-6"
+        >
           <Panel member={member} />
         </div>
       </div>

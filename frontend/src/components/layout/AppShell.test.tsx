@@ -85,6 +85,16 @@ describe('app shell', () => {
     );
   });
 
+  it('starts with a skip link to the focusable main region', async () => {
+    usersApi.getUserSummary.mockResolvedValue(staffSummary);
+    const container = await renderDashboard(['member']);
+    const skip = container.querySelector('a')!;
+    expect(skip.textContent).toBe('Skip to main content');
+    expect(skip.getAttribute('href')).toBe('#main-content');
+    const main = container.querySelector('main#main-content')!;
+    expect(main.getAttribute('tabindex')).toBe('-1');
+  });
+
   it('marks My Profile, not Members, as current on the own profile page', async () => {
     nav.pathname = '/members/cluser0000000000000000001';
     const container = await renderDashboard(['member']);

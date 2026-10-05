@@ -119,7 +119,7 @@ describe('AddEditMemberModal', () => {
 
   it('update sends roleIds when the roles changed', async () => {
     await open(existing);
-    fireEvent.click(screen.getByRole('checkbox', { name: /leader/ }));
+    fireEvent.click(await screen.findByRole('checkbox', { name: /leader/ }));
     await submit('Update Member');
     expect(usersApi.updateUser).toHaveBeenCalledWith(existing.id, {
       name: 'Ann Example',
@@ -131,7 +131,7 @@ describe('AddEditMemberModal', () => {
 
   it('update does not send roleIds when a role is toggled off and on again', async () => {
     await open(existing);
-    const memberBox = screen.getByRole('checkbox', { name: /member/ });
+    const memberBox = await screen.findByRole('checkbox', { name: /member/ });
     fireEvent.click(memberBox);
     fireEvent.click(memberBox);
     await submit('Update Member');

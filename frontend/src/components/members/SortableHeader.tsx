@@ -12,7 +12,7 @@ interface SortableHeaderProps {
 
 const thClass = 'px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider';
 
-/** A member table column header that sorts on the server when clicked. */
+/** A member table column header whose button sorts on the server; the header carries aria-sort. */
 export default function SortableHeader({
   label,
   field,
@@ -28,17 +28,25 @@ export default function SortableHeader({
     );
   }
   const active = sort?.key === field ? sort.order : null;
+  // aria-sort belongs on the column header; the button inside it is what the keyboard reaches.
   return (
     <th
       scope="col"
       aria-sort={active === 'asc' ? 'ascending' : active === 'desc' ? 'descending' : 'none'}
-      className={`${thClass} cursor-pointer hover:bg-gray-100`}
-      onClick={() => onSort(field)}
+      className={thClass}
     >
-      <div className="flex items-center space-x-1">
+      <button
+        type="button"
+        onClick={() => onSort(field)}
+        className="-mx-1 flex items-center space-x-1 rounded px-1 uppercase tracking-wider hover:bg-gray-100 hover:text-gray-700"
+      >
         <span>{label}</span>
-        {active && <span className="text-blue-500">{active === 'asc' ? '↑' : '↓'}</span>}
-      </div>
+        {active && (
+          <span aria-hidden="true" className="text-blue-700">
+            {active === 'asc' ? '↑' : '↓'}
+          </span>
+        )}
+      </button>
     </th>
   );
 }

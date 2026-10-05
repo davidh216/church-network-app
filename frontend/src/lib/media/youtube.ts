@@ -16,10 +16,10 @@ export function mediaVideoId(media: VideoSource): string | null {
   return youtubeVideoId(media.url);
 }
 
-/** A thumbnail URL for a video id; '' when the id is missing or malformed. */
+/** A thumbnail URL on i.ytimg.com for a video id; '' when the id is missing or malformed. */
 export function thumbnailUrl(videoId: string | null, quality: 'hq' | 'maxres' = 'hq'): string {
   if (!videoId || !YOUTUBE_VIDEO_ID.test(videoId)) return '';
-  return `https://img.youtube.com/vi/${videoId}/${quality === 'maxres' ? 'maxresdefault' : 'hqdefault'}.jpg`;
+  return `https://i.ytimg.com/vi/${videoId}/${quality === 'maxres' ? 'maxresdefault' : 'hqdefault'}.jpg`;
 }
 
 /**

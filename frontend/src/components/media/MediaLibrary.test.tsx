@@ -123,4 +123,30 @@ describe('MediaLibrary', () => {
     await waitFor(() => expect(mediaApi.listMedia.mock.calls.length).toBeGreaterThan(callsBefore));
     expect(screen.queryByText('Add YouTube Video')).not.toBeInTheDocument();
   });
+
+  it('opens Add Video as a labelled modal dialog that Escape closes', async () => {
+    await renderAs(['admin']);
+    fireEvent.click(screen.getByRole('button', { name: /Add Video/ }));
+    const dialog = screen.getByRole('dialog', { name: 'Add YouTube Video' });
+    expect(dialog).toHaveAttribute('aria-modal', 'true');
+    expect(document.activeElement).toBe(screen.getByLabelText('Video Title *'));
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('gives every play control and the view switch an accessible name', async () => {
+    await renderAs(['member']);
+    expect(await screen.findByRole('button', { name: 'Play Sermon 1' })).toBeInTheDocument();
+    const grid = screen.getByRole('button', { name: 'Grid View' });
+    expect(grid).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('button', { name: 'List View' }));
+    expect(screen.getByRole('button', { name: 'List View' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getByRole('button', { name: 'Play Sermon 1' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: 'Open Sermon 1 on YouTube (opens in a new tab)' }),
+    ).toBeInTheDocument();
+  });
 });

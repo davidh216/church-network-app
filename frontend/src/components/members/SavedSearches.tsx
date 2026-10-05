@@ -78,14 +78,26 @@ export default function SavedSearches({ onLoadSearch, onClose, currentQuery }: S
         <div className="flex items-center space-x-2">
           {canManage && currentQuery && (
             <button
+              type="button"
               onClick={() => setShowSaveForm(!showSaveForm)}
               className="text-sm text-blue-600 hover:text-blue-800"
             >
               Save Current Search
             </button>
           )}
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-gray-500 hover:text-gray-700"
+            aria-label="Close saved searches"
+          >
+            <svg
+              className="w-6 h-6"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -120,12 +132,14 @@ export default function SavedSearches({ onLoadSearch, onClose, currentQuery }: S
           <div className="space-y-3">
             <input
               type="text"
+              aria-label="Search name"
               placeholder="Search name..."
               value={saveForm.name}
               onChange={(e) => setSaveForm({ ...saveForm, name: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             <textarea
+              aria-label="Description (optional)"
               placeholder="Description (optional)..."
               value={saveForm.description}
               onChange={(e) => setSaveForm({ ...saveForm, description: e.target.value })}
@@ -143,6 +157,7 @@ export default function SavedSearches({ onLoadSearch, onClose, currentQuery }: S
             </label>
             <div className="flex space-x-2">
               <button
+                type="button"
                 onClick={handleSaveCurrentSearch}
                 disabled={!saveForm.name.trim()}
                 className="px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
@@ -150,6 +165,7 @@ export default function SavedSearches({ onLoadSearch, onClose, currentQuery }: S
                 Save
               </button>
               <button
+                type="button"
                 onClick={() => setShowSaveForm(false)}
                 className="px-3 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400 text-sm"
               >
@@ -166,14 +182,15 @@ export default function SavedSearches({ onLoadSearch, onClose, currentQuery }: S
           <h4 className="text-sm font-medium text-gray-900 mb-3">Quick Searches</h4>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {predefinedSearches().map((search, index) => (
-              <div
+              <button
+                type="button"
                 key={index}
-                className="p-3 border border-gray-200 rounded-lg hover:border-blue-300 cursor-pointer transition-colors"
+                className="p-3 text-left border border-gray-200 rounded-lg hover:border-blue-300 transition-colors"
                 onClick={() => onLoadSearch(search.query)}
               >
-                <h5 className="text-sm font-medium text-gray-900">{search.name}</h5>
-                <p className="text-xs text-gray-500 mt-1">{search.description}</p>
-              </div>
+                <span className="block text-sm font-medium text-gray-900">{search.name}</span>
+                <span className="block text-xs text-gray-500 mt-1">{search.description}</span>
+              </button>
             ))}
           </div>
         </div>
@@ -197,34 +214,40 @@ export default function SavedSearches({ onLoadSearch, onClose, currentQuery }: S
                 key={search.id}
                 className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:border-blue-300"
               >
-                <div
-                  className="flex-1 cursor-pointer"
+                <button
+                  type="button"
+                  className="flex-1 text-left"
                   onClick={() => handleLoadSavedSearch(search)}
                 >
-                  <div className="flex items-center space-x-2">
-                    <h5 className="text-sm font-medium text-gray-900">{search.name}</h5>
+                  <span className="flex items-center space-x-2">
+                    <span className="text-sm font-medium text-gray-900">{search.name}</span>
                     {search.isPublic && (
                       <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
                         Public
                       </span>
                     )}
-                  </div>
+                  </span>
                   {search.description && (
-                    <p className="text-xs text-gray-500 mt-1">{search.description}</p>
+                    <span className="block text-xs text-gray-500 mt-1">{search.description}</span>
                   )}
-                  <p className="text-xs text-gray-400 mt-1">
+                  <span className="block text-xs text-gray-500 mt-1">
                     Saved {new Date(search.createdAt).toLocaleDateString()}
-                  </p>
-                </div>
+                  </span>
+                </button>
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDeleteSearch(search.id);
-                  }}
+                  type="button"
+                  onClick={() => handleDeleteSearch(search.id)}
                   className="text-red-600 hover:text-red-800 p-1"
+                  aria-label={`Delete saved search ${search.name}`}
                   title="Delete search"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"

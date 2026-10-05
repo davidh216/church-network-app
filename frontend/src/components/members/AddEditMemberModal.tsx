@@ -1,8 +1,9 @@
 // File: frontend/src/components/members/AddEditMemberModal.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useId } from 'react';
 import { getErrorMessage } from '../../lib/errors';
+import Dialog from '../ui/Dialog';
 import InlineError from '../ui/InlineError';
 import { useRoles } from '../../lib/queries/roles';
 import { useCreateUser, useUpdateUser } from '../../lib/queries/users';
@@ -39,6 +40,7 @@ export default function AddEditMemberModal({
   const createUser = useCreateUser();
   const updateUser = useUpdateUser();
   const loading = createUser.isPending || updateUser.isPending;
+  const titleId = useId();
 
   const isEditing = !!member;
   const defaultRoles = member
@@ -114,171 +116,166 @@ export default function AddEditMemberModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-gray-600/50 overflow-y-auto h-full w-full z-50">
-      <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-        <div className="mt-3">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">
-            {isEditing ? 'Edit Member' : 'Add New Member'}
-          </h3>
+    <Dialog labelledBy={titleId} onClose={onClose}>
+      <div>
+        <h2 id={titleId} className="text-lg font-medium text-gray-900 mb-4">
+          {isEditing ? 'Edit Member' : 'Add New Member'}
+        </h2>
 
-          {error && (
-            <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
-              {error}
-            </div>
-          )}
-          {rolesQuery.error && (
-            <InlineError
-              error={rolesQuery.error}
-              fallback="Failed to load roles"
-              onRetry={() => void rolesQuery.refetch()}
-              className="mb-4"
+        {error && (
+          <div
+            role="alert"
+            className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded"
+          >
+            {error}
+          </div>
+        )}
+        {rolesQuery.error && (
+          <InlineError
+            error={rolesQuery.error}
+            fallback="Failed to load roles"
+            onRetry={() => void rolesQuery.refetch()}
+            className="mb-4"
+          />
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label htmlFor="member-name" className="block text-sm font-medium text-gray-700 mb-1">
+              Full Name *
+            </label>
+            <input
+              id="member-name"
+              type="text"
+              value={formData.name}
+              onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
+              required
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="John Doe"
             />
+          </div>
+
+          <div>
+            <label htmlFor="member-email" className="block text-sm font-medium text-gray-700 mb-1">
+              Email *
+            </label>
+            <input
+              id="member-email"
+              type="email"
+              value={formData.email}
+              onChange={(e) => setFormData((prev) => ({ ...prev, email: e.target.value }))}
+              required
+              disabled={isEditing} // Can't change email when editing
+              className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                isEditing ? 'bg-gray-100' : ''
+              }`}
+              placeholder="john@example.com"
+            />
+          </div>
+
+          {!isEditing && (
+            <div>
+              <label
+                htmlFor="member-password"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
+                Password *
+              </label>
+              <input
+                id="member-password"
+                type="password"
+                value={formData.password}
+                onChange={(e) => setFormData((prev) => ({ ...prev, password: e.target.value }))}
+                required
+                minLength={12}
+                maxLength={128}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Temporary password (at least 12 characters)"
+              />
+            </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label htmlFor="member-name" className="block text-sm font-medium text-gray-700 mb-1">
-                Full Name *
-              </label>
-              <input
-                id="member-name"
-                type="text"
-                value={formData.name}
-                onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="John Doe"
-              />
-            </div>
+          <div>
+            <label htmlFor="member-phone" className="block text-sm font-medium text-gray-700 mb-1">
+              Phone
+            </label>
+            <input
+              id="member-phone"
+              type="tel"
+              value={formData.phone}
+              onChange={(e) => setFormData((prev) => ({ ...prev, phone: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="(555) 123-4567"
+            />
+          </div>
 
-            <div>
-              <label
-                htmlFor="member-email"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Email *
-              </label>
-              <input
-                id="member-email"
-                type="email"
-                value={formData.email}
-                onChange={(e) => setFormData((prev) => ({ ...prev, email: e.target.value }))}
-                required
-                disabled={isEditing} // Can't change email when editing
-                className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                  isEditing ? 'bg-gray-100' : ''
-                }`}
-                placeholder="john@example.com"
-              />
-            </div>
+          <div>
+            <label htmlFor="member-bio" className="block text-sm font-medium text-gray-700 mb-1">
+              Bio
+            </label>
+            <textarea
+              id="member-bio"
+              value={formData.bio}
+              onChange={(e) => setFormData((prev) => ({ ...prev, bio: e.target.value }))}
+              rows={3}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Tell us about this member..."
+            />
+          </div>
 
-            {!isEditing && (
-              <div>
-                <label
-                  htmlFor="member-password"
-                  className="block text-sm font-medium text-gray-700 mb-1"
-                >
-                  Password *
+          <fieldset>
+            <legend className="block text-sm font-medium text-gray-700 mb-2">Roles</legend>
+            <div className="space-y-2 max-h-32 overflow-y-auto">
+              {roles.map((role) => (
+                <label key={role.id} className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={selectedRoles.includes(role.id)}
+                    onChange={() => handleRoleChange(role.id)}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="ml-2 text-sm text-gray-700 capitalize">
+                    {role.name}
+                    {role.description && (
+                      <span className="text-gray-500"> - {role.description}</span>
+                    )}
+                  </span>
                 </label>
-                <input
-                  id="member-password"
-                  type="password"
-                  value={formData.password}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, password: e.target.value }))}
-                  required
-                  minLength={12}
-                  maxLength={128}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Temporary password (at least 12 characters)"
-                />
-              </div>
-            )}
-
-            <div>
-              <label
-                htmlFor="member-phone"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Phone
-              </label>
-              <input
-                id="member-phone"
-                type="tel"
-                value={formData.phone}
-                onChange={(e) => setFormData((prev) => ({ ...prev, phone: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="(555) 123-4567"
-              />
+              ))}
             </div>
+          </fieldset>
 
-            <div>
-              <label htmlFor="member-bio" className="block text-sm font-medium text-gray-700 mb-1">
-                Bio
-              </label>
-              <textarea
-                id="member-bio"
-                value={formData.bio}
-                onChange={(e) => setFormData((prev) => ({ ...prev, bio: e.target.value }))}
-                rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Tell us about this member..."
-              />
-            </div>
+          <div className="flex items-center">
+            <input
+              id="member-active"
+              type="checkbox"
+              checked={formData.isActive}
+              onChange={(e) => setFormData((prev) => ({ ...prev, isActive: e.target.checked }))}
+              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            <label htmlFor="member-active" className="ml-2 text-sm text-gray-700">
+              Active Member
+            </label>
+          </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Roles</label>
-              <div className="space-y-2 max-h-32 overflow-y-auto">
-                {roles.map((role) => (
-                  <label key={role.id} className="flex items-center">
-                    <input
-                      type="checkbox"
-                      checked={selectedRoles.includes(role.id)}
-                      onChange={() => handleRoleChange(role.id)}
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                    />
-                    <span className="ml-2 text-sm text-gray-700 capitalize">
-                      {role.name}
-                      {role.description && (
-                        <span className="text-gray-500"> - {role.description}</span>
-                      )}
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex items-center">
-              <input
-                id="member-active"
-                type="checkbox"
-                checked={formData.isActive}
-                onChange={(e) => setFormData((prev) => ({ ...prev, isActive: e.target.checked }))}
-                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-              />
-              <label htmlFor="member-active" className="ml-2 text-sm text-gray-700">
-                Active Member
-              </label>
-            </div>
-
-            <div className="flex justify-end space-x-3 pt-4">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-500"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={loading}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-              >
-                {loading ? 'Saving...' : isEditing ? 'Update Member' : 'Add Member'}
-              </button>
-            </div>
-          </form>
-        </div>
+          <div className="flex justify-end space-x-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-500"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+            >
+              {loading ? 'Saving...' : isEditing ? 'Update Member' : 'Add Member'}
+            </button>
+          </div>
+        </form>
       </div>
-    </div>
+    </Dialog>
   );
 }

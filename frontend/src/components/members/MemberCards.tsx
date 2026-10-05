@@ -31,6 +31,7 @@ export default function MemberCards({
             <div className="absolute top-4 right-4">
               <input
                 type="checkbox"
+                aria-label={`Select ${member.name}`}
                 checked={selected.has(member.id)}
                 onChange={() => onToggleSelect(member.id)}
                 className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"

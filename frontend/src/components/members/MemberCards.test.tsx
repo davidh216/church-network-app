@@ -39,7 +39,7 @@ describe('MemberCards', () => {
     expect(screen.getByText('AL')).toBeTruthy();
     expect(screen.getByText('member')).toBeTruthy();
     expect(screen.getByText('Inactive')).toBeTruthy();
-    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(screen.getByRole('checkbox', { name: `Select ${ada.name}` }));
     expect(onToggleSelect).toHaveBeenCalledWith('a/1');
   });
 

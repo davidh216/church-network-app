@@ -1,5 +1,6 @@
 import type { MemberAnalytics } from '../../types/domain';
 import { engagementScoreClass, stageColour, stageLabel } from '../../lib/analytics/display';
+import AvatarImage from '../ui/AvatarImage';
 
 const SHOWN = 8;
 
@@ -27,7 +28,7 @@ export default function TopEngagedMembers({
                 </div>
                 <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center">
                   {member.user.avatar ? (
-                    <img
+                    <AvatarImage
                       src={member.user.avatar}
                       alt={member.user.name}
                       className="w-10 h-10 rounded-full object-cover"

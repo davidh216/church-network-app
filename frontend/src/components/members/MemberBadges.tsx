@@ -6,6 +6,7 @@ import {
   riskDotClass,
   stageClass,
 } from '../../lib/members/display';
+import AvatarImage from '../ui/AvatarImage';
 
 const pill = 'inline-flex items-center rounded-full text-xs font-medium';
 
@@ -15,7 +16,11 @@ export function MemberAvatar({ member, size }: { member: Member; size: 'sm' | 'm
   return (
     <div className={`${box} bg-gray-300 rounded-full flex items-center justify-center shrink-0`}>
       {member.avatar ? (
-        <img src={member.avatar} alt={member.name} className={`${box} rounded-full object-cover`} />
+        <AvatarImage
+          src={member.avatar}
+          alt={member.name}
+          className={`${box} rounded-full object-cover`}
+        />
       ) : (
         <span
           className={size === 'sm' ? 'text-sm font-medium text-gray-600' : 'text-lg text-gray-600'}
@@ -69,14 +74,14 @@ export function StatusBadge({
 /** The membership stage badge, or "Unknown". */
 export function StageBadge({ member }: { member: Member }) {
   const stage = member.engagement?.membershipStage;
-  if (!stage) return <span className="text-sm text-gray-400">Unknown</span>;
+  if (!stage) return <span className="text-sm text-gray-500">Unknown</span>;
   return <span className={`${pill} px-2 py-1 ${stageClass(stage)}`}>{formatStage(stage)}</span>;
 }
 
 /** The engagement score with a risk-level dot, or "-". */
 export function EngagementBadge({ member }: { member: Member }) {
   const engagement = member.engagement;
-  if (!engagement) return <span className="text-sm text-gray-400">-</span>;
+  if (!engagement) return <span className="text-sm text-gray-500">-</span>;
   return (
     <div className="flex items-center space-x-2">
       <div

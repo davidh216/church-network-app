@@ -102,17 +102,18 @@ describe('MemberList', () => {
   it('sorts on the server: ascending, descending, then unsorted', async () => {
     await renderAs(['member']);
     const nameHeader = () => screen.getByRole('columnheader', { name: /Member/ });
+    const sortByName = () => fireEvent.click(within(nameHeader()).getByRole('button'));
 
-    fireEvent.click(nameHeader());
+    sortByName();
     await waitFor(() => expect(lastParams()).toMatchObject({ sort: 'name', order: 'asc' }));
     expect(nameHeader()).toHaveAttribute('aria-sort', 'ascending');
     expect(within(nameHeader()).getByText('↑')).toBeInTheDocument();
 
-    fireEvent.click(nameHeader());
+    sortByName();
     await waitFor(() => expect(lastParams()).toMatchObject({ sort: 'name', order: 'desc' }));
     expect(within(nameHeader()).getByText('↓')).toBeInTheDocument();
 
-    fireEvent.click(nameHeader());
+    sortByName();
     await waitFor(() => expect(lastParams()).not.toHaveProperty('sort'));
     expect(nameHeader()).toHaveAttribute('aria-sort', 'none');
   });
@@ -120,11 +121,11 @@ describe('MemberList', () => {
   it('lets staff sort by the engagement and contact columns', async () => {
     usersApi.listUsers.mockResolvedValue(page(staffRows));
     await renderAs(['admin']);
-    fireEvent.click(screen.getByRole('columnheader', { name: /Engagement/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Engagement' }));
     await waitFor(() =>
       expect(lastParams()).toMatchObject({ sort: 'engagementScore', order: 'asc' }),
     );
-    fireEvent.click(screen.getByRole('columnheader', { name: /Contact/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Contact' }));
     await waitFor(() => expect(lastParams()).toMatchObject({ sort: 'email', order: 'asc' }));
   });
 
@@ -225,6 +226,13 @@ describe('MemberList', () => {
     expect(screen.queryByLabelText('Role')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Joined from')).not.toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Joined' })).not.toHaveAttribute('aria-sort');
+    // Sortable headers are buttons inside the header cell; members only get the name one.
+    expect(
+      within(screen.getByRole('columnheader', { name: 'Member' })).getByRole('button'),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('columnheader', { name: 'Joined' })).queryByRole('button'),
+    ).toBeNull();
   });
 
   it('shows the staff controls, and Export after selecting a row, to a leader', async () => {
@@ -257,6 +265,10 @@ describe('MemberList', () => {
     await waitFor(() => expect(screen.getByText('Dan Example')).toBeInTheDocument());
     expect(screen.getByText('3 selected across pages')).toBeInTheDocument();
     expect(screen.getByLabelText('Select all members on this page')).not.toBeChecked();
+    // Each row's checkbox is named after its member.
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select Dan Example' }));
+    expect(screen.getByText('4 selected across pages')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select Dan Example' }));
 
     fireEvent.click(screen.getByLabelText('Select all members on this page'));
     expect(screen.getByText('4 selected across pages')).toBeInTheDocument();

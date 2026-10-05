@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { MemberDetails } from '../../../types/domain';
 import { formatStage, initials } from '../../../lib/members/display';
 import { calculateAge, formatDate, riskBadgeClass } from '../../../lib/members/profile';
+import AvatarImage from '../../ui/AvatarImage';
 
 export const backLinkClass = 'text-sm font-medium text-blue-600 hover:text-blue-800';
 
@@ -20,7 +21,7 @@ export default function ProfileHeader({
       <div className="flex items-center space-x-4">
         <div className="w-16 h-16 bg-gray-300 rounded-full flex items-center justify-center">
           {member.avatar ? (
-            <img
+            <AvatarImage
               src={member.avatar}
               alt={member.name}
               className="w-16 h-16 rounded-full object-cover"

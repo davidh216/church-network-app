@@ -15,7 +15,7 @@ function TagList({
 }) {
   return (
     <div>
-      <label className="block text-sm font-medium text-gray-700 mb-2">{label}</label>
+      <span className="block text-sm font-medium text-gray-700 mb-2">{label}</span>
       <div className="flex flex-wrap gap-2">
         {items.length > 0 ? (
           items.map((item, index) => (
