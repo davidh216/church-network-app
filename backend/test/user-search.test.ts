@@ -54,6 +54,8 @@ beforeAll(async () => {
         phone,
         bio,
         isActive,
+        // Staff-only notes must never leave the API through the list or the search.
+        notes: 'Private pastoral note',
         createdAt: new Date(createdAt),
         lastLoginAt: lastLoginAt ? new Date(lastLoginAt) : null,
       },
@@ -490,6 +492,19 @@ describe('GET /api/users', () => {
       expect(names((await list('q=carol', memberToken)).body)).toEqual([]);
     });
 
+    it('may pass order with sort=name, or alone', async () => {
+      const desc = await list('sort=name&order=desc', memberToken);
+      expect(desc.status).toBe(200);
+      expect(names(desc.body)).toEqual(['Dan Diaz', 'Bob Brown', 'Alice Anders']);
+      const asc = await list('sort=name&order=asc', memberToken);
+      expect(asc.status).toBe(200);
+      expect(names(asc.body)).toEqual(['Alice Anders', 'Bob Brown', 'Dan Diaz']);
+      // Without sort the list is sorted by name, so order alone is allowed too.
+      const orderOnly = await list('order=desc', memberToken);
+      expect(orderOnly.status).toBe(200);
+      expect(names(orderOnly.body)).toEqual(['Dan Diaz', 'Bob Brown', 'Alice Anders']);
+    });
+
     it('may sort by name and page', async () => {
       const res = await list('sort=name&order=desc&page=2&pageSize=2', memberToken);
       expect(res.status).toBe(200);
@@ -512,6 +527,46 @@ describe('GET /api/users', () => {
       expect(res.status).toBe(403);
       expect(res.body.error).toMatch(/only staff/i);
     });
+  });
+});
+
+describe('notes and password never leave the API', () => {
+  it('the fixture has notes on every account', async () => {
+    expect(await prisma.user.count({ where: { notes: 'Private pastoral note' } })).toBe(4);
+  });
+
+  it.each([
+    ['the staff list', () => list('')],
+    ['the staff list with a search', () => list('q=a&sort=engagementScore')],
+    [
+      'the staff search',
+      () =>
+        search({
+          conditions: [{ field: 'isActive', operator: 'equals', value: true }],
+          logic: 'OR',
+        }),
+    ],
+    [
+      'the staff search on every account',
+      () =>
+        search({
+          conditions: [
+            { field: 'isActive', operator: 'equals', value: true },
+            { field: 'isActive', operator: 'equals', value: false },
+          ],
+          logic: 'OR',
+        }),
+    ],
+    ['the member list', () => list('', memberToken)],
+    ['the member list with a search', () => list('q=a', memberToken)],
+  ])('%s', async (_label, call) => {
+    const res = await call();
+    expect(res.status).toBe(200);
+    expect(res.body.users.length).toBeGreaterThan(0);
+    for (const u of res.body.users as Record<string, unknown>[]) {
+      expect('notes' in u, String(u.name)).toBe(false);
+      expect('password' in u, String(u.name)).toBe(false);
+    }
   });
 });
 
