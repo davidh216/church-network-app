@@ -1,11 +1,17 @@
 // File: frontend/src/components/media/SimpleMediaLibrary.tsx
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { createMedia, listMedia } from '../../lib/api/media';
+import { DEFAULT_MEDIA_PAGE_SIZE } from '@embrace/shared';
+import { useState } from 'react';
 import { useIsStaff } from '../../lib/auth/AuthProvider';
 import { getErrorMessage } from '../../lib/errors';
+import { useDebouncedValue } from '../../lib/hooks/useDebouncedValue';
+import { useResettingPage } from '../../lib/hooks/useResettingPage';
+import { useCreateMedia, useMedia } from '../../lib/queries/media';
 import type { MediaItem } from '../../types/domain';
+import InlineError from '../ui/InlineError';
+import Pagination from '../ui/Pagination';
+import Skeleton from '../ui/Skeleton';
 
 interface SimpleMediaLibraryProps {
   onPlayMedia: (media: MediaItem, playlist?: MediaItem[]) => void;
@@ -13,13 +19,23 @@ interface SimpleMediaLibraryProps {
 
 export default function SimpleMediaLibrary({ onPlayMedia }: SimpleMediaLibraryProps) {
   const canManage = useIsStaff();
-  const [media, setMedia] = useState<MediaItem[]>([]);
-  const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTag, setSelectedTag] = useState('all');
-  const [error, setError] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  // The input updates at once; the query follows 300 ms after the last keystroke.
+  const search = useDebouncedValue(searchTerm.trim());
+  const [page, setPage] = useResettingPage(`${search}|${selectedTag}`);
+  const mediaQuery = useMedia({
+    search,
+    tag: selectedTag,
+    page,
+    pageSize: DEFAULT_MEDIA_PAGE_SIZE,
+  });
+  const media = mediaQuery.data?.media ?? [];
+  const total = mediaQuery.data?.total ?? 0;
+  const loading = mediaQuery.isPending;
+  const filtered = search !== '' || selectedTag !== 'all';
 
   const availableTags = [
     'all',
@@ -32,21 +48,6 @@ export default function SimpleMediaLibrary({ onPlayMedia }: SimpleMediaLibraryPr
     'communion',
     'special-event',
   ];
-
-  const fetchMedia = useCallback(async () => {
-    try {
-      setLoading(true);
-      setMedia(await listMedia({ search: searchTerm, tag: selectedTag }));
-    } catch (err) {
-      setError(getErrorMessage(err, 'Failed to load media'));
-    } finally {
-      setLoading(false);
-    }
-  }, [searchTerm, selectedTag]);
-
-  useEffect(() => {
-    fetchMedia();
-  }, [fetchMedia]);
 
   const extractVideoId = (url: string): string => {
     // Handle various YouTube URL formats
@@ -88,21 +89,13 @@ export default function SimpleMediaLibrary({ onPlayMedia }: SimpleMediaLibraryPr
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
-
   return (
     <div className="bg-white shadow rounded-lg">
       <div className="px-6 py-4 border-b border-gray-200">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-center space-x-4">
             <h2 className="text-lg font-medium text-gray-900">Embrace Media Library</h2>
-            <span className="text-sm text-gray-500">({media.length} videos)</span>
+            <span className="text-sm text-gray-500">({total} videos)</span>
           </div>
           <div className="flex items-center space-x-3">
             {/* View Mode Toggle */}
@@ -178,11 +171,15 @@ export default function SimpleMediaLibrary({ onPlayMedia }: SimpleMediaLibraryPr
         </div>
       </div>
 
-      {error && (
-        <div className="px-6 py-4 bg-red-50 border-l-4 border-red-400">
-          <p className="text-red-700">{error}</p>
-        </div>
+      {mediaQuery.error && (
+        <InlineError
+          error={mediaQuery.error}
+          fallback="Failed to load media"
+          onRetry={() => void mediaQuery.refetch()}
+        />
       )}
+
+      {loading && <Skeleton rows={4} label="Loading videos" className="p-6" />}
 
       {/* Grid View */}
       {viewMode === 'grid' && (
@@ -354,7 +351,21 @@ export default function SimpleMediaLibrary({ onPlayMedia }: SimpleMediaLibraryPr
         </div>
       )}
 
-      {media.length === 0 && !loading && (
+      {total > DEFAULT_MEDIA_PAGE_SIZE && (
+        <Pagination
+          total={total}
+          page={page}
+          pageSize={DEFAULT_MEDIA_PAGE_SIZE}
+          onPageChange={setPage}
+          itemLabel="videos"
+        />
+      )}
+
+      {media.length === 0 && mediaQuery.isSuccess && filtered && (
+        <p className="px-6 py-12 text-center text-gray-500">No videos match your search.</p>
+      )}
+
+      {media.length === 0 && mediaQuery.isSuccess && !filtered && (
         <div className="px-6 py-12 text-center">
           <div className="max-w-md mx-auto">
             <h3 className="text-lg font-medium text-gray-900 mb-2">Welcome to Embrace Media!</h3>
@@ -380,13 +391,7 @@ export default function SimpleMediaLibrary({ onPlayMedia }: SimpleMediaLibraryPr
 
       {/* Add Video Form Modal */}
       {canManage && showAddForm && (
-        <AddVideoModal
-          onClose={() => setShowAddForm(false)}
-          onSave={() => {
-            setShowAddForm(false);
-            fetchMedia();
-          }}
-        />
+        <AddVideoModal onClose={() => setShowAddForm(false)} onSave={() => setShowAddForm(false)} />
       )}
     </div>
   );
@@ -405,8 +410,9 @@ function AddVideoModal({ onClose, onSave }: AddVideoModalProps) {
     url: '',
     tags: [] as string[],
   });
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const createMedia = useCreateMedia();
+  const loading = createMedia.isPending;
 
   const availableTags = [
     'worship',
@@ -434,7 +440,6 @@ function AddVideoModal({ onClose, onSave }: AddVideoModalProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
     setError('');
 
     try {
@@ -452,7 +457,7 @@ function AddVideoModal({ onClose, onSave }: AddVideoModalProps) {
         throw new Error('Please enter a valid YouTube URL');
       }
 
-      await createMedia({
+      await createMedia.mutateAsync({
         title: formData.title,
         description: formData.description,
         type: 'YOUTUBE_VIDEO',
@@ -463,8 +468,6 @@ function AddVideoModal({ onClose, onSave }: AddVideoModalProps) {
       onSave();
     } catch (err: unknown) {
       setError(getErrorMessage(err));
-    } finally {
-      setLoading(false);
     }
   };
 

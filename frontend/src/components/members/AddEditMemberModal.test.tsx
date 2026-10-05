@@ -65,7 +65,7 @@ describe('AddEditMemberModal', () => {
   it('create sends roleIds (defaulting to the member role) and isActive', async () => {
     await open();
     expect(screen.getByRole('heading', { name: 'Add New Member' })).toBeInTheDocument();
-    expect(screen.getByRole('checkbox', { name: /member/ })).toBeChecked();
+    expect(await screen.findByRole('checkbox', { name: /^member/ })).toBeChecked();
     expect(screen.getByLabelText('Password *')).toHaveAttribute('minLength', '12');
 
     type('Full Name *', 'New Person');

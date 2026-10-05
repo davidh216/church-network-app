@@ -1,8 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { getUserSummary, type UserSummary } from '@/lib/api/users';
-import { getErrorMessage } from '@/lib/errors';
+import type { UserSummary } from '@/lib/api/users';
+import { useUserSummary } from '@/lib/queries/users';
+import InlineError from '../ui/InlineError';
+import Skeleton from '../ui/Skeleton';
 
 interface Tile {
   label: string;
@@ -24,39 +25,21 @@ export function summaryTiles(summary: UserSummary): Tile[] {
 }
 
 export default function SummaryTiles() {
-  const [summary, setSummary] = useState<UserSummary | null>(null);
-  const [error, setError] = useState('');
-
-  const load = useCallback(async () => {
-    setError('');
-    try {
-      setSummary(await getUserSummary());
-    } catch (err) {
-      setError(getErrorMessage(err, 'Failed to load member counts'));
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const { data: summary, error, refetch } = useUserSummary();
 
   if (error) {
     return (
-      <div role="alert" className="bg-white shadow rounded-lg p-5 text-sm text-red-700">
-        {error}{' '}
-        <button type="button" onClick={() => void load()} className="ml-2 font-medium underline">
-          Retry
-        </button>
-      </div>
+      <InlineError
+        error={error}
+        fallback="Failed to load member counts"
+        onRetry={() => void refetch()}
+        className="bg-white shadow rounded-lg"
+      />
     );
   }
 
   if (!summary) {
-    return (
-      <p role="status" className="text-sm text-gray-500">
-        Loading member counts...
-      </p>
-    );
+    return <Skeleton rows={1} label="Loading member counts" />;
   }
 
   return (

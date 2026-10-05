@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import AddEditMemberModal from './AddEditMemberModal';
-import { getMemberDetails } from '../../lib/api/memberDetails';
-import { getErrorMessage } from '../../lib/errors';
-import type { MemberDetails } from '../../types/domain';
+import { useMemberDetails } from '../../lib/queries/memberDetails';
+import InlineError from '../ui/InlineError';
+import Skeleton from '../ui/Skeleton';
 
 interface MemberProfileProps {
   memberId: string;
@@ -15,27 +15,9 @@ const backLinkClass = 'text-sm font-medium text-blue-600 hover:text-blue-800';
 
 /** Staff view of one member at `/members/[id]`, with Edit opening the member form in place. */
 export default function MemberProfile({ memberId }: MemberProfileProps) {
-  const [member, setMember] = useState<MemberDetails | null>(null);
+  const { data: member, isPending, error, refetch } = useMemberDetails(memberId);
   const [editing, setEditing] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState('personal');
-
-  const fetchMember = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError('');
-      setMember(await getMemberDetails(memberId));
-    } catch (err) {
-      setError(getErrorMessage(err, 'Failed to load member details'));
-    } finally {
-      setLoading(false);
-    }
-  }, [memberId]);
-
-  useEffect(() => {
-    fetchMember();
-  }, [fetchMember]);
 
   const formatDate = (dateString?: string): string => {
     if (!dateString) return 'Not set';
@@ -172,29 +154,25 @@ export default function MemberProfile({ memberId }: MemberProfileProps) {
     }
   };
 
-  if (loading) {
+  if (isPending) {
     return (
-      <div>
-        <div className="p-5 border border-gray-200 shadow rounded-md bg-white">
-          <div className="flex justify-center items-center h-64">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-          </div>
-        </div>
+      <div className="p-5 border border-gray-200 shadow rounded-md bg-white">
+        <Skeleton rows={6} label="Loading member details" />
       </div>
     );
   }
 
   if (error || !member) {
     return (
-      <div>
-        <div className="p-5 border border-gray-200 shadow rounded-md bg-white">
-          <div className="text-center">
-            <div className="text-red-600 mb-4">{error || 'Member not found'}</div>
-            <Link href="/members" className={backLinkClass}>
-              ← Back to members
-            </Link>
-          </div>
-        </div>
+      <div className="p-5 border border-gray-200 shadow rounded-md bg-white space-y-4">
+        <InlineError
+          error={error}
+          fallback="Member not found"
+          onRetry={error ? () => void refetch() : undefined}
+        />
+        <Link href="/members" className={backLinkClass}>
+          ← Back to members
+        </Link>
       </div>
     );
   }
@@ -915,12 +893,7 @@ export default function MemberProfile({ memberId }: MemberProfileProps) {
           )}
         </div>
       </div>
-      <AddEditMemberModal
-        isOpen={editing}
-        onClose={() => setEditing(false)}
-        onSave={() => void fetchMember()}
-        member={member}
-      />
+      <AddEditMemberModal isOpen={editing} onClose={() => setEditing(false)} member={member} />
     </div>
   );
 }

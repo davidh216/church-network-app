@@ -1,9 +1,21 @@
+import type { ListUsersParams } from '@embrace/shared';
 import type { ApiEnvelope, CreateUserInput, Member, UpdateUserInput } from '../../types/domain';
 import { apiFetch, apiRequest } from './client';
+import { queryString, type Paged } from './query';
 
-export async function listUsers(): Promise<Member[]> {
-  const data = await apiFetch<ApiEnvelope<{ users: Member[] }>>('/users');
-  return data.users;
+export interface UserPage extends Paged {
+  users: Member[];
+}
+
+/**
+ * GET /api/users: one page of members matching the filters (server-side paging, 25 per
+ * page by default). Members may only pass `q`, `sort=name`, `order`, `page` and `pageSize`.
+ */
+export async function listUsers(params: ListUsersParams = {}): Promise<UserPage> {
+  const { users, total, page, pageSize } = await apiFetch<ApiEnvelope<UserPage>>(
+    `/users${queryString(params)}`,
+  );
+  return { users, total, page, pageSize };
 }
 
 /**

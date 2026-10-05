@@ -1,3 +1,4 @@
+import { waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AnalyticsPage from '@/app/(app)/analytics/page';
 import RequireStaff from '@/components/auth/RequireStaff';
@@ -84,8 +85,8 @@ describe('/analytics', () => {
 
   it('loads the dashboard for staff, with a retry instead of a close button on failure', async () => {
     const container = await renderAs(['admin'], <AnalyticsPage />);
+    await waitFor(() => expect(container.textContent).toContain('not needed'));
     expect(analyticsApi.getAnalytics).toHaveBeenCalledTimes(1);
-    expect(container.textContent).toContain('not needed');
     expect(container.textContent).toContain('Retry');
     expect(container.textContent).not.toContain('Close');
   });
@@ -94,8 +95,8 @@ describe('/analytics', () => {
 describe('/members/[id]', () => {
   it('shows staff the full profile with a link back to the list', async () => {
     const container = await renderAs(['admin'], <MemberProfileRoute id={OTHER} />);
+    await waitFor(() => expect(container.querySelector('h1')?.textContent).toBe('Bob Other'));
     expect(detailsApi.getMemberDetails).toHaveBeenCalledWith(OTHER);
-    expect(container.querySelector('h1')?.textContent).toBe('Bob Other');
     expect(container.querySelector('a[href="/members"]')).not.toBeNull();
     expect(container.querySelector('.fixed')).toBeNull();
   });

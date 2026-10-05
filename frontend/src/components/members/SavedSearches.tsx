@@ -1,9 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import * as savedSearchesApi from '../../lib/api/savedSearches';
+import { useState } from 'react';
 import { useIsStaff } from '../../lib/auth/AuthProvider';
 import { getErrorMessage } from '../../lib/errors';
+import {
+  useCreateSavedSearch,
+  useDeleteSavedSearch,
+  useRecordSavedSearchUse,
+  useSavedSearches,
+} from '../../lib/queries/savedSearches';
+import InlineError from '../ui/InlineError';
 import type { SavedSearch, SearchQuery } from '../../types/domain';
 
 // The quick searches need the advanced-query evaluator; hidden until it exists (gameplan 2.4 / F038).
@@ -17,8 +23,12 @@ interface SavedSearchesProps {
 
 export default function SavedSearches({ onLoadSearch, onClose, currentQuery }: SavedSearchesProps) {
   const canManage = useIsStaff();
-  const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
-  const [loading, setLoading] = useState(true);
+  const searchesQuery = useSavedSearches();
+  const savedSearches = searchesQuery.data ?? [];
+  const loading = searchesQuery.isPending;
+  const createSearch = useCreateSavedSearch();
+  const deleteSearch = useDeleteSavedSearch();
+  const recordUse = useRecordSavedSearchUse();
   const [error, setError] = useState('');
   const [showSaveForm, setShowSaveForm] = useState(false);
   const [saveForm, setSaveForm] = useState({
@@ -27,31 +37,16 @@ export default function SavedSearches({ onLoadSearch, onClose, currentQuery }: S
     isPublic: false,
   });
 
-  useEffect(() => {
-    fetchSavedSearches();
-  }, []);
-
-  const fetchSavedSearches = async () => {
-    try {
-      setSavedSearches(await savedSearchesApi.listSavedSearches());
-    } catch (err) {
-      setError(getErrorMessage(err, 'Failed to load saved searches'));
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleSaveCurrentSearch = async () => {
     if (!currentQuery || !saveForm.name.trim()) return;
 
     try {
-      await savedSearchesApi.createSavedSearch({
+      await createSearch.mutateAsync({
         name: saveForm.name,
         description: saveForm.description,
         query: currentQuery,
         isPublic: saveForm.isPublic,
       });
-      await fetchSavedSearches();
       setShowSaveForm(false);
       setSaveForm({ name: '', description: '', isPublic: false });
     } catch (err) {
@@ -63,8 +58,7 @@ export default function SavedSearches({ onLoadSearch, onClose, currentQuery }: S
     if (!confirm('Are you sure you want to delete this saved search?')) return;
 
     try {
-      await savedSearchesApi.deleteSavedSearch(searchId);
-      setSavedSearches(savedSearches.filter((s) => s.id !== searchId));
+      await deleteSearch.mutateAsync(searchId);
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to delete search'));
     }
@@ -73,7 +67,7 @@ export default function SavedSearches({ onLoadSearch, onClose, currentQuery }: S
   const handleLoadSavedSearch = (search: SavedSearch) => {
     onLoadSearch(search.query);
     // Usage tracking is best effort; a failure must not block loading the search.
-    savedSearchesApi.useSavedSearch(search.id).catch(() => undefined);
+    recordUse.mutate(search.id);
   };
 
   // Predefined searches for common scenarios
@@ -184,6 +178,14 @@ export default function SavedSearches({ onLoadSearch, onClose, currentQuery }: S
         >
           {error}
         </div>
+      )}
+      {searchesQuery.error && (
+        <InlineError
+          error={searchesQuery.error}
+          fallback="Failed to load saved searches"
+          onRetry={() => void searchesQuery.refetch()}
+          className="mb-4"
+        />
       )}
 
       {canManage && showSaveForm && (

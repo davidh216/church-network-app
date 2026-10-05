@@ -29,6 +29,11 @@ test('admin navigates the dashboard, members, a profile, media and analytics, th
   await nav.getByRole('link', { name: 'Members' }).click();
   await expect(page).toHaveURL(/\/members$/);
   await expect(page.getByRole('heading', { name: 'Church Members' })).toBeVisible();
+  // The search runs on the server (debounced) and the input keeps focus while results load.
+  const search = page.getByPlaceholder(/Search by name/);
+  await search.fill(admin.email);
+  await expect(page.getByText('(1 total)')).toBeVisible();
+  await expect(search).toBeFocused();
   const row = page.getByRole('row').filter({ hasText: admin.email });
   await row.getByRole('link', { name: 'View', exact: true }).click();
   await expect(page).toHaveURL(/\/members\/[^/]+$/);

@@ -1,9 +1,10 @@
-import { act, fireEvent, screen, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import MemberList from '@/components/members/MemberList';
 import { AuthProvider } from '@/lib/auth/AuthProvider';
 import { makeUser } from '@/test/fixtures';
 import { render } from '@/test/render';
+import { ApiError } from '@/lib/api/client';
 import type { Member } from '@/types/domain';
 
 const router = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn() }));
@@ -65,6 +66,15 @@ async function renderAs(roleNames: string[]) {
   );
 }
 
+function page(users: Member[], total = users.length, pageNumber = 1, pageSize = 25) {
+  return { users, total, page: pageNumber, pageSize };
+}
+
+/** The params of the latest GET /api/users call. */
+function lastParams(): Record<string, unknown> {
+  return usersApi.listUsers.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+}
+
 /** Member names in table order. */
 function rowNames(): string[] {
   const body = screen.getAllByRole('rowgroup')[1]!;
@@ -75,70 +85,134 @@ function rowNames(): string[] {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  usersApi.listUsers.mockResolvedValue(directory);
+  usersApi.listUsers.mockResolvedValue(page(directory));
 });
 
 describe('MemberList', () => {
-  it('renders a row per member from the API', async () => {
+  it('renders the page of members the API returns, with the total across pages', async () => {
+    usersApi.listUsers.mockResolvedValue(page(directory, 40));
     await renderAs(['member']);
     expect(usersApi.listUsers).toHaveBeenCalledTimes(1);
+    expect(lastParams()).toEqual({ q: undefined, page: 1, pageSize: 25 });
     expect(rowNames()).toEqual(['Carol Example', 'Ann Example', 'Bob Example']);
-    expect(screen.getByText('(3 of 3)')).toBeInTheDocument();
+    expect(screen.getByText('(40 total)')).toBeInTheDocument();
+    expect(screen.getByText('Page 1 of 2')).toBeInTheDocument();
   });
 
-  it('sorts by name ascending, then descending, then back to API order without throwing', async () => {
+  it('sorts on the server: ascending, descending, then unsorted', async () => {
     await renderAs(['member']);
-    const nameHeader = screen.getByRole('columnheader', { name: /Member/ });
+    const nameHeader = () => screen.getByRole('columnheader', { name: /Member/ });
 
-    fireEvent.click(nameHeader);
-    expect(rowNames()).toEqual(['Ann Example', 'Bob Example', 'Carol Example']);
-    expect(within(nameHeader).getByText('↑')).toBeInTheDocument();
+    fireEvent.click(nameHeader());
+    await waitFor(() => expect(lastParams()).toMatchObject({ sort: 'name', order: 'asc' }));
+    expect(nameHeader()).toHaveAttribute('aria-sort', 'ascending');
+    expect(within(nameHeader()).getByText('↑')).toBeInTheDocument();
 
-    fireEvent.click(nameHeader);
-    expect(rowNames()).toEqual(['Carol Example', 'Bob Example', 'Ann Example']);
-    expect(within(nameHeader).getByText('↓')).toBeInTheDocument();
+    fireEvent.click(nameHeader());
+    await waitFor(() => expect(lastParams()).toMatchObject({ sort: 'name', order: 'desc' }));
+    expect(within(nameHeader()).getByText('↓')).toBeInTheDocument();
 
-    fireEvent.click(nameHeader);
-    expect(rowNames()).toEqual(['Carol Example', 'Ann Example', 'Bob Example']);
+    fireEvent.click(nameHeader());
+    await waitFor(() => expect(lastParams()).not.toHaveProperty('sort'));
+    expect(nameHeader()).toHaveAttribute('aria-sort', 'none');
   });
 
-  it('sorts staff columns whose values are missing without throwing', async () => {
-    usersApi.listUsers.mockResolvedValue(staffRows);
+  it('lets staff sort by the engagement and contact columns', async () => {
+    usersApi.listUsers.mockResolvedValue(page(staffRows));
     await renderAs(['admin']);
     fireEvent.click(screen.getByRole('columnheader', { name: /Engagement/ }));
+    await waitFor(() =>
+      expect(lastParams()).toMatchObject({ sort: 'engagementScore', order: 'asc' }),
+    );
     fireEvent.click(screen.getByRole('columnheader', { name: /Contact/ }));
-    expect(rowNames()).toEqual(['Ann Example', 'Bob Example', 'Carol Example']);
+    await waitFor(() => expect(lastParams()).toMatchObject({ sort: 'email', order: 'asc' }));
   });
 
-  it('reduces rows with the search box and the role filter, and restores them on Clear All', async () => {
+  it('debounces the search box, keeps focus and the current rows, and sends one request', async () => {
     await renderAs(['member']);
+    const input = screen.getByPlaceholderText(/Search by name/);
+    input.focus();
+    for (const value of ['b', 'bo', 'bob']) {
+      fireEvent.change(input, { target: { value } });
+    }
+    // Before the debounce fires: no new request, the rows stay and the input keeps focus.
+    expect(usersApi.listUsers).toHaveBeenCalledTimes(1);
+    expect(rowNames()).toHaveLength(3);
 
-    fireEvent.change(screen.getByPlaceholderText(/Search by name/), { target: { value: 'bob' } });
-    expect(rowNames()).toEqual(['Bob Example']);
-    expect(screen.getByText('(1 of 3)')).toBeInTheDocument();
+    usersApi.listUsers.mockResolvedValue(page([directory[2]!]));
+    await waitFor(() => expect(lastParams()).toMatchObject({ q: 'bob', page: 1 }));
+    expect(usersApi.listUsers).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(rowNames()).toEqual(['Bob Example']));
+    expect(document.activeElement).toBe(screen.getByPlaceholderText(/Search by name/));
+    expect(screen.getByDisplayValue('bob')).toBeInTheDocument();
+  });
 
-    fireEvent.change(screen.getByPlaceholderText(/Search by name/), { target: { value: '' } });
-    fireEvent.change(screen.getByDisplayValue('All Roles'), { target: { value: 'leader' } });
-    expect(rowNames()).toEqual(['Ann Example']);
+  it('pages on the server and returns to page 1 when a filter changes', async () => {
+    usersApi.listUsers.mockResolvedValue(page(staffRows, 60));
+    await renderAs(['admin']);
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    await waitFor(() => expect(lastParams()).toMatchObject({ page: 2, pageSize: 25 }));
 
-    fireEvent.change(screen.getByDisplayValue('Leader'), { target: { value: 'admin' } });
-    expect(screen.queryAllByRole('row')).toHaveLength(1); // header row only
-    expect(screen.getByText('No members found')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Role'), { target: { value: 'leader' } });
+    await waitFor(() => expect(lastParams()).toMatchObject({ role: 'leader', page: 1 }));
+
+    fireEvent.change(screen.getByDisplayValue('25'), { target: { value: '50' } });
+    await waitFor(() => expect(lastParams()).toMatchObject({ page: 1, pageSize: 50 }));
+  });
+
+  it('sends the staff filters, with the joined date range inclusive as typed', async () => {
+    usersApi.listUsers.mockResolvedValue(page(staffRows));
+    await renderAs(['leader']);
+    fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'inactive' } });
+    fireEvent.change(screen.getByLabelText('Membership stage'), {
+      target: { value: 'new_member' },
+    });
+    fireEvent.change(screen.getByLabelText('Risk level'), { target: { value: 'high' } });
+    fireEvent.change(screen.getByLabelText('Joined from'), { target: { value: '2026-01-01' } });
+    fireEvent.change(screen.getByLabelText('Joined to (inclusive)'), {
+      target: { value: '2026-01-31' },
+    });
+    await waitFor(() =>
+      expect(lastParams()).toMatchObject({
+        status: 'inactive',
+        stage: 'new_member',
+        risk: 'high',
+        joinedFrom: '2026-01-01',
+        joinedTo: '2026-01-31',
+        page: 1,
+      }),
+    );
+
+    // An inverted range is reported and not sent.
+    fireEvent.change(screen.getByLabelText('Joined from'), { target: { value: '2026-02-01' } });
+    expect(await screen.findByRole('alert')).toHaveTextContent('start date is after the end date');
+    await waitFor(() => expect(lastParams()).not.toHaveProperty('joinedFrom', '2026-02-01'));
+    expect(lastParams()).toMatchObject({ joinedFrom: undefined, joinedTo: undefined });
 
     fireEvent.click(screen.getByRole('button', { name: 'Clear All' }));
-    expect(rowNames()).toHaveLength(3);
+    await waitFor(() => expect(lastParams()).toMatchObject({ status: undefined, risk: undefined }));
   });
 
-  it('lets staff filter by status', async () => {
-    usersApi.listUsers.mockResolvedValue(staffRows);
-    await renderAs(['leader']);
-    fireEvent.change(screen.getByDisplayValue('All Status'), { target: { value: 'inactive' } });
-    expect(rowNames()).toEqual(['Bob Example']);
-    fireEvent.change(screen.getByDisplayValue('Inactive'), { target: { value: 'active' } });
-    expect(rowNames()).toEqual(['Carol Example', 'Ann Example']);
+  it('shows "No members found" with a clear action when the filters match nothing', async () => {
+    await renderAs(['admin']);
+    usersApi.listUsers.mockResolvedValue(page([]));
+    fireEvent.change(screen.getByLabelText('Role'), { target: { value: 'admin' } });
+    expect(await screen.findByText('No members found')).toBeInTheDocument();
+    usersApi.listUsers.mockResolvedValue(page(directory));
+    fireEvent.click(screen.getByRole('button', { name: 'Clear all filters' }));
+    await waitFor(() => expect(rowNames()).toHaveLength(3));
   });
 
-  it('hides staff-only controls from a member', async () => {
+  it('shows an inline error with Retry when the list fails to load', async () => {
+    usersApi.listUsers.mockRejectedValue(new ApiError(500, 'Database unavailable'));
+    await renderAs(['admin']);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Database unavailable');
+    usersApi.listUsers.mockResolvedValue(page(staffRows));
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(rowNames()).toHaveLength(3));
+  });
+
+  it('hides staff-only controls and filters from a member', async () => {
     await renderAs(['member']);
     expect(screen.getByText('Ann Example')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Add Member' })).not.toBeInTheDocument();
@@ -147,10 +221,14 @@ describe('MemberList', () => {
     expect(screen.queryByRole('button', { name: /Export/ })).not.toBeInTheDocument();
     expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
     expect(screen.queryByRole('columnheader', { name: 'Actions' })).not.toBeInTheDocument();
+    // The API lets members search by name and sort by name only.
+    expect(screen.queryByLabelText('Role')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Joined from')).not.toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Joined' })).not.toHaveAttribute('aria-sort');
   });
 
   it('shows the staff controls, and Export after selecting a row, to a leader', async () => {
-    usersApi.listUsers.mockResolvedValue(staffRows);
+    usersApi.listUsers.mockResolvedValue(page(staffRows));
     await renderAs(['leader']);
     expect(screen.getByRole('button', { name: 'Add Member' })).toBeInTheDocument();
     // Profiles are routes now: "View" is a link to /members/[id].
@@ -166,8 +244,27 @@ describe('MemberList', () => {
     expect(screen.getByRole('button', { name: 'Export Selected (1)' })).toBeInTheDocument();
   });
 
-  it('opens the member form in place for Add Member and Edit, and reloads after saving', async () => {
-    usersApi.listUsers.mockResolvedValue(staffRows);
+  it('selects all on the current page and counts a selection across pages honestly', async () => {
+    usersApi.listUsers.mockResolvedValue(page(staffRows, 30));
+    await renderAs(['admin']);
+    const selectAll = screen.getByLabelText('Select all members on this page');
+    fireEvent.click(selectAll);
+    expect(screen.getAllByText('3 selected').length).toBeGreaterThan(0);
+
+    const nextRows = [member('m4', 'Dan Example', 'member', { email: 'dan@example.com' })];
+    usersApi.listUsers.mockResolvedValue(page(nextRows, 30, 2));
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    await waitFor(() => expect(screen.getByText('Dan Example')).toBeInTheDocument());
+    expect(screen.getByText('3 selected across pages')).toBeInTheDocument();
+    expect(screen.getByLabelText('Select all members on this page')).not.toBeChecked();
+
+    fireEvent.click(screen.getByLabelText('Select all members on this page'));
+    expect(screen.getByText('4 selected across pages')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Export Selected (4)' })).toBeInTheDocument();
+  });
+
+  it('opens the member form in place for Add Member and Edit, and refetches after saving', async () => {
+    usersApi.listUsers.mockResolvedValue(page(staffRows));
     rolesApi.listRoles.mockResolvedValue([]);
     usersApi.updateUser.mockResolvedValue(staffRows[1]);
     await renderAs(['admin']);
@@ -185,7 +282,8 @@ describe('MemberList', () => {
       fireEvent.click(screen.getByRole('button', { name: /Update|Save/ }));
     });
     expect(usersApi.updateUser).toHaveBeenCalledWith('m2', expect.any(Object));
-    expect(usersApi.listUsers).toHaveBeenCalledTimes(2);
+    // The update invalidates the member queries, so the list refetches.
+    await waitFor(() => expect(usersApi.listUsers).toHaveBeenCalledTimes(2));
     expect(screen.queryByRole('heading', { name: 'Edit Member' })).not.toBeInTheDocument();
   });
 });

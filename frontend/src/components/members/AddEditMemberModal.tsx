@@ -1,16 +1,18 @@
 // File: frontend/src/components/members/AddEditMemberModal.tsx
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { listRoles } from '../../lib/api/roles';
-import { createUser, updateUser } from '../../lib/api/users';
+import { useState, useEffect } from 'react';
 import { getErrorMessage } from '../../lib/errors';
-import type { Member, Role } from '../../types/domain';
+import InlineError from '../ui/InlineError';
+import { useRoles } from '../../lib/queries/roles';
+import { useCreateUser, useUpdateUser } from '../../lib/queries/users';
+import type { Member } from '../../types/domain';
 
 interface AddEditMemberModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: () => void;
+  /** Called after a successful save; the member queries are already invalidated. */
+  onSave?: () => void;
   member?: Member | null;
 }
 
@@ -28,60 +30,40 @@ export default function AddEditMemberModal({
     isActive: true,
     password: '',
   });
-  const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
-  const [roles, setRoles] = useState<Role[]>([]);
-  const [loading, setLoading] = useState(false);
+  // null until the user picks roles: a new member then defaults to the member role and an
+  // edited member keeps their current roles.
+  const [pickedRoles, setPickedRoles] = useState<string[] | null>(null);
   const [error, setError] = useState('');
+  const rolesQuery = useRoles({ enabled: isOpen });
+  const roles = rolesQuery.data ?? [];
+  const createUser = useCreateUser();
+  const updateUser = useUpdateUser();
+  const loading = createUser.isPending || updateUser.isPending;
 
   const isEditing = !!member;
+  const defaultRoles = member
+    ? member.roles.map((ur) => ur.role.id)
+    : roles.filter((r) => r.name === 'member').map((r) => r.id);
+  const selectedRoles = pickedRoles ?? defaultRoles;
 
-  const fetchRoles = useCallback(async () => {
-    try {
-      const fetchedRoles = await listRoles();
-      setRoles(fetchedRoles);
-      // A new member defaults to the member role unless roles were already picked.
-      if (!member) {
-        const memberRole = fetchedRoles.find((r) => r.name === 'member');
-        if (memberRole) {
-          setSelectedRoles((prev) => (prev.length ? prev : [memberRole.id]));
-        }
-      }
-    } catch (err) {
-      setError(getErrorMessage(err, 'Failed to load roles'));
-    }
-  }, [member]);
-
+  // Reset the form whenever it opens or switches member (no data is fetched here).
   useEffect(() => {
     if (isOpen) {
-      fetchRoles();
-      if (member) {
-        setFormData({
-          name: member.name,
-          email: member.email ?? '',
-          phone: member.phone || '',
-          bio: member.bio || '',
-          isActive: member.isActive,
-          password: '',
-        });
-        setSelectedRoles(member.roles.map((ur) => ur.role.id));
-      } else {
-        setFormData({
-          name: '',
-          email: '',
-          phone: '',
-          bio: '',
-          isActive: true,
-          password: '',
-        });
-        setSelectedRoles([]);
-      }
+      setFormData({
+        name: member?.name ?? '',
+        email: member?.email ?? '',
+        phone: member?.phone || '',
+        bio: member?.bio || '',
+        isActive: member ? member.isActive : true,
+        password: '',
+      });
+      setPickedRoles(null);
       setError('');
     }
-  }, [isOpen, member, fetchRoles]);
+  }, [isOpen, member]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
     setError('');
 
     try {
@@ -91,16 +73,19 @@ export default function AddEditMemberModal({
         const originalRoleIds = member.roles.map((ur) => ur.role.id).sort();
         const nextRoleIds = [...selectedRoles].sort();
         const rolesChanged = JSON.stringify(originalRoleIds) !== JSON.stringify(nextRoleIds);
-        await updateUser(member.id, {
-          name: formData.name,
-          phone: formData.phone || null,
-          bio: formData.bio || null,
-          ...(formData.isActive !== member.isActive ? { isActive: formData.isActive } : {}),
-          ...(rolesChanged ? { roleIds: selectedRoles } : {}),
+        await updateUser.mutateAsync({
+          id: member.id,
+          input: {
+            name: formData.name,
+            phone: formData.phone || null,
+            bio: formData.bio || null,
+            ...(formData.isActive !== member.isActive ? { isActive: formData.isActive } : {}),
+            ...(rolesChanged ? { roleIds: selectedRoles } : {}),
+          },
         });
       } else {
         // Create new member (staff only). Self-registration uses /api/auth/register instead.
-        await createUser({
+        await createUser.mutateAsync({
           name: formData.name,
           email: formData.email,
           password: formData.password,
@@ -111,18 +96,18 @@ export default function AddEditMemberModal({
         });
       }
 
-      onSave();
+      onSave?.();
       onClose();
     } catch (err: unknown) {
       setError(getErrorMessage(err));
-    } finally {
-      setLoading(false);
     }
   };
 
   const handleRoleChange = (roleId: string) => {
-    setSelectedRoles((prev) =>
-      prev.includes(roleId) ? prev.filter((id) => id !== roleId) : [...prev, roleId],
+    setPickedRoles(
+      selectedRoles.includes(roleId)
+        ? selectedRoles.filter((id) => id !== roleId)
+        : [...selectedRoles, roleId],
     );
   };
 
@@ -140,6 +125,14 @@ export default function AddEditMemberModal({
             <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
               {error}
             </div>
+          )}
+          {rolesQuery.error && (
+            <InlineError
+              error={rolesQuery.error}
+              fallback="Failed to load roles"
+              onRetry={() => void rolesQuery.refetch()}
+              className="mb-4"
+            />
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">

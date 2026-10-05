@@ -1,44 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { getAnalytics, refreshAllEngagement } from '../../lib/api/analytics';
-import { getErrorMessage } from '../../lib/errors';
-import type { MemberAnalytics } from '../../types/domain';
+import { useAnalytics, useRefreshAllEngagement } from '../../lib/queries/analytics';
+import InlineError from '../ui/InlineError';
+import Skeleton from '../ui/Skeleton';
 
 /** The `/analytics` route body (staff only; the page wraps it in RequireStaff). */
 export default function MemberAnalyticsDashboard() {
-  const [analytics, setAnalytics] = useState<MemberAnalytics | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [refreshing, setRefreshing] = useState(false);
-
-  useEffect(() => {
-    fetchAnalytics();
-  }, []);
-
-  const fetchAnalytics = async () => {
-    try {
-      setLoading(true);
-      setAnalytics(await getAnalytics());
-    } catch (err) {
-      setError(getErrorMessage(err, 'Failed to load analytics'));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const refreshAllEngagementScores = async () => {
-    try {
-      setRefreshing(true);
-      await refreshAllEngagement();
-      // Refresh analytics after updating scores
-      await fetchAnalytics();
-    } catch (err) {
-      setError(getErrorMessage(err, 'Failed to refresh engagement scores'));
-    } finally {
-      setRefreshing(false);
-    }
-  };
+  const { data: analytics, isPending, error, refetch } = useAnalytics();
+  const refresh = useRefreshAllEngagement();
+  const refreshing = refresh.isPending;
 
   const getEngagementColor = (score: number): string => {
     if (score >= 80) return 'text-green-600 bg-green-100';
@@ -76,36 +46,22 @@ export default function MemberAnalyticsDashboard() {
       .join(' ');
   };
 
-  if (loading) {
+  if (isPending) {
     return (
-      <div>
-        <div className="p-5 border border-gray-200 shadow rounded-md bg-white">
-          <div className="flex justify-center items-center h-64">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-          </div>
-        </div>
+      <div className="p-5 border border-gray-200 shadow rounded-md bg-white">
+        <Skeleton rows={6} label="Loading analytics" />
       </div>
     );
   }
 
   if (error || !analytics) {
     return (
-      <div>
-        <div className="p-5 border border-gray-200 shadow rounded-md bg-white">
-          <div className="text-center">
-            <div className="text-red-600 mb-4">{error || 'Analytics not available'}</div>
-            <button
-              type="button"
-              onClick={() => {
-                setError('');
-                void fetchAnalytics();
-              }}
-              className="bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-gray-600"
-            >
-              Retry
-            </button>
-          </div>
-        </div>
+      <div className="p-5 border border-gray-200 shadow rounded-md bg-white">
+        <InlineError
+          error={error}
+          fallback="Analytics not available"
+          onRetry={() => void refetch()}
+        />
       </div>
     );
   }
@@ -121,7 +77,7 @@ export default function MemberAnalyticsDashboard() {
           </div>
           <div className="flex items-center space-x-3">
             <button
-              onClick={refreshAllEngagementScores}
+              onClick={() => refresh.mutate()}
               disabled={refreshing}
               className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 flex items-center space-x-2"
             >
@@ -142,6 +98,13 @@ export default function MemberAnalyticsDashboard() {
             </button>
           </div>
         </div>
+        {refresh.error && (
+          <InlineError
+            error={refresh.error}
+            fallback="Failed to refresh engagement scores"
+            className="mb-6"
+          />
+        )}
 
         {/* Key Metrics */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">

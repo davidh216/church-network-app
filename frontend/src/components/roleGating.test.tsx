@@ -24,6 +24,10 @@ vi.mock('@/lib/api/users', () => usersApi);
 const mediaApi = vi.hoisted(() => ({ listMedia: vi.fn(), createMedia: vi.fn() }));
 vi.mock('@/lib/api/media', () => mediaApi);
 
+// GET /api/users and /api/media return one page plus the total (Phase 2 spec 1.2).
+const usersPage = (users: unknown[]) => ({ users, total: users.length, page: 1, pageSize: 25 });
+const mediaPage = (media: unknown[]) => ({ media, total: media.length, page: 1, pageSize: 24 });
+
 const directory: Member[] = [
   {
     id: 'm1',
@@ -49,8 +53,8 @@ async function renderAs(roleNames: string[], ui: React.ReactNode) {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  usersApi.listUsers.mockResolvedValue(directory);
-  mediaApi.listMedia.mockResolvedValue([]);
+  usersApi.listUsers.mockResolvedValue(usersPage(directory));
+  mediaApi.listMedia.mockResolvedValue(mediaPage([]));
 });
 
 const noop = () => undefined;

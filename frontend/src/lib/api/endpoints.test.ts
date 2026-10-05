@@ -74,14 +74,33 @@ describe('auth endpoints', () => {
 });
 
 describe('users endpoints', () => {
-  it('listUsers, getUser', async () => {
-    respond({ success: true, users: [{ id: 'u1' }] });
-    await expect(users.listUsers()).resolves.toEqual([{ id: 'u1' }]);
+  it('listUsers returns the page and total, sending only the set params', async () => {
+    const pageBody = { users: [{ id: 'u1' }], total: 26, page: 2, pageSize: 25 };
+    respond({ success: true, ...pageBody });
+    await expect(users.listUsers()).resolves.toEqual(pageBody);
     expect(call(0).url).toBe('/api/users');
 
+    respond({ success: true, ...pageBody });
+    await users.listUsers({
+      q: ' ann ',
+      role: '',
+      status: 'active',
+      stage: undefined,
+      joinedTo: '2026-01-31',
+      sort: 'name',
+      order: 'desc',
+      page: 2,
+      pageSize: 25,
+    });
+    expect(call(1).url).toBe(
+      '/api/users?q=ann&status=active&joinedTo=2026-01-31&sort=name&order=desc&page=2&pageSize=25',
+    );
+  });
+
+  it('getUser', async () => {
     respond({ success: true, user: { id: 'u1' } });
     await expect(users.getUser('u1')).resolves.toEqual({ id: 'u1' });
-    expect(call(1).url).toBe('/api/users/u1');
+    expect(call(0).url).toBe('/api/users/u1');
   });
 
   it('getUserSummary returns the staff counts, or only total for a member', async () => {

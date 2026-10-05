@@ -33,6 +33,10 @@ vi.mock('@/lib/api/users', () => usersApi);
 const mediaApi = vi.hoisted(() => ({ listMedia: vi.fn(), createMedia: vi.fn() }));
 vi.mock('@/lib/api/media', () => mediaApi);
 
+// GET /api/users and /api/media return one page plus the total (Phase 2 spec 1.2).
+const usersPage = (users: unknown[]) => ({ users, total: users.length, page: 1, pageSize: 25 });
+const mediaPage = (media: unknown[]) => ({ media, total: media.length, page: 1, pageSize: 24 });
+
 const savedSearchesApi = vi.hoisted(() => ({
   listSavedSearches: vi.fn(),
   createSavedSearch: vi.fn(),
@@ -94,8 +98,8 @@ function headers(container: HTMLElement): string[] {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  usersApi.listUsers.mockResolvedValue(staffRows);
-  mediaApi.listMedia.mockResolvedValue([]);
+  usersApi.listUsers.mockResolvedValue(usersPage(staffRows));
+  mediaApi.listMedia.mockResolvedValue(mediaPage([]));
   savedSearchesApi.listSavedSearches.mockResolvedValue([]);
 });
 
@@ -148,7 +152,7 @@ describe('VideoPlayer playlist', () => {
   });
 
   it('switches the playing video when a playlist item is chosen on the media page', async () => {
-    mediaApi.listMedia.mockResolvedValue(playlist);
+    mediaApi.listMedia.mockResolvedValue(mediaPage(playlist));
     const container = await renderAs(['member'], <MediaPage />);
     // Play the first video, then pick the third from the playlist.
     const play = container.querySelectorAll<HTMLButtonElement>('.group > button')[0]!;
@@ -167,7 +171,7 @@ describe('VideoPlayer playlist', () => {
 
 describe('media thumbnails', () => {
   it('hides a thumbnail whose fallbacks fail instead of loading a dead placeholder host', async () => {
-    mediaApi.listMedia.mockResolvedValue([video(1)]);
+    mediaApi.listMedia.mockResolvedValue(mediaPage([video(1)]));
     const container = await renderAs(['member'], <SimpleMediaLibrary onPlayMedia={noop} />);
     const img = container.querySelector('img')!;
     expect(img.src).toContain('img.youtube.com');
@@ -254,11 +258,12 @@ describe('MemberList', () => {
   });
 
   it('shows members only the directory columns and filters', async () => {
-    usersApi.listUsers.mockResolvedValue(directoryRows);
+    usersApi.listUsers.mockResolvedValue(usersPage(directoryRows));
     const container = await renderAs(['member'], <MemberList />);
     expect(headers(container)).toEqual(['Member', 'Role', 'Joined']);
     expect(container.textContent).not.toContain('Inactive');
-    expect(container.querySelectorAll('select')).toHaveLength(1); // roles only
+    // The API lets members search by name only, so no filter selects are offered.
+    expect(container.querySelectorAll('select[aria-label]')).toHaveLength(0);
   });
 
   it('shows staff the contact, engagement, stage and status columns', async () => {

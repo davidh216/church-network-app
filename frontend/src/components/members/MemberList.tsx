@@ -1,81 +1,76 @@
 // File: frontend/src/components/members/MemberList.tsx
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { exportUsers, listUsers } from '../../lib/api/users';
+import { DEFAULT_USER_PAGE_SIZE, type UserSortField } from '@embrace/shared';
+import { exportUsers } from '../../lib/api/users';
 import { useIsStaff } from '../../lib/auth/AuthProvider';
+import { useDebouncedValue } from '../../lib/hooks/useDebouncedValue';
+import { useResettingPage } from '../../lib/hooks/useResettingPage';
+import {
+  EMPTY_FILTERS,
+  buildListParams,
+  dateRangeError,
+  hasActiveFilters,
+  nextSort,
+  selectionLabel,
+  toggleAllOnPage,
+  type MemberFilters,
+  type MemberSort,
+} from '../../lib/members/filters';
+import { useUsers } from '../../lib/queries/users';
 import AddEditMemberModal from './AddEditMemberModal';
 import AdvancedSearchBuilder from './AdvancedSearchBuilder';
 import SavedSearches from './SavedSearches';
 import BulkActionsToolbar from './BulkActionsToolbar';
+import SortableHeader from './SortableHeader';
+import InlineError from '../ui/InlineError';
+import Pagination from '../ui/Pagination';
+import Skeleton from '../ui/Skeleton';
 
 import { getErrorMessage } from '../../lib/errors';
 import type { Member, SearchQuery } from '../../types/domain';
 
-// Pure helpers live at module scope so they are initialised before render uses them.
-// The advanced-query evaluator is a stub that matches every member, so the Advanced
-// Search button and builder are not rendered while ADVANCED_SEARCH_ENABLED is false.
-// Saved Searches only load such queries, so their button is hidden behind the same flag.
-const ADVANCED_SEARCH_ENABLED = false; // hidden until the evaluator exists (gameplan 2.4 / F038)
+// The advanced search runs on the server only from F5 (POST /api/users/search); until then
+// the Advanced Search and Saved Searches buttons stay hidden behind this flag.
+const ADVANCED_SEARCH_ENABLED = false; // hidden until the search UI exists (gameplan 2.4 / F038)
 
 const TOAST_TIMEOUT_MS = 6000;
-
-function evaluateAdvancedQuery(member: Member, query: SearchQuery): boolean {
-  void member;
-  void query;
-  return true;
-}
-
-function getNestedValue(obj: unknown, path: string): unknown {
-  return path.split('.').reduce<unknown>((current, key) => {
-    if (current && typeof current === 'object') {
-      return (current as Record<string, unknown>)[key];
-    }
-    return undefined;
-  }, obj);
-}
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 
 /** The `/members` route body; staff add and edit members in place, profiles are links. */
 export default function MemberList() {
-  // Selection, export, profiles and editing are staff-only; members get the directory.
+  // Selection, export, profiles, editing and every filter but the name search are
+  // staff-only; members get the name directory.
   const canManage = useIsStaff();
-  const [members, setMembers] = useState<Member[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [roleFilter, setRoleFilter] = useState('all');
-  const [membershipStageFilter, setMembershipStageFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [engagementFilter, setEngagementFilter] = useState('all');
-  const [riskLevelFilter, setRiskLevelFilter] = useState('all');
-  const [dateRangeFilter, setDateRangeFilter] = useState({ start: '', end: '' });
+  const [filters, setFilters] = useState<MemberFilters>(EMPTY_FILTERS);
+  const [sort, setSort] = useState<MemberSort | null>(null);
+  const [pageSize, setPageSize] = useState(DEFAULT_USER_PAGE_SIZE);
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
   // The member form: closed (null), adding ({ member: null }) or editing a member.
   const [editing, setEditing] = useState<{ member: Member | null } | null>(null);
+  // Selection is kept across pages and filter changes; export sends exactly these ids.
   const [selectedMembers, setSelectedMembers] = useState<Set<string>>(new Set());
   const [showAdvancedSearch, setShowAdvancedSearch] = useState(false);
   const [showSavedSearches, setShowSavedSearches] = useState(false);
-  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' }[]>([]);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(25);
-  const [error, setError] = useState('');
   const [toast, setToast] = useState('');
   const [advancedQuery, setAdvancedQuery] = useState<SearchQuery | null>(null);
 
-  const fetchMembers = async () => {
-    try {
-      setLoading(true);
-      setMembers(await listUsers());
-    } catch (err) {
-      setError(getErrorMessage(err, 'Failed to load members'));
-    } finally {
-      setLoading(false);
-    }
-  };
+  // The search box updates at once; the query follows 300 ms after the last keystroke.
+  const search = useDebouncedValue(filters.search.trim());
+  const queryFilters = { ...filters, search };
+  const filterKey = JSON.stringify([queryFilters, sort, pageSize]);
+  const [page, setPage] = useResettingPage(filterKey);
+  const usersQuery = useUsers(buildListParams(queryFilters, sort, page, pageSize, canManage));
+  const members = usersQuery.data?.users ?? [];
+  const total = usersQuery.data?.total ?? 0;
+  const pageIds = members.map((m) => m.id);
+  const filtersActive = hasActiveFilters(filters);
+  const dateError = canManage ? dateRangeError(filters.joinedFrom, filters.joinedTo) : null;
 
-  useEffect(() => {
-    fetchMembers();
-  }, []);
+  const setFilter = (key: keyof MemberFilters, value: string) =>
+    setFilters((prev) => ({ ...prev, [key]: value }));
 
   useEffect(() => {
     if (!toast) return;
@@ -83,119 +78,7 @@ export default function MemberList() {
     return () => clearTimeout(timer);
   }, [toast]);
 
-  const filteredMembers = useMemo(
-    () =>
-      members.filter((member) => {
-        // Advanced query takes precedence over basic filters
-        if (advancedQuery) {
-          return evaluateAdvancedQuery(member, advancedQuery);
-        }
-
-        const matchesSearch =
-          member.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          (member.email ?? '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-          (member.phone && member.phone.toLowerCase().includes(searchTerm.toLowerCase())) ||
-          (member.bio && member.bio.toLowerCase().includes(searchTerm.toLowerCase()));
-
-        const matchesRole =
-          roleFilter === 'all' || member.roles.some((ur) => ur.role.name === roleFilter);
-
-        const matchesStatus =
-          statusFilter === 'all' ||
-          (statusFilter === 'active' && member.isActive) ||
-          (statusFilter === 'inactive' && !member.isActive);
-
-        const matchesMembershipStage =
-          membershipStageFilter === 'all' ||
-          member.engagement?.membershipStage === membershipStageFilter;
-
-        const matchesEngagement =
-          engagementFilter === 'all' ||
-          (engagementFilter === 'high' && (member.engagement?.engagementScore || 0) >= 80) ||
-          (engagementFilter === 'medium' &&
-            (member.engagement?.engagementScore || 0) >= 50 &&
-            (member.engagement?.engagementScore || 0) < 80) ||
-          (engagementFilter === 'low' && (member.engagement?.engagementScore || 0) < 50);
-
-        const matchesRiskLevel =
-          riskLevelFilter === 'all' || member.engagement?.riskLevel === riskLevelFilter;
-
-        const matchesDateRange =
-          (!dateRangeFilter.start ||
-            new Date(member.createdAt) >= new Date(dateRangeFilter.start)) &&
-          (!dateRangeFilter.end || new Date(member.createdAt) <= new Date(dateRangeFilter.end));
-
-        return (
-          matchesSearch &&
-          matchesRole &&
-          matchesStatus &&
-          matchesMembershipStage &&
-          matchesEngagement &&
-          matchesRiskLevel &&
-          matchesDateRange
-        );
-      }),
-    [
-      members,
-      advancedQuery,
-      searchTerm,
-      roleFilter,
-      statusFilter,
-      membershipStageFilter,
-      engagementFilter,
-      riskLevelFilter,
-      dateRangeFilter,
-    ],
-  );
-
-  // Apply sorting
-  const sortedMembers = useMemo(
-    () =>
-      [...filteredMembers].sort((a, b) => {
-        for (const sort of sortConfig) {
-          const aValue = getNestedValue(a, sort.key);
-          const bValue = getNestedValue(b, sort.key);
-
-          if (aValue !== bValue) {
-            const direction = sort.direction === 'asc' ? 1 : -1;
-            if (typeof aValue === 'string' && typeof bValue === 'string') {
-              return aValue.localeCompare(bValue) * direction;
-            }
-            if (typeof aValue === 'number' && typeof bValue === 'number') {
-              return (aValue - bValue) * direction;
-            }
-            if (aValue instanceof Date && bValue instanceof Date) {
-              return (aValue.getTime() - bValue.getTime()) * direction;
-            }
-            return String(aValue ?? '').localeCompare(String(bValue ?? '')) * direction;
-          }
-        }
-        return 0;
-      }),
-    [filteredMembers, sortConfig],
-  );
-
-  // Apply pagination
-  const totalPages = Math.ceil(sortedMembers.length / itemsPerPage);
-  const paginatedMembers = useMemo(
-    () => sortedMembers.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage),
-    [sortedMembers, currentPage, itemsPerPage],
-  );
-
-  const handleSort = (key: string) => {
-    setSortConfig((prev) => {
-      const existing = prev.find((s) => s.key === key);
-      if (existing) {
-        if (existing.direction === 'asc') {
-          return prev.map((s) => (s.key === key ? { ...s, direction: 'desc' as const } : s));
-        } else {
-          return prev.filter((s) => s.key !== key);
-        }
-      } else {
-        return [...prev, { key, direction: 'asc' as const }];
-      }
-    });
-  };
+  const handleSort = (key: UserSortField) => setSort((prev) => nextSort(prev, key));
 
   const toggleSelectMember = (memberId: string) => {
     setSelectedMembers((prev) => {
@@ -209,25 +92,12 @@ export default function MemberList() {
     });
   };
 
-  const toggleSelectAll = () => {
-    if (selectedMembers.size === paginatedMembers.length) {
-      setSelectedMembers(new Set());
-    } else {
-      setSelectedMembers(new Set(paginatedMembers.map((m) => m.id)));
-    }
-  };
+  const toggleSelectAll = () => setSelectedMembers((prev) => toggleAllOnPage(prev, pageIds));
 
   const clearAllFilters = () => {
-    setSearchTerm('');
-    setRoleFilter('all');
-    setMembershipStageFilter('all');
-    setStatusFilter('all');
-    setEngagementFilter('all');
-    setRiskLevelFilter('all');
-    setDateRangeFilter({ start: '', end: '' });
+    setFilters(EMPTY_FILTERS);
     setAdvancedQuery(null);
-    setSortConfig([]);
-    setCurrentPage(1);
+    setSort(null);
   };
 
   const exportMembers = async () => {
@@ -246,26 +116,16 @@ export default function MemberList() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
-
   return (
     <div className="bg-white shadow rounded-lg">
       <div className="px-6 py-4 border-b border-gray-200">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-center space-x-4">
             <h2 className="text-lg font-medium text-gray-900">Church Members</h2>
-            <span className="text-sm text-gray-500">
-              ({sortedMembers.length} of {members.length})
-            </span>
+            <span className="text-sm text-gray-500">({total} total)</span>
             {selectedMembers.size > 0 && (
               <span className="text-sm text-blue-600 font-medium">
-                {selectedMembers.size} selected
+                {selectionLabel(selectedMembers, pageIds)}
               </span>
             )}
           </div>
@@ -324,8 +184,9 @@ export default function MemberList() {
                 <input
                   type="text"
                   placeholder="Search by name, email, phone, or bio..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  aria-label="Search members"
+                  value={filters.search}
+                  onChange={(e) => setFilter('search', e.target.value)}
                   className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
                 <svg
@@ -378,161 +239,132 @@ export default function MemberList() {
             </div>
           </div>
 
-          {/* Quick Filters */}
-          <div className="flex flex-wrap gap-2">
-            <select
-              value={roleFilter}
-              onChange={(e) => setRoleFilter(e.target.value)}
-              className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">All Roles</option>
-              <option value="admin">Admin</option>
-              <option value="leader">Leader</option>
-              <option value="member">Member</option>
-            </select>
+          {/* Quick Filters (staff only: the API lets members search by name alone) */}
+          {canManage && (
+            <div className="flex flex-wrap gap-2">
+              <select
+                aria-label="Role"
+                value={filters.role}
+                onChange={(e) => setFilter('role', e.target.value)}
+                className={filterClass}
+              >
+                <option value="all">All Roles</option>
+                <option value="admin">Admin</option>
+                <option value="leader">Leader</option>
+                <option value="member">Member</option>
+              </select>
 
-            {/* Engagement and status are staff-only fields; the member directory has neither. */}
-            {canManage && (
-              <>
-                <select
-                  value={membershipStageFilter}
-                  onChange={(e) => setMembershipStageFilter(e.target.value)}
-                  className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="all">All Stages</option>
-                  <option value="leader">Leader</option>
-                  <option value="core_member">Core Member</option>
-                  <option value="active_member">Active Member</option>
-                  <option value="new_member">New Member</option>
-                  <option value="visitor">Visitor</option>
-                  <option value="at_risk">At Risk</option>
-                  <option value="inactive">Inactive</option>
-                </select>
+              <select
+                aria-label="Membership stage"
+                value={filters.stage}
+                onChange={(e) => setFilter('stage', e.target.value)}
+                className={filterClass}
+              >
+                <option value="all">All Stages</option>
+                <option value="leader">Leader</option>
+                <option value="core_member">Core Member</option>
+                <option value="active_member">Active Member</option>
+                <option value="new_member">New Member</option>
+                <option value="visitor">Visitor</option>
+                <option value="at_risk">At Risk</option>
+                <option value="inactive">Inactive</option>
+              </select>
 
-                <select
-                  value={engagementFilter}
-                  onChange={(e) => setEngagementFilter(e.target.value)}
-                  className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="all">All Engagement</option>
-                  <option value="high">High (80%+)</option>
-                  <option value="medium">Medium (50-79%)</option>
-                  <option value="low">Low (&lt;50%)</option>
-                </select>
+              <select
+                aria-label="Risk level"
+                value={filters.risk}
+                onChange={(e) => setFilter('risk', e.target.value)}
+                className={filterClass}
+              >
+                <option value="all">All Risk Levels</option>
+                <option value="low">Low Risk</option>
+                <option value="medium">Medium Risk</option>
+                <option value="high">High Risk</option>
+              </select>
 
-                <select
-                  value={riskLevelFilter}
-                  onChange={(e) => setRiskLevelFilter(e.target.value)}
-                  className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="all">All Risk Levels</option>
-                  <option value="low">Low Risk</option>
-                  <option value="medium">Medium Risk</option>
-                  <option value="high">High Risk</option>
-                </select>
+              <select
+                aria-label="Status"
+                value={filters.status}
+                onChange={(e) => setFilter('status', e.target.value)}
+                className={filterClass}
+              >
+                <option value="all">All Status</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
 
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="all">All Status</option>
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                </select>
-              </>
-            )}
+              <input
+                type="date"
+                aria-label="Joined from"
+                value={filters.joinedFrom}
+                onChange={(e) => setFilter('joinedFrom', e.target.value)}
+                className={filterClass}
+              />
 
-            <input
-              type="date"
-              placeholder="Start Date"
-              value={dateRangeFilter.start}
-              onChange={(e) => setDateRangeFilter((prev) => ({ ...prev, start: e.target.value }))}
-              className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+              <input
+                type="date"
+                aria-label="Joined to (inclusive)"
+                value={filters.joinedTo}
+                onChange={(e) => setFilter('joinedTo', e.target.value)}
+                className={filterClass}
+              />
 
-            <input
-              type="date"
-              placeholder="End Date"
-              value={dateRangeFilter.end}
-              onChange={(e) => setDateRangeFilter((prev) => ({ ...prev, end: e.target.value }))}
-              className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-
-            <button
-              onClick={clearAllFilters}
-              className="px-3 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors"
-            >
-              Clear All
-            </button>
-          </div>
+              <button
+                onClick={clearAllFilters}
+                className="px-3 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors"
+              >
+                Clear All
+              </button>
+            </div>
+          )}
+          {dateError && (
+            <p role="alert" className="text-sm text-red-700">
+              {dateError} The date range is not applied.
+            </p>
+          )}
 
           {/* Active Filters Display */}
-          {(searchTerm ||
-            roleFilter !== 'all' ||
-            membershipStageFilter !== 'all' ||
-            engagementFilter !== 'all' ||
-            riskLevelFilter !== 'all' ||
-            statusFilter !== 'all' ||
-            dateRangeFilter.start ||
-            dateRangeFilter.end ||
-            sortConfig.length > 0) && (
+          {(filtersActive || sort) && (
             <div className="flex flex-wrap gap-2">
               <span className="text-sm text-gray-500">Active filters:</span>
-              {searchTerm && (
-                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                  Search: {searchTerm}
-                  <button
-                    onClick={() => setSearchTerm('')}
-                    className="ml-1 text-blue-600 hover:text-blue-800"
-                  >
-                    ×
-                  </button>
-                </span>
+              {filters.search && (
+                <FilterChip
+                  label={`Search: ${filters.search}`}
+                  onClear={() => setFilter('search', '')}
+                />
               )}
-              {roleFilter !== 'all' && (
-                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                  Role: {roleFilter}
-                  <button
-                    onClick={() => setRoleFilter('all')}
-                    className="ml-1 text-purple-600 hover:text-purple-800"
-                  >
-                    ×
-                  </button>
-                </span>
+              {filters.role !== 'all' && (
+                <FilterChip
+                  label={`Role: ${filters.role}`}
+                  onClear={() => setFilter('role', 'all')}
+                />
               )}
-              {membershipStageFilter !== 'all' && (
-                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                  Stage: {membershipStageFilter.replace('_', ' ')}
-                  <button
-                    onClick={() => setMembershipStageFilter('all')}
-                    className="ml-1 text-green-600 hover:text-green-800"
-                  >
-                    ×
-                  </button>
-                </span>
+              {filters.stage !== 'all' && (
+                <FilterChip
+                  label={`Stage: ${filters.stage.replace('_', ' ')}`}
+                  onClear={() => setFilter('stage', 'all')}
+                />
               )}
-              {sortConfig.length > 0 && (
-                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
-                  Sorted by: {sortConfig.map((s) => `${s.key} ${s.direction}`).join(', ')}
-                  <button
-                    onClick={() => setSortConfig([])}
-                    className="ml-1 text-orange-600 hover:text-orange-800"
-                  >
-                    ×
-                  </button>
-                </span>
+              {sort && (
+                <FilterChip
+                  label={`Sorted by: ${sort.key} ${sort.order}`}
+                  onClear={() => setSort(null)}
+                />
               )}
             </div>
           )}
         </div>
       </div>
 
-      {error && (
-        <div className="px-6 py-4 bg-red-50 border-l-4 border-red-400">
-          <p className="text-red-700">{error}</p>
-        </div>
+      {usersQuery.error && (
+        <InlineError
+          error={usersQuery.error}
+          fallback="Failed to load members"
+          onRetry={() => void usersQuery.refetch()}
+        />
       )}
+
+      {usersQuery.isPending && <Skeleton rows={5} label="Loading members" className="p-6" />}
 
       {/* Bulk Actions Toolbar */}
       {canManage && selectedMembers.size > 0 && (
@@ -570,105 +402,49 @@ export default function MemberList() {
             <thead className="bg-gray-50">
               <tr>
                 {canManage && (
-                  <th className="px-6 py-3 w-12">
+                  <th scope="col" className="px-6 py-3 w-12">
                     <input
                       type="checkbox"
-                      checked={
-                        selectedMembers.size === paginatedMembers.length &&
-                        paginatedMembers.length > 0
-                      }
+                      aria-label="Select all members on this page"
+                      checked={pageIds.length > 0 && pageIds.every((id) => selectedMembers.has(id))}
                       onChange={toggleSelectAll}
                       className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                     />
                   </th>
                 )}
-                <th
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                  onClick={() => handleSort('name')}
-                >
-                  <div className="flex items-center space-x-1">
-                    <span>Member</span>
-                    {sortConfig.find((s) => s.key === 'name') && (
-                      <span className="text-blue-500">
-                        {sortConfig.find((s) => s.key === 'name')?.direction === 'asc' ? '↑' : '↓'}
-                      </span>
-                    )}
-                  </div>
-                </th>
+                <SortableHeader label="Member" field="name" sort={sort} onSort={handleSort} />
                 {canManage && (
-                  <th
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleSort('email')}
-                  >
-                    <div className="flex items-center space-x-1">
-                      <span>Contact</span>
-                      {sortConfig.find((s) => s.key === 'email') && (
-                        <span className="text-blue-500">
-                          {sortConfig.find((s) => s.key === 'email')?.direction === 'asc'
-                            ? '↑'
-                            : '↓'}
-                        </span>
-                      )}
-                    </div>
-                  </th>
+                  <SortableHeader label="Contact" field="email" sort={sort} onSort={handleSort} />
                 )}
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Role
                 </th>
                 {canManage && (
                   <>
-                    <th
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                      onClick={() => handleSort('engagement.engagementScore')}
-                    >
-                      <div className="flex items-center space-x-1">
-                        <span>Engagement</span>
-                        {sortConfig.find((s) => s.key === 'engagement.engagementScore') && (
-                          <span className="text-blue-500">
-                            {sortConfig.find((s) => s.key === 'engagement.engagementScore')
-                              ?.direction === 'asc'
-                              ? '↑'
-                              : '↓'}
-                          </span>
-                        )}
-                      </div>
-                    </th>
-                    <th
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                      onClick={() => handleSort('engagement.membershipStage')}
-                    >
-                      <div className="flex items-center space-x-1">
-                        <span>Stage</span>
-                        {sortConfig.find((s) => s.key === 'engagement.membershipStage') && (
-                          <span className="text-blue-500">
-                            {sortConfig.find((s) => s.key === 'engagement.membershipStage')
-                              ?.direction === 'asc'
-                              ? '↑'
-                              : '↓'}
-                          </span>
-                        )}
-                      </div>
-                    </th>
+                    <SortableHeader
+                      label="Engagement"
+                      field="engagementScore"
+                      sort={sort}
+                      onSort={handleSort}
+                    />
+                    <SortableHeader
+                      label="Stage"
+                      field="membershipStage"
+                      sort={sort}
+                      onSort={handleSort}
+                    />
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Status
                     </th>
                   </>
                 )}
-                <th
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                  onClick={() => handleSort('createdAt')}
-                >
-                  <div className="flex items-center space-x-1">
-                    <span>Joined</span>
-                    {sortConfig.find((s) => s.key === 'createdAt') && (
-                      <span className="text-blue-500">
-                        {sortConfig.find((s) => s.key === 'createdAt')?.direction === 'asc'
-                          ? '↑'
-                          : '↓'}
-                      </span>
-                    )}
-                  </div>
-                </th>
+                <SortableHeader
+                  label="Joined"
+                  field="createdAt"
+                  sort={sort}
+                  onSort={handleSort}
+                  sortable={canManage}
+                />
                 {canManage && (
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Actions
@@ -677,7 +453,7 @@ export default function MemberList() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {paginatedMembers.map((member) => (
+              {members.map((member) => (
                 <tr
                   key={member.id}
                   className={`hover:bg-gray-50 ${
@@ -859,7 +635,7 @@ export default function MemberList() {
       {/* Card View */}
       {viewMode === 'cards' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-6">
-          {paginatedMembers.map((member) => (
+          {members.map((member) => (
             <div
               key={member.id}
               className={`bg-white border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow relative ${
@@ -962,79 +738,19 @@ export default function MemberList() {
         </div>
       )}
 
-      {/* Pagination Controls */}
-      {sortedMembers.length > itemsPerPage && (
-        <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
-          <div className="flex-1 flex justify-between items-center">
-            <div className="flex items-center space-x-4">
-              <p className="text-sm text-gray-700">
-                Showing <span className="font-medium">{(currentPage - 1) * itemsPerPage + 1}</span>{' '}
-                to{' '}
-                <span className="font-medium">
-                  {Math.min(currentPage * itemsPerPage, sortedMembers.length)}
-                </span>{' '}
-                of <span className="font-medium">{sortedMembers.length}</span> results
-              </p>
-
-              <select
-                value={itemsPerPage}
-                onChange={(e) => {
-                  setItemsPerPage(Number(e.target.value));
-                  setCurrentPage(1);
-                }}
-                className="text-sm border border-gray-300 rounded px-2 py-1"
-              >
-                <option value={10}>10 per page</option>
-                <option value={25}>25 per page</option>
-                <option value={50}>50 per page</option>
-                <option value={100}>100 per page</option>
-              </select>
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                disabled={currentPage === 1}
-                className="relative inline-flex items-center px-2 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed rounded-l-md"
-              >
-                Previous
-              </button>
-
-              {/* Page Numbers */}
-              <div className="flex space-x-1">
-                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                  const pageNum = Math.max(1, Math.min(totalPages - 4, currentPage - 2)) + i;
-                  if (pageNum > totalPages) return null;
-
-                  return (
-                    <button
-                      key={pageNum}
-                      onClick={() => setCurrentPage(pageNum)}
-                      className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
-                        currentPage === pageNum
-                          ? 'z-10 bg-blue-50 border-blue-500 text-blue-600'
-                          : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
-                      }`}
-                    >
-                      {pageNum}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <button
-                onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                disabled={currentPage === totalPages}
-                className="relative inline-flex items-center px-2 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed rounded-r-md"
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        </div>
+      {total > 0 && (
+        <Pagination
+          total={total}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          pageSizeOptions={PAGE_SIZE_OPTIONS}
+          onPageSizeChange={setPageSize}
+          itemLabel="members"
+        />
       )}
 
-      {sortedMembers.length === 0 && !loading && (
+      {members.length === 0 && usersQuery.isSuccess && (
         <div className="px-6 py-12 text-center">
           <svg
             className="mx-auto h-12 w-12 text-gray-400"
@@ -1051,25 +767,11 @@ export default function MemberList() {
           </svg>
           <h3 className="mt-2 text-sm font-medium text-gray-900">No members found</h3>
           <p className="mt-1 text-sm text-gray-500">
-            {searchTerm ||
-            roleFilter !== 'all' ||
-            membershipStageFilter !== 'all' ||
-            engagementFilter !== 'all' ||
-            riskLevelFilter !== 'all' ||
-            statusFilter !== 'all' ||
-            dateRangeFilter.start ||
-            dateRangeFilter.end
+            {filtersActive
               ? 'No members match your current search criteria. Try adjusting your filters.'
               : 'Get started by adding your first member to the church community.'}
           </p>
-          {(searchTerm ||
-            roleFilter !== 'all' ||
-            membershipStageFilter !== 'all' ||
-            engagementFilter !== 'all' ||
-            riskLevelFilter !== 'all' ||
-            statusFilter !== 'all' ||
-            dateRangeFilter.start ||
-            dateRangeFilter.end) && (
+          {filtersActive && (
             <div className="mt-6">
               <button
                 onClick={clearAllFilters}
@@ -1104,10 +806,29 @@ export default function MemberList() {
         <AddEditMemberModal
           isOpen={editing !== null}
           onClose={() => setEditing(null)}
-          onSave={() => void fetchMembers()}
           member={editing?.member ?? null}
         />
       )}
     </div>
+  );
+}
+
+const filterClass =
+  'px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500';
+
+/** An active filter with a button that clears it. */
+function FilterChip({ label, onClear }: { label: string; onClear: () => void }) {
+  return (
+    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+      {label}
+      <button
+        type="button"
+        onClick={onClear}
+        aria-label={`Clear ${label}`}
+        className="ml-1 text-blue-600 hover:text-blue-800"
+      >
+        ×
+      </button>
+    </span>
   );
 }

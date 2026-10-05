@@ -66,6 +66,8 @@ export interface MediaItem {
   description?: string | null;
   type: string;
   url: string;
+  /** The YouTube video id, or null when the stored URL cannot be embedded. */
+  videoId?: string | null;
   thumbnailUrl?: string | null;
   /** JSON-encoded string array. */
   tags: string;
