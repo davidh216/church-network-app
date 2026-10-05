@@ -21,7 +21,7 @@ export function isApiError(err: unknown): err is ApiError {
   return err instanceof ApiError;
 }
 
-export type ApiFetchInit = RequestInit & { json?: unknown };
+type ApiFetchInit = RequestInit & { json?: unknown };
 
 /**
  * The message to show for a failed response: the first field error from a

@@ -1,3 +1,4 @@
+import { canonicalYouTubeUrl } from '@embrace/shared';
 import type { MediaItem } from '@/types/domain';
 import { formatMediaDate } from '@/lib/media/format';
 
@@ -5,6 +6,8 @@ interface PlayerControlsProps {
   /** id for the title heading, which names the player dialog. */
   titleId: string;
   media: MediaItem;
+  /** The checked YouTube id; the external link is built from it and omitted without one. */
+  videoId: string | null;
   /** Controls fade out after a few idle seconds in fullscreen. */
   visible: boolean;
   playlistLength: number;
@@ -21,6 +24,7 @@ interface PlayerControlsProps {
 export default function PlayerControls({
   titleId,
   media,
+  videoId,
   visible,
   playlistLength,
   currentIndex,
@@ -166,19 +170,21 @@ export default function PlayerControls({
           {/* Right Controls */}
           <div className="flex items-center space-x-3">
             {/* External Link */}
-            <a
-              href={media.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="p-2 text-white hover:bg-white/20 rounded-sm transition-colors"
-              aria-label="Watch on YouTube (opens in a new tab)"
-              title="Watch on YouTube"
-            >
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
-                <path d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z" />
-                <path d="M5 5a2 2 0 00-2 2v6a2 2 0 002 2h6a2 2 0 002-2v-2a1 1 0 10-2 0v2H5V7h2a1 1 0 000-2H5z" />
-              </svg>
-            </a>
+            {videoId && (
+              <a
+                href={canonicalYouTubeUrl(videoId)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-2 text-white hover:bg-white/20 rounded-sm transition-colors"
+                aria-label="Watch on YouTube (opens in a new tab)"
+                title="Watch on YouTube"
+              >
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                  <path d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z" />
+                  <path d="M5 5a2 2 0 00-2 2v6a2 2 0 002 2h6a2 2 0 002-2v-2a1 1 0 10-2 0v2H5V7h2a1 1 0 000-2H5z" />
+                </svg>
+              </a>
+            )}
           </div>
         </div>
       </div>

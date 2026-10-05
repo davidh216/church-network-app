@@ -8,7 +8,8 @@ import { queryKeys } from './keys';
 export function useMedia(params: ListMediaParams) {
   return useQuery({
     queryKey: queryKeys.media.list(params),
-    queryFn: () => listMedia(params),
+    // TanStack aborts the signal when the key changes, so a superseded page is cancelled.
+    queryFn: ({ signal }) => listMedia(params, signal),
     placeholderData: keepPreviousData,
   });
 }

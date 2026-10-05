@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 
-export const TOAST_TIMEOUT_MS = 6000;
+const TOAST_TIMEOUT_MS = 6000;
 
 interface ErrorToastProps {
   /** The message; nothing renders while it is empty. */

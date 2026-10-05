@@ -1,4 +1,5 @@
 import type { ListUsersParams, SortOrder, UserSortField } from '@embrace/shared';
+import { stageLabel } from './display';
 
 /** The member list's quick filters as the inputs hold them; '' and 'all' mean unset. */
 export interface MemberFilters {
@@ -7,6 +8,8 @@ export interface MemberFilters {
   stage: string;
   risk: string;
   status: string;
+  /** Engagement band: 'high' (80+), 'medium' (50 to 79), 'low' (under 50) or 'all'. */
+  engagement: string;
   /** `YYYY-MM-DD` from a date input, inclusive. */
   joinedFrom: string;
   /** `YYYY-MM-DD`, inclusive to the end of that day (the API treats date-only bounds so). */
@@ -19,6 +22,7 @@ export const EMPTY_FILTERS: MemberFilters = {
   stage: 'all',
   risk: 'all',
   status: 'all',
+  engagement: 'all',
   joinedFrom: '',
   joinedTo: '',
 };
@@ -77,6 +81,60 @@ export function buildListParams(
     page,
     pageSize,
   };
+}
+
+/** The engagement bands of the quick filter, with their labels. */
+export const ENGAGEMENT_BANDS: [string, string][] = [
+  ['high', 'High (80+)'],
+  ['medium', 'Medium (50-79)'],
+  ['low', 'Low (under 50)'],
+];
+
+const isSet = (value: string) => value.trim() !== '' && value !== 'all';
+
+interface ChipRule {
+  /** The filters one chip shows and clears together. */
+  keys: (keyof MemberFilters)[];
+  label: (filters: MemberFilters) => string;
+}
+
+/** One row per active-filter chip, in display order; every quick filter has one. */
+const CHIP_RULES: ChipRule[] = [
+  { keys: ['search'], label: (f) => `Search: ${f.search.trim()}` },
+  { keys: ['role'], label: (f) => `Role: ${stageLabel(f.role)}` },
+  { keys: ['stage'], label: (f) => `Stage: ${stageLabel(f.stage)}` },
+  { keys: ['risk'], label: (f) => `Risk: ${stageLabel(f.risk)}` },
+  { keys: ['status'], label: (f) => `Status: ${stageLabel(f.status)}` },
+  {
+    keys: ['engagement'],
+    label: (f) =>
+      `Engagement: ${ENGAGEMENT_BANDS.find(([band]) => band === f.engagement)?.[1] ?? f.engagement}`,
+  },
+  {
+    keys: ['joinedFrom', 'joinedTo'],
+    label: ({ joinedFrom: from, joinedTo: to }) =>
+      from && to ? `Joined: ${from} to ${to}` : from ? `Joined from ${from}` : `Joined until ${to}`,
+  },
+];
+
+export interface FilterChip {
+  label: string;
+  /** The filters this chip clears (set back to their empty values). */
+  keys: (keyof MemberFilters)[];
+}
+
+/** The chips for the quick filters that are set. */
+export function activeFilterChips(filters: MemberFilters): FilterChip[] {
+  return CHIP_RULES.filter(({ keys }) => keys.some((key) => isSet(filters[key]))).map(
+    ({ keys, label }) => ({ keys, label: label(filters) }),
+  );
+}
+
+/** `filters` with the chip's keys back at their empty values. */
+export function clearChip(filters: MemberFilters, chip: FilterChip): MemberFilters {
+  const next = { ...filters };
+  for (const key of chip.keys) next[key] = EMPTY_FILTERS[key];
+  return next;
 }
 
 /** True when any quick filter differs from its empty value. */

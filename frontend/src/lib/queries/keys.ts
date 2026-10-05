@@ -9,7 +9,7 @@ export const queryKeys = {
   users: {
     all: ['users'] as const,
     list: (params: ListUsersParams) => ['users', 'list', params] as const,
-    search: (query: SearchQuery | null) => ['users', 'search', query] as const,
+    search: (query: SearchQuery) => ['users', 'search', query] as const,
     detail: (id: string) => ['users', 'detail', id] as const,
     summary: () => ['users', 'summary'] as const,
   },

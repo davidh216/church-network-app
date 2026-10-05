@@ -14,14 +14,7 @@ import {
   useRecordSavedSearchUse,
   useSavedSearches,
 } from './savedSearches';
-import {
-  useCreateUser,
-  useMemberSearch,
-  useUpdateUser,
-  useUser,
-  useUserSummary,
-  useUsers,
-} from './users';
+import { useCreateUser, useMemberRows, useUpdateUser, useUser, useUserSummary } from './users';
 
 const usersApi = vi.hoisted(() => ({
   listUsers: vi.fn(),
@@ -84,16 +77,16 @@ beforeEach(() => vi.resetAllMocks());
 /** Each query hook: its API function, the hook call, and the expected arguments. */
 const queryCases: QueryCase[] = [
   {
-    name: 'useUsers',
+    name: 'useMemberRows (list)',
     api: usersApi.listUsers,
-    useHook: () => useUsers({ q: 'ann', page: 2, pageSize: 25 }),
-    args: [{ q: 'ann', page: 2, pageSize: 25 }],
+    useHook: () => useMemberRows({ kind: 'list', params: { q: 'ann', page: 2, pageSize: 25 } }),
+    args: [{ q: 'ann', page: 2, pageSize: 25 }, expect.any(AbortSignal)],
   },
   {
-    name: 'useMemberSearch',
+    name: 'useMemberRows (search)',
     api: usersApi.searchUsers,
-    useHook: () => useMemberSearch(stageQuery),
-    args: [stageQuery],
+    useHook: () => useMemberRows({ kind: 'search', query: stageQuery }),
+    args: [stageQuery, expect.any(AbortSignal)],
   },
   { name: 'useUser', api: usersApi.getUser, useHook: () => useUser('u1'), args: ['u1'] },
   { name: 'useUserSummary', api: usersApi.getUserSummary, useHook: useUserSummary, args: [] },
@@ -107,7 +100,7 @@ const queryCases: QueryCase[] = [
     name: 'useMedia',
     api: mediaApi.listMedia,
     useHook: () => useMedia({ search: 'grace', page: 1, pageSize: 24 }),
-    args: [{ search: 'grace', page: 1, pageSize: 24 }],
+    args: [{ search: 'grace', page: 1, pageSize: 24 }, expect.any(AbortSignal)],
   },
   { name: 'useAnalytics', api: analyticsApi.getAnalytics, useHook: useAnalytics, args: [] },
   { name: 'useRoles', api: rolesApi.listRoles, useHook: () => useRoles(), args: [] },
@@ -137,19 +130,11 @@ describe.each(queryCases)('$name', ({ api, useHook, args }) => {
   });
 });
 
-describe('useMemberSearch', () => {
-  it('stays idle without a query', () => {
-    const { result } = renderHook(() => useMemberSearch(null), {
-      wrapper: queryWrapper(makeTestQueryClient()),
-    });
-    expect(result.current.fetchStatus).toBe('idle');
-    expect(usersApi.searchUsers).not.toHaveBeenCalled();
-  });
-
-  it('caches under the users prefix, so member invalidations refetch the search', async () => {
+describe('useMemberRows', () => {
+  it('caches searches under the users prefix, so member invalidations refetch them', async () => {
     usersApi.searchUsers.mockResolvedValue({ users: [], total: 0, page: 1, pageSize: 25 });
     const client = makeTestQueryClient();
-    const { result } = renderHook(() => useMemberSearch(stageQuery), {
+    const { result } = renderHook(() => useMemberRows({ kind: 'search', query: stageQuery }), {
       wrapper: queryWrapper(client),
     });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -160,14 +145,14 @@ describe('useMemberSearch', () => {
 });
 
 describe('list hooks keep the previous page while the next loads', () => {
-  it('useUsers shows the old page as placeholder data under the new key', async () => {
+  it('useMemberRows shows the old page as placeholder data under the new key', async () => {
     usersApi.listUsers.mockResolvedValueOnce({ users: ['first'], total: 30 });
     let resolveNext: (value: unknown) => void = () => undefined;
     usersApi.listUsers.mockReturnValueOnce(new Promise((resolve) => (resolveNext = resolve)));
-    const { result, rerender } = renderHook(({ page }) => useUsers({ page, pageSize: 25 }), {
-      wrapper: queryWrapper(),
-      initialProps: { page: 1 },
-    });
+    const { result, rerender } = renderHook(
+      ({ page }) => useMemberRows({ kind: 'list', params: { page, pageSize: 25 } }),
+      { wrapper: queryWrapper(), initialProps: { page: 1 } },
+    );
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     rerender({ page: 2 });
     expect(result.current.isPlaceholderData).toBe(true);
@@ -175,7 +160,46 @@ describe('list hooks keep the previous page while the next loads', () => {
     resolveNext({ users: ['second'], total: 30 });
     await waitFor(() => expect(result.current.isPlaceholderData).toBe(false));
     expect(result.current.data).toEqual({ users: ['second'], total: 30 });
-    expect(usersApi.listUsers).toHaveBeenLastCalledWith({ page: 2, pageSize: 25 });
+    expect(usersApi.listUsers).toHaveBeenLastCalledWith(
+      { page: 2, pageSize: 25 },
+      expect.any(AbortSignal),
+    );
+  });
+
+  it('useMemberRows keeps the list rows while switching to a search (no empty flash)', async () => {
+    usersApi.listUsers.mockResolvedValueOnce({ users: ['listed'], total: 3 });
+    usersApi.searchUsers.mockReturnValueOnce(new Promise(() => undefined));
+    const { result, rerender } = renderHook(
+      ({ advanced }) =>
+        useMemberRows(
+          advanced
+            ? { kind: 'search', query: stageQuery }
+            : { kind: 'list', params: { page: 1, pageSize: 25 } },
+        ),
+      { wrapper: queryWrapper(), initialProps: { advanced: false } },
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    rerender({ advanced: true });
+    expect(usersApi.searchUsers).toHaveBeenCalled();
+    expect(result.current.isPlaceholderData).toBe(true);
+    expect(result.current.data).toEqual({ users: ['listed'], total: 3 });
+  });
+
+  it('aborts the superseded request', async () => {
+    const signals: AbortSignal[] = [];
+    mediaApi.listMedia.mockImplementation((_params: unknown, signal: AbortSignal) => {
+      signals.push(signal);
+      return new Promise(() => undefined);
+    });
+    const { rerender } = renderHook(({ search }) => useMedia({ search }), {
+      wrapper: queryWrapper(),
+      initialProps: { search: 'g' },
+    });
+    await waitFor(() => expect(signals).toHaveLength(1));
+    rerender({ search: 'grace' });
+    await waitFor(() => expect(signals).toHaveLength(2));
+    expect(signals[0]!.aborted).toBe(true);
+    expect(signals[1]!.aborted).toBe(false);
   });
 
   it('useMedia does the same', async () => {

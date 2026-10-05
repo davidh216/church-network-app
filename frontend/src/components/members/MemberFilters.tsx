@@ -1,7 +1,13 @@
 import { useRef, type ReactNode } from 'react';
 import { MAX_QUERY_TEXT, type SearchQuery } from '@embrace/shared';
-import { stageLabel } from '@/lib/members/display';
-import type { MemberFilters as Filters, MemberSort } from '@/lib/members/filters';
+import {
+  activeFilterChips,
+  EMPTY_FILTERS,
+  ENGAGEMENT_BANDS,
+  type MemberFilters as Filters,
+  type MemberSort,
+} from '@/lib/members/filters';
+import { NAME_ONLY_LIST_NOTE } from '@/lib/members/searchQuery';
 import AdvancedQueryChip from './search/AdvancedQueryChip';
 
 interface MemberFiltersProps {
@@ -18,6 +24,8 @@ interface MemberFiltersProps {
   actions?: ReactNode;
   /** While an advanced query is active it replaces the search box and quick filters. */
   advanced?: { query: SearchQuery; onEdit: () => void; onClear: () => void } | null;
+  /** The text search is narrowed to names (it is combined with other filters). */
+  nameOnly?: boolean;
 }
 
 const filterClass =
@@ -67,6 +75,11 @@ const SELECTS: { key: keyof Filters; label: string; options: [string, string][] 
       ['inactive', 'Inactive'],
     ],
   },
+  {
+    key: 'engagement',
+    label: 'Engagement',
+    options: [['all', 'All Engagement'], ...ENGAGEMENT_BANDS],
+  },
 ];
 
 /** The member search box, the staff quick filters and the active-filter chips. */
@@ -80,6 +93,7 @@ export default function MemberFilters({
   dateError,
   actions,
   advanced,
+  nameOnly = false,
 }: MemberFiltersProps) {
   // Clearing a chip (or the advanced query) moves focus to the search box, which survives.
   const searchRef = useRef<HTMLInputElement | null>(null);
@@ -103,17 +117,10 @@ export default function MemberFilters({
     searchRef.current?.focus();
   };
 
-  const chips: { label: string; clear: () => void }[] = [];
-  if (filters.search)
-    chips.push({ label: `Search: ${filters.search}`, clear: () => onFilterChange('search', '') });
-  if (filters.role !== 'all')
-    chips.push({ label: `Role: ${filters.role}`, clear: () => onFilterChange('role', 'all') });
-  if (filters.stage !== 'all') {
-    chips.push({
-      label: `Stage: ${stageLabel(filters.stage)}`,
-      clear: () => onFilterChange('stage', 'all'),
-    });
-  }
+  const chips = activeFilterChips(filters).map(({ label, keys }) => ({
+    label,
+    clear: () => keys.forEach((key) => onFilterChange(key, EMPTY_FILTERS[key])),
+  }));
   if (sort) chips.push({ label: `Sorted by: ${sort.key} ${sort.order}`, clear: onClearSort });
 
   return (
@@ -195,6 +202,9 @@ export default function MemberFilters({
             Clear All
           </button>
         </div>
+      )}
+      {canManage && !advanced && nameOnly && filters.engagement !== 'all' && (
+        <p className="text-sm text-gray-600">{NAME_ONLY_LIST_NOTE}</p>
       )}
       {dateError && (
         <p role="alert" className="text-sm text-red-700">

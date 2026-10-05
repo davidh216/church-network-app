@@ -1,5 +1,5 @@
 /** Elements a keyboard user can Tab to, in a form `querySelectorAll` understands. */
-export const FOCUSABLE_SELECTOR = [
+const FOCUSABLE_SELECTOR = [
   'a[href]',
   'area[href]',
   'button:not([disabled])',

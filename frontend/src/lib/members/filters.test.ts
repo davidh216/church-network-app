@@ -8,6 +8,8 @@ import {
   nextSort,
   selectionLabel,
   toggleAllOnPage,
+  activeFilterChips,
+  clearChip,
 } from './filters';
 
 const all = {
@@ -16,6 +18,7 @@ const all = {
   stage: 'new_member',
   risk: 'high',
   status: 'inactive',
+  engagement: 'all',
   joinedFrom: '2026-01-01',
   joinedTo: '2026-01-31',
 };
@@ -134,5 +137,37 @@ describe('selection across pages', () => {
   it('selectionLabel says "across pages" only when selected rows are off this page', () => {
     expect(selectionLabel(new Set(['a']), ['a', 'b'])).toBe('1 selected');
     expect(selectionLabel(new Set(['a', 'z']), ['a', 'b'])).toBe('2 selected across pages');
+  });
+});
+
+describe('activeFilterChips', () => {
+  it('has a chip for every quick filter that is set, with the joined range as one chip', () => {
+    expect(activeFilterChips(EMPTY_FILTERS)).toEqual([]);
+    const chips = activeFilterChips({ ...all, engagement: 'medium' });
+    expect(chips.map((c) => c.label)).toEqual([
+      'Search: ann',
+      'Role: Leader',
+      'Stage: New Member',
+      'Risk: High',
+      'Status: Inactive',
+      'Engagement: Medium (50-79)',
+      'Joined: 2026-01-01 to 2026-01-31',
+    ]);
+    expect(chips.at(-1)!.keys).toEqual(['joinedFrom', 'joinedTo']);
+  });
+
+  it('labels a one-sided joined range', () => {
+    const from = activeFilterChips({ ...EMPTY_FILTERS, joinedFrom: '2026-01-01' });
+    expect(from.map((c) => c.label)).toEqual(['Joined from 2026-01-01']);
+    const to = activeFilterChips({ ...EMPTY_FILTERS, joinedTo: '2026-01-31' });
+    expect(to.map((c) => c.label)).toEqual(['Joined until 2026-01-31']);
+  });
+
+  it('clears exactly the chip keys', () => {
+    const filters = { ...all, engagement: 'high' };
+    const joined = activeFilterChips(filters).find((c) => c.label.startsWith('Joined'))!;
+    expect(clearChip(filters, joined)).toEqual({ ...filters, joinedFrom: '', joinedTo: '' });
+    const risk = activeFilterChips(filters).find((c) => c.label.startsWith('Risk'))!;
+    expect(clearChip(filters, risk)).toEqual({ ...filters, risk: 'all' });
   });
 });

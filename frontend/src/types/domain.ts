@@ -21,7 +21,7 @@ export interface Role {
   permissions?: string;
 }
 
-export interface UserRole {
+interface UserRole {
   role: Role;
 }
 

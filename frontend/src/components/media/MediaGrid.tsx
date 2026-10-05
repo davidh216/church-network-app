@@ -27,7 +27,6 @@ export default function MediaGrid({ media, onPlay }: MediaGridProps) {
                 <VideoThumbnail
                   videoId={videoId}
                   alt={item.title}
-                  large
                   sizes="(min-width: 1280px) 25vw, (min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw"
                 />
               )}

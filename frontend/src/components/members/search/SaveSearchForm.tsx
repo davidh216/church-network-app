@@ -9,6 +9,8 @@ export interface SaveSearchValues {
 interface SaveSearchFormProps {
   /** One line describing the query being saved. */
   summary: string;
+  /** How the saved query differs from what the list shows (the name-only text search). */
+  note?: string;
   saving: boolean;
   onSave: (values: SaveSearchValues) => void;
   onCancel: () => void;
@@ -18,7 +20,13 @@ const inputClass =
   'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-hidden focus:ring-2 focus:ring-blue-500';
 
 /** Names the current query (advanced conditions or the quick filters) before saving it. */
-export default function SaveSearchForm({ summary, saving, onSave, onCancel }: SaveSearchFormProps) {
+export default function SaveSearchForm({
+  summary,
+  note,
+  saving,
+  onSave,
+  onCancel,
+}: SaveSearchFormProps) {
   const [values, setValues] = useState<SaveSearchValues>({
     name: '',
     description: '',
@@ -35,6 +43,14 @@ export default function SaveSearchForm({ summary, saving, onSave, onCancel }: Sa
     >
       <h3 className="text-sm font-medium text-gray-900">Save Current Search</h3>
       <p className="text-xs text-gray-600">{summary}</p>
+      {note && (
+        <p
+          role="note"
+          className="text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-sm p-2"
+        >
+          {note}
+        </p>
+      )}
       <input
         type="text"
         aria-label="Search name"

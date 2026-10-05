@@ -7,11 +7,18 @@ export interface MediaPage extends Paged {
   media: MediaItem[];
 }
 
-/** GET /api/media: one page (24 by default) of the library; tag "all" means no tag filter. */
-export async function listMedia(params: ListMediaParams = {}): Promise<MediaPage> {
+/**
+ * GET /api/media: one page (24 by default) of the library; tag "all" means no tag filter.
+ * `signal` aborts a request that a newer one has superseded.
+ */
+export async function listMedia(
+  params: ListMediaParams = {},
+  signal?: AbortSignal,
+): Promise<MediaPage> {
   const { tag, ...rest } = params;
   const { media, total, page, pageSize } = await apiFetch<ApiEnvelope<MediaPage>>(
     `/media${queryString({ ...rest, tag: tag === 'all' ? undefined : tag })}`,
+    { signal },
   );
   return { media, total, page, pageSize };
 }

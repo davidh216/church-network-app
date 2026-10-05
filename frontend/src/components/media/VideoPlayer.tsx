@@ -122,7 +122,8 @@ export default function VideoPlayer({
   // Hooks above must run on every render; bail out only after them.
   if (!media) return null;
   // Only a strictly checked YouTube id is embedded; a stored URL never goes into the iframe.
-  const embed = embedUrl(mediaVideoId(media), window.location.origin);
+  const videoId = mediaVideoId(media);
+  const embed = embedUrl(videoId, window.location.origin);
 
   return (
     <Dialog
@@ -151,6 +152,7 @@ export default function VideoPlayer({
           <PlayerControls
             titleId={titleId}
             media={media}
+            videoId={videoId}
             visible={showControls}
             playlistLength={playlist.length}
             currentIndex={currentIndex}

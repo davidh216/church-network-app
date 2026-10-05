@@ -103,9 +103,11 @@ describe('MediaLibrary', () => {
     expect(await screen.findByText('Sermon 3')).toBeInTheDocument();
   });
 
-  it('refetches the library after staff add a video', async () => {
+  it('refetches the library after staff add a video, back on page 1', async () => {
     mediaApi.createMedia.mockResolvedValue(video(9));
     await renderAs(['admin']);
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    await waitFor(() => expect(lastParams()).toMatchObject({ page: 2 }));
     const callsBefore = mediaApi.listMedia.mock.calls.length;
     fireEvent.click(screen.getByRole('button', { name: /Add Video/ }));
     fireEvent.change(screen.getByPlaceholderText('Sunday Service - January 2025'), {
@@ -124,6 +126,8 @@ describe('MediaLibrary', () => {
     );
     await waitFor(() => expect(mediaApi.listMedia.mock.calls.length).toBeGreaterThan(callsBefore));
     expect(screen.queryByText('Add YouTube Video')).not.toBeInTheDocument();
+    await waitFor(() => expect(lastParams()).toMatchObject({ page: 1 }));
+    expect(screen.getByText('Page 1 of 2')).toBeInTheDocument();
   });
 
   it('opens Add Video as a labelled modal dialog that Escape closes', async () => {
@@ -147,9 +151,42 @@ describe('MediaLibrary', () => {
       'true',
     );
     expect(screen.getByRole('button', { name: 'Play Sermon 1' })).toBeInTheDocument();
+    // External links are built from the checked id, never the stored URL.
     expect(
       screen.getByRole('link', { name: 'Open Sermon 1 on YouTube (opens in a new tab)' }),
-    ).toBeInTheDocument();
+    ).toHaveAttribute('href', 'https://www.youtube.com/watch?v=abcdefghij1');
+  });
+
+  it('omits the external link for a row without a valid video id', async () => {
+    mediaApi.listMedia.mockResolvedValue(
+      mediaPage([{ ...video(1), url: 'javascript:alert(1)', videoId: null }, video(2)]),
+    );
+    await renderAs(['member']);
+    fireEvent.click(await screen.findByRole('button', { name: 'List View' }));
+    expect(screen.queryByRole('link', { name: /Open Sermon 1 on YouTube/ })).toBeNull();
+    expect(screen.getByRole('link', { name: /Open Sermon 2 on YouTube/ })).toBeInTheDocument();
+  });
+
+  it('requests hqdefault thumbnails for the grid', async () => {
+    await renderAs(['member']);
+    const image = await screen.findByAltText('Sermon 1');
+    expect(decodeURIComponent(image.getAttribute('src')!)).toContain(
+      '/vi/abcdefghij1/hqdefault.jpg',
+    );
+  });
+
+  it('moves back to the last page when the library shrinks', async () => {
+    await renderAs(['member']);
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    await waitFor(() => expect(lastParams()).toMatchObject({ page: 2 }));
+    // Videos were deleted elsewhere; a refetch of page 2 finds only one page left.
+    mediaApi.listMedia.mockImplementation((params: { page: number }) =>
+      Promise.resolve(params.page === 2 ? mediaPage([], 20, 2) : mediaPage([video(1)], 20)),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Previous' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    await waitFor(() => expect(lastParams()).toMatchObject({ page: 1 }));
+    expect(await screen.findByText('Sermon 1')).toBeInTheDocument();
   });
 
   it('has one page heading (h1) and no duplicate library heading', async () => {

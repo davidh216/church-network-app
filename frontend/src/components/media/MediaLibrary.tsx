@@ -4,6 +4,7 @@ import { DEFAULT_MEDIA_PAGE_SIZE } from '@embrace/shared';
 import { useState, type RefObject } from 'react';
 import { useIsStaff } from '@/lib/auth/AuthProvider';
 import { useDebouncedValue } from '@/lib/hooks/useDebouncedValue';
+import { useClampedPage } from '@/lib/hooks/useClampedPage';
 import { useResettingPage } from '@/lib/hooks/useResettingPage';
 import { useMedia } from '@/lib/queries/media';
 import type { MediaItem } from '@/types/domain';
@@ -50,6 +51,12 @@ export default function MediaLibrary({ onPlayMedia, headingRef }: MediaLibraryPr
   });
   const media = mediaQuery.data?.media ?? [];
   const total = mediaQuery.data?.total ?? 0;
+  useClampedPage(
+    page,
+    setPage,
+    mediaQuery.isPlaceholderData ? undefined : mediaQuery.data?.total,
+    DEFAULT_MEDIA_PAGE_SIZE,
+  );
   const filtered = search !== '' || selectedTag !== 'all';
   const empty = media.length === 0 && mediaQuery.isSuccess;
   const play = (item: MediaItem) => onPlayMedia(item, media);
@@ -158,7 +165,11 @@ export default function MediaLibrary({ onPlayMedia, headingRef }: MediaLibraryPr
       {canManage && showAddForm && (
         <AddMediaDialog
           onClose={() => setShowAddForm(false)}
-          onSaved={() => setShowAddForm(false)}
+          onSaved={() => {
+            setShowAddForm(false);
+            // The new video sorts first, so show it.
+            setPage(1);
+          }}
           fallbackFocus={headingRef}
         />
       )}

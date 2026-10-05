@@ -1,4 +1,4 @@
-export const PROFILE_TABS = [
+const PROFILE_TABS = [
   { id: 'personal', label: 'Personal Info', icon: '👤' },
   { id: 'church', label: 'Church Info', icon: '⛪' },
   { id: 'contact', label: 'Contact & Address', icon: '📧' },

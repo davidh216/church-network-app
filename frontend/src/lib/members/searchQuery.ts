@@ -16,7 +16,7 @@ import { dateRangeError, type MemberFilters } from './filters';
  * `searchQuery` with the shared schema, so the rules match what the API enforces.
  */
 
-export type FieldKind = 'text' | 'role' | 'score' | 'stage' | 'risk' | 'date' | 'active';
+type FieldKind = 'text' | 'role' | 'score' | 'stage' | 'risk' | 'date' | 'active';
 
 export const SEARCH_FIELDS: { field: SearchField; label: string; kind: FieldKind }[] = [
   { field: 'name', label: 'Name', kind: 'text' },
@@ -48,8 +48,8 @@ export const OPERATOR_LABELS: Record<SearchOperator, string> = {
   after: 'after',
 };
 
-export const ROLE_OPTIONS = ['admin', 'leader', 'member'] as const;
-export const STAGE_OPTIONS = [
+const ROLE_OPTIONS = ['admin', 'leader', 'member'] as const;
+const STAGE_OPTIONS = [
   'leader',
   'core_member',
   'active_member',
@@ -58,13 +58,13 @@ export const STAGE_OPTIONS = [
   'at_risk',
   'inactive',
 ] as const;
-export const RISK_OPTIONS = ['low', 'medium', 'high'] as const;
+const RISK_OPTIONS = ['low', 'medium', 'high'] as const;
 
 export function fieldKind(field: SearchField): FieldKind {
   return SEARCH_FIELDS.find((f) => f.field === field)?.kind ?? 'text';
 }
 
-export function fieldLabel(field: SearchField): string {
+function fieldLabel(field: SearchField): string {
   return SEARCH_FIELDS.find((f) => f.field === field)?.label ?? field;
 }
 
@@ -144,8 +144,7 @@ function toCandidate(draft: DraftCondition): unknown {
   return { field, operator, value: scalar(draft.value) };
 }
 
-export type BuildResult =
-  { ok: true; query: SearchQuery } | { ok: false; errors: Record<string, string> };
+type BuildResult = { ok: true; query: SearchQuery } | { ok: false; errors: Record<string, string> };
 
 /**
  * Validates each draft with the shared `searchCondition` schema and returns the query, or a
@@ -189,6 +188,16 @@ export function draftsFromQuery(query: Pick<SearchQuery, 'conditions'>): DraftCo
   });
 }
 
+/** Engagement score conditions for each band of the quick filter (all combined with AND). */
+const ENGAGEMENT_CONDITIONS: Record<string, SearchCondition[]> = {
+  high: [{ field: 'engagement.engagementScore', operator: 'gte', value: 80 }],
+  medium: [
+    { field: 'engagement.engagementScore', operator: 'gte', value: 50 },
+    { field: 'engagement.engagementScore', operator: 'lt', value: 80 },
+  ],
+  low: [{ field: 'engagement.engagementScore', operator: 'lt', value: 50 }],
+};
+
 // Bounds for a one-sided joined range: `between` includes both ends, like the list filter.
 const EARLIEST_DATE = '1970-01-01';
 const LATEST_DATE = '9999-12-31';
@@ -218,6 +227,7 @@ export function filtersToQuery(filters: MemberFilters): SearchQuery | null {
     });
   if (filters.status === 'active' || filters.status === 'inactive')
     conditions.push({ field: 'isActive', operator: 'equals', value: filters.status === 'active' });
+  conditions.push(...(ENGAGEMENT_CONDITIONS[filters.engagement] ?? []));
   const datesValid = dateRangeError(filters.joinedFrom, filters.joinedTo) === null;
   if (datesValid && (filters.joinedFrom || filters.joinedTo))
     conditions.push({
@@ -237,6 +247,21 @@ export function filtersToQuery(filters: MemberFilters): SearchQuery | null {
   const parsed = searchQuery.safeParse({ conditions, logic: 'AND' });
   return parsed.success ? parsed.data : null;
 }
+
+/**
+ * True when the quick filters' text search becomes `name contains` (it is combined with other
+ * filters, and one query has one logic), so it no longer matches email, phone or bio.
+ */
+export function searchNarrowedToName(filters: MemberFilters): boolean {
+  return filters.search.trim() !== '' && filtersToQuery(filters)?.logic === 'AND';
+}
+
+/** Shown when saving quick filters whose text search is narrowed to names. */
+export const NAME_ONLY_SAVE_NOTE =
+  'The text search is saved as a name match only: next to other filters it matches names, not email, phone or bio.';
+
+/** Shown under the quick filters while the engagement filter narrows the text search. */
+export const NAME_ONLY_LIST_NOTE = 'With an engagement filter, the text search matches names only.';
 
 function valueText(condition: SearchCondition): string {
   if (!('value' in condition)) return '';

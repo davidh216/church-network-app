@@ -11,29 +11,28 @@ import {
 } from '@/lib/api/users';
 import { queryKeys } from './keys';
 
-/**
- * One page of the member list. The previous page stays on screen while the next loads
- * (`keepPreviousData`), so typing in the search box never swaps the list for a spinner.
- */
-export function useUsers(params: ListUsersParams, { enabled = true }: { enabled?: boolean } = {}) {
-  return useQuery({
-    queryKey: queryKeys.users.list(params),
-    queryFn: () => listUsers(params),
-    placeholderData: keepPreviousData,
-    enabled,
-  });
-}
+/** What the member list shows: a GET /api/users page or a POST /api/users/search page. */
+export type MemberRowsRequest =
+  { kind: 'list'; params: ListUsersParams } | { kind: 'search'; query: SearchQuery };
 
 /**
- * Staff only: one page of the advanced search (POST /api/users/search). Idle while `query`
- * is null. The key sits under `users`, so saving a member refetches the search too.
+ * One page of the member list, from the list endpoint or (staff) the search endpoint. It is
+ * one query whose key and fetcher follow `request`, so the previous rows stay on screen
+ * (`keepPreviousData`) while a new page, filter or a switch between list and search loads;
+ * the superseded request is aborted. Search keys sit under `users`, so saving a member
+ * refetches them too.
  */
-export function useMemberSearch(query: SearchQuery | null) {
+export function useMemberRows(request: MemberRowsRequest) {
   return useQuery({
-    queryKey: queryKeys.users.search(query),
-    queryFn: () => searchUsers(query!),
+    queryKey:
+      request.kind === 'list'
+        ? queryKeys.users.list(request.params)
+        : queryKeys.users.search(request.query),
+    queryFn: ({ signal }) =>
+      request.kind === 'list'
+        ? listUsers(request.params, signal)
+        : searchUsers(request.query, signal),
     placeholderData: keepPreviousData,
-    enabled: query !== null,
   });
 }
 

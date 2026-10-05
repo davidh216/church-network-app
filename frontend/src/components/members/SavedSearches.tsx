@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { searchQuery, type SearchQuery } from '@embrace/shared';
 import { getErrorMessage } from '@/lib/errors';
 import { predefinedSearches } from '@/lib/members/predefinedSearches';
-import { describeQuery } from '@/lib/members/searchQuery';
+import { describeQuery, NAME_ONLY_SAVE_NOTE } from '@/lib/members/searchQuery';
 import {
   useCreateSavedSearch,
   useDeleteSavedSearch,
@@ -24,6 +24,8 @@ interface SavedSearchesProps {
   onClose: () => void;
   /** The list's current query (advanced, or the quick filters as conditions); null if none. */
   currentQuery: SearchQuery | null;
+  /** The current query came from quick filters whose text search is stored as a name match. */
+  nameOnly?: boolean;
 }
 
 /** The API marks stale rows `invalid`; anything that does not parse is treated the same way. */
@@ -33,7 +35,12 @@ function checked(search: SavedSearch): SavedSearch {
 }
 
 /** Staff only: quick searches, the saved searches (apply, delete) and saving the current query. */
-export default function SavedSearches({ onLoadSearch, onClose, currentQuery }: SavedSearchesProps) {
+export default function SavedSearches({
+  onLoadSearch,
+  onClose,
+  currentQuery,
+  nameOnly = false,
+}: SavedSearchesProps) {
   const searchesQuery = useSavedSearches();
   const savedSearches = (searchesQuery.data ?? []).map(checked);
   const createSearch = useCreateSavedSearch();
@@ -131,6 +138,7 @@ export default function SavedSearches({ onLoadSearch, onClose, currentQuery }: S
       {showSaveForm && currentQuery && (
         <SaveSearchForm
           summary={describeQuery(currentQuery)}
+          note={nameOnly ? NAME_ONLY_SAVE_NOTE : undefined}
           saving={createSearch.isPending}
           onSave={(values) => void save(values)}
           onCancel={() => setShowSaveForm(false)}

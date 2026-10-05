@@ -178,4 +178,19 @@ describe('VideoPlayer', () => {
     fireEvent.keyDown(document, { key: ' ' });
     expect(sent()[3]![0]).toMatchObject({ func: 'pauseVideo' });
   });
+
+  it('links to YouTube by the checked id only, and not at all without one', async () => {
+    const { unmount } = await render(
+      <VideoPlayer
+        media={video('http://youtu.be/dQw4w9WgXcQ?evil=1', 'dQw4w9WgXcQ')}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(
+      screen.getByRole('link', { name: 'Watch on YouTube (opens in a new tab)' }),
+    ).toHaveAttribute('href', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+    unmount();
+    await render(<VideoPlayer media={video('https://evil.example/x')} onClose={vi.fn()} />);
+    expect(screen.queryByRole('link', { name: /Watch on YouTube/ })).toBeNull();
+  });
 });

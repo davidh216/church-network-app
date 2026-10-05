@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { act } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import MediaPage from '@/components/media/MediaPage';
+import VideoThumbnail from '@/components/media/VideoThumbnail';
 import MediaLibrary from '@/components/media/MediaLibrary';
 import VideoPlayer from '@/components/media/VideoPlayer';
 import BulkActionsToolbar from '@/components/members/BulkActionsToolbar';
@@ -170,17 +171,14 @@ describe('VideoPlayer playlist', () => {
 });
 
 describe('media thumbnails', () => {
-  it('loads thumbnails from i.ytimg.com through next/image and hides one whose fallbacks fail', async () => {
+  it('loads hqdefault thumbnails from i.ytimg.com through next/image and hides one that fails', async () => {
     mediaApi.listMedia.mockResolvedValue(mediaPage([video(1)]));
     const container = await renderAs(['member'], <MediaLibrary onPlayMedia={noop} />);
     const img = () => container.querySelector('img');
     const src = () => decodeURIComponent(img()!.getAttribute('src')!);
-    // next/image serves the remote file through its optimiser (/_next/image?url=...).
-    expect(src()).toContain(
-      '/_next/image?url=https://i.ytimg.com/vi/abcdefghij1/maxresdefault.jpg',
-    );
-    await act(async () => img()!.dispatchEvent(new Event('error')));
-    expect(src()).toContain('https://i.ytimg.com/vi/abcdefghij1/hqdefault.jpg');
+    // next/image serves the remote file through its optimiser (/_next/image?url=...). Grid
+    // cards use hqdefault, which every video has (maxresdefault is poster-only).
+    expect(src()).toContain('/_next/image?url=https://i.ytimg.com/vi/abcdefghij1/hqdefault.jpg');
     await act(async () => img()!.dispatchEvent(new Event('error')));
     expect(img()).toBeNull();
     expect(container.innerHTML).not.toContain('placeholder.com');
@@ -304,5 +302,17 @@ describe('SavedSearches', () => {
     expect(container.textContent).toContain('High Engagement Members');
     // Nothing to save without a current query.
     expect(buttonTexts(container)).not.toContain('Save Current Search');
+  });
+});
+
+describe('VideoThumbnail', () => {
+  it('falls back from maxresdefault to hqdefault for a poster-sized image', async () => {
+    const { container } = await render(
+      <VideoThumbnail videoId="abcdefghij1" alt="Poster" large sizes="100vw" />,
+    );
+    const src = () => decodeURIComponent(container.querySelector('img')!.getAttribute('src')!);
+    expect(src()).toContain('/vi/abcdefghij1/maxresdefault.jpg');
+    await act(async () => container.querySelector('img')!.dispatchEvent(new Event('error')));
+    expect(src()).toContain('/vi/abcdefghij1/hqdefault.jpg');
   });
 });

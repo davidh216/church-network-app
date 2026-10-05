@@ -5,11 +5,8 @@ import { useCallback, useRef, useState } from 'react';
 import { DEFAULT_USER_PAGE_SIZE, type SearchQuery, type UserSortField } from '@embrace/shared';
 import { exportUsers } from '@/lib/api/users';
 import { useIsStaff } from '@/lib/auth/AuthProvider';
-import { useDebouncedValue } from '@/lib/hooks/useDebouncedValue';
-import { useResettingPage } from '@/lib/hooks/useResettingPage';
 import {
   EMPTY_FILTERS,
-  buildListParams,
   dateRangeError,
   hasActiveFilters,
   nextSort,
@@ -19,7 +16,7 @@ import {
   type MemberSort,
 } from '@/lib/members/filters';
 import { filtersToQuery } from '@/lib/members/searchQuery';
-import { useMemberSearch, useUsers } from '@/lib/queries/users';
+import { useMemberResults } from '@/lib/members/useMemberResults';
 import AddEditMemberModal from './AddEditMemberModal';
 import AdvancedSearchBuilder from './AdvancedSearchBuilder';
 import SavedSearches from './SavedSearches';
@@ -63,22 +60,14 @@ export default function MemberList() {
     saved: useRef<HTMLButtonElement>(null),
   };
 
-  // The search box updates at once; the query follows 300 ms after the last keystroke.
-  const search = useDebouncedValue(filters.search.trim());
-  const queryFilters = { ...filters, search };
-  const filterKey = JSON.stringify([queryFilters, sort, pageSize, advancedQuery]);
-  const [page, setPage] = useResettingPage(filterKey);
-  const sortParams = sort ? { sort: sort.key, order: sort.order } : {};
-  const listQuery = useUsers(buildListParams(queryFilters, sort, page, pageSize, canManage), {
-    enabled: !advancedQuery,
-  });
-  const searchResult = useMemberSearch(
-    advancedQuery ? { ...advancedQuery, ...sortParams, page, pageSize } : null,
-  );
-  const usersQuery = advancedQuery ? searchResult : listQuery;
-  // What "Save Current Search" stores: the advanced query, or the quick filters as conditions.
-  const baseQuery = advancedQuery ?? filtersToQuery(queryFilters);
-  const currentQuery = baseQuery && { ...baseQuery, ...sortParams };
+  // The inputs update at once; the query follows 300 ms after the last change.
+  const {
+    query: usersQuery,
+    page,
+    setPage,
+    currentQuery,
+    nameOnly,
+  } = useMemberResults({ filters, sort, pageSize, advancedQuery, staff: canManage });
   const members = usersQuery.data?.users ?? [];
   const total = usersQuery.data?.total ?? 0;
   const pageIds = members.map((m) => m.id);
@@ -152,6 +141,7 @@ export default function MemberList() {
           onClearSort={() => setSort(null)}
           canManage={canManage}
           dateError={dateError}
+          nameOnly={nameOnly}
           advanced={
             advancedQuery && {
               query: advancedQuery,
@@ -204,7 +194,12 @@ export default function MemberList() {
       )}
 
       {canManage && panel === 'saved' && (
-        <SavedSearches onLoadSearch={applyQuery} onClose={closePanel} currentQuery={currentQuery} />
+        <SavedSearches
+          onLoadSearch={applyQuery}
+          onClose={closePanel}
+          currentQuery={currentQuery}
+          nameOnly={nameOnly}
+        />
       )}
 
       {/* Rows render only once data exists, so the skeleton is the only loading state. */}

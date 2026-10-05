@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 
 /** The origin of the embedded player (`embedUrl` uses www.youtube.com). */
-export const YOUTUBE_ORIGIN = 'https://www.youtube.com';
+const YOUTUBE_ORIGIN = 'https://www.youtube.com';
 
 /** YouTube iframe API player states we act on. */
 const PLAYING = 1;

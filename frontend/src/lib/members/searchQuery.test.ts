@@ -7,6 +7,8 @@ import {
   describeQuery,
   draftsFromQuery,
   filtersToQuery,
+  NAME_ONLY_SAVE_NOTE,
+  searchNarrowedToName,
   newDraft,
   operatorsFor,
   withField,
@@ -144,6 +146,7 @@ describe('filtersToQuery', () => {
       stage: 'new_member',
       risk: 'high',
       status: 'inactive',
+      engagement: 'all',
       joinedFrom: '2026-01-01',
       joinedTo: '',
     });
@@ -176,6 +179,34 @@ describe('filtersToQuery', () => {
       conditions: [{ field: 'engagement.riskLevel', operator: 'equals', value: 'low' }],
       logic: 'AND',
     });
+  });
+});
+
+describe('engagement bands and the name-only text search', () => {
+  it('turns each engagement band into score conditions', () => {
+    const band = (engagement: string) =>
+      filtersToQuery({ ...EMPTY_FILTERS, engagement })?.conditions;
+    expect(band('high')).toEqual([
+      { field: 'engagement.engagementScore', operator: 'gte', value: 80 },
+    ]);
+    expect(band('medium')).toEqual([
+      { field: 'engagement.engagementScore', operator: 'gte', value: 50 },
+      { field: 'engagement.engagementScore', operator: 'lt', value: 80 },
+    ]);
+    expect(band('low')).toEqual([
+      { field: 'engagement.engagementScore', operator: 'lt', value: 50 },
+    ]);
+    expect(band('all')).toBeUndefined();
+  });
+
+  it('says when the text search is narrowed to names', () => {
+    expect(searchNarrowedToName({ ...EMPTY_FILTERS, search: 'ann' })).toBe(false);
+    expect(searchNarrowedToName({ ...EMPTY_FILTERS, engagement: 'high' })).toBe(false);
+    expect(searchNarrowedToName({ ...EMPTY_FILTERS, search: 'ann', engagement: 'high' })).toBe(
+      true,
+    );
+    expect(searchNarrowedToName({ ...EMPTY_FILTERS, search: 'ann', role: 'leader' })).toBe(true);
+    expect(NAME_ONLY_SAVE_NOTE).toMatch(/^The text search is saved as a name match only/);
   });
 });
 

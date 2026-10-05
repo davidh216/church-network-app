@@ -7,7 +7,10 @@ import { thumbnailUrl } from '@/lib/media/youtube';
 interface VideoThumbnailProps {
   videoId: string;
   alt: string;
-  /** Start from the large thumbnail (grid cards); list rows use the smaller one. */
+  /**
+   * Start from maxresdefault (falling back to hqdefault): only for a poster-sized image. Grid
+   * cards and list rows use hqdefault, which every video has and which is much smaller.
+   */
   large?: boolean;
   /** The `sizes` hint for next/image (the box is filled, so this picks the width). */
   sizes: string;

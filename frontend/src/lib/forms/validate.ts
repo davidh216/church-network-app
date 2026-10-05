@@ -7,7 +7,7 @@ export type FieldErrors = Partial<Record<string, string>>;
 
 export const FORM_ERROR_KEY = '_form';
 
-export type FormValidation<T> = { ok: true; data: T } | { ok: false; errors: FieldErrors };
+type FormValidation<T> = { ok: true; data: T } | { ok: false; errors: FieldErrors };
 
 /**
  * Collects zod issues the way the API's validate middleware does (flattened by the first path

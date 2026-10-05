@@ -1,6 +1,6 @@
 import type { SearchQuery } from '@embrace/shared';
 
-export interface PredefinedSearch {
+interface PredefinedSearch {
   name: string;
   description: string;
   query: SearchQuery;
