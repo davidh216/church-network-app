@@ -33,7 +33,7 @@ function dateFilter(operator: 'before' | 'after' | 'between', value: string | [s
 
 const insensitive = 'insensitive' as const;
 
-export function conditionWhere(condition: SearchCondition): Prisma.UserWhereInput {
+function conditionWhere(condition: SearchCondition): Prisma.UserWhereInput {
   switch (condition.field) {
     case 'name':
     case 'email':

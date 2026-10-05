@@ -2,7 +2,7 @@ import express from 'express';
 import { createMediaInput, listMediaQuery } from '@embrace/shared';
 import { requireRole, STAFF } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
-import { idParams } from './schemas';
+import { idParams } from '../../lib/schemas';
 import * as media from './service';
 
 const router = express.Router();

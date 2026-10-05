@@ -223,6 +223,13 @@ describe('request validation', () => {
     expect((await request(app).get('/api/media?type=IMAGE').set(bearer(token))).status).toBe(400);
   });
 
+  it('rejects a malformed media id with 400', async () => {
+    const res = await request(app).get('/api/media/not-a-cuid').set(bearer(token));
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('VALIDATION');
+    expect(res.body.details.id).toBeDefined();
+  });
+
   it('rejects malformed JSON with 400', async () => {
     const res = await request(app)
       .post('/api/auth/login')
