@@ -22,7 +22,8 @@ router.get(
   '/:id/timeline',
   validate({ params: idParams, query: timelineQuery }),
   async (req, res) => {
-    res.json({ success: true, activities: await details.listTimeline(req.params.id, req.query) });
+    const { items, total } = await details.listTimeline(req.params.id, req.user!, req.query);
+    res.json({ success: true, items, total, page: req.query.page, pageSize: req.query.pageSize });
   },
 );
 

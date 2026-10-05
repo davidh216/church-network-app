@@ -225,15 +225,6 @@ export interface MemberDetails {
     followUpDate?: string;
     createdAt: string;
   }>;
-  timelineActivities?: Array<{
-    id: string;
-    activityDate: string;
-    activityType: string;
-    title: string;
-    description?: string;
-    category: string;
-    impact: string;
-  }>;
 }
 
 /** Aggregates from /api/analytics/members (staff only). */

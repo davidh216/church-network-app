@@ -1,4 +1,9 @@
-import type { ListMediaParams, ListUsersParams, SearchQuery } from '@embrace/shared';
+import type {
+  ListMediaParams,
+  ListTimelineParams,
+  ListUsersParams,
+  SearchQuery,
+} from '@embrace/shared';
 
 /**
  * Query keys. Each list key includes its params, so a new filter or page is a new query
@@ -16,6 +21,8 @@ export const queryKeys = {
   memberDetails: {
     all: ['member-details'] as const,
     detail: (id: string) => ['member-details', id] as const,
+    timeline: (id: string, params: ListTimelineParams) =>
+      ['member-details', id, 'timeline', params] as const,
   },
   media: {
     all: ['media'] as const,

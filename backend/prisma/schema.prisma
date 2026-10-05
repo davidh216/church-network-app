@@ -76,7 +76,6 @@ model User {
   milestones     MemberMilestone[]
   memberNotes    MemberNote[]
   memberTags     UserTag[]
-  timelineActivities TimelineActivity[]
   
   // Phase 3: Family Relationships
   familyRelationships     FamilyRelationship[] @relation("UserAsPrimary")
@@ -145,12 +144,6 @@ model Family {
   state       String?
   zipCode     String?
   country     String?
-  
-  // Phase 3: Enhanced family analytics
-  familyEngagementScore Float @default(0)
-  lastCalculated       DateTime @default(now())
-  totalMembers         Int @default(0)
-  activeMembers        Int @default(0)
   
   // Timestamps
   createdAt   DateTime @default(now())
@@ -267,13 +260,6 @@ model MemberEngagement {
   riskLevel          String   @default("low")     // "low", "medium", "high"
   lastActivity       DateTime?
   
-  // Phase 3: Lifecycle automation fields
-  stageTransitionDate DateTime?
-  nextReviewDate     DateTime?
-  automationTriggers String?  // JSON array of active automation triggers
-  followUpRequired   Boolean  @default(false)
-  followUpDate       DateTime?
-  
   // Timestamps
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
@@ -283,47 +269,6 @@ model MemberEngagement {
   
   @@unique([userId])
   @@map("member_engagement")
-}
-
-// Phase 3: New model for lifecycle automation rules
-model LifecycleRule {
-  id              String @id @default(cuid())
-  name            String
-  description     String?
-  triggerCondition String // JSON string defining when rule triggers
-  actionType      String  // "stage_transition", "send_communication", "create_follow_up", "assign_tag"
-  actionData      String  // JSON string with action parameters
-  isActive        Boolean @default(true)
-  priority        Int     @default(0)
-  
-  // Timestamps
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
-  @@map("lifecycle_rules")
-}
-
-// Phase 3: New model for timeline activity aggregation
-model TimelineActivity {
-  id              String @id @default(cuid())
-  userId          String
-  activityDate    DateTime
-  activityType    String  // "interaction", "milestone", "note", "attendance", "engagement_update"
-  title           String
-  description     String?
-  category        String  // "spiritual", "service", "family", "personal", "ministry"
-  impact          String  @default("medium") // "low", "medium", "high"
-  
-  // Metadata for different activity types
-  metadata        String? // JSON string with activity-specific data
-  
-  // Timestamps
-  createdAt       DateTime @default(now())
-  
-  // Relations
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  @@map("timeline_activities")
 }
 
 model MemberActivity {

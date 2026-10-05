@@ -3,10 +3,10 @@ import { interactionCategory, milestoneCategory, noteType } from '@embrace/share
 import { idParams, pagination } from '../../lib/schemas';
 
 export { idParams };
+export { timelineQuery } from '@embrace/shared';
 
 export const detailsQuery = z.object({});
 
-export const timelineQuery = z.object({ ...pagination(50) });
 export const interactionsQuery = z.object({
   ...pagination(50),
   category: interactionCategory.optional(),

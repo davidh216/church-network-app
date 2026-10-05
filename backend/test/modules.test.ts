@@ -79,7 +79,12 @@ describe('modules', () => {
         .get(`/api/member-details/${memberId}/timeline`)
         .set(bearer(staff));
       expect(timeline.status).toBe(200);
-      expect(timeline.body.activities).toEqual([]);
+      expect(timeline.body).toMatchObject({ total: 3, page: 1, pageSize: 20 });
+      expect(timeline.body.items.map((i: { kind: string }) => i.kind).sort()).toEqual([
+        'interaction',
+        'milestone',
+        'note',
+      ]);
 
       const profile = await request(app).get(`/api/member-details/${memberId}`).set(bearer(staff));
       expect(profile.status).toBe(200);

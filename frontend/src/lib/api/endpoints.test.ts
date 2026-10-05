@@ -237,6 +237,24 @@ describe('roles, media, analytics, member details', () => {
     });
     expect(call().url).toBe('/api/member-details/u1');
   });
+
+  it('getMemberTimeline', async () => {
+    const item = {
+      kind: 'note',
+      id: 'n1',
+      date: '2026-01-01T00:00:00.000Z',
+      title: 'T',
+      summary: null,
+    };
+    respond({ success: true, items: [item], total: 1, page: 2, pageSize: 5 });
+    await expect(memberDetails.getMemberTimeline('u1', { page: 2, pageSize: 5 })).resolves.toEqual({
+      items: [item],
+      total: 1,
+      page: 2,
+      pageSize: 5,
+    });
+    expect(call().url).toBe('/api/member-details/u1/timeline?page=2&pageSize=5');
+  });
 });
 
 describe('saved searches endpoints', () => {

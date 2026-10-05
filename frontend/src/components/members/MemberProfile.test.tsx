@@ -5,7 +5,7 @@ import { ApiError } from '@/lib/api/client';
 import { render } from '@/test/render';
 import type { MemberDetails } from '@/types/domain';
 
-const detailsApi = vi.hoisted(() => ({ getMemberDetails: vi.fn() }));
+const detailsApi = vi.hoisted(() => ({ getMemberDetails: vi.fn(), getMemberTimeline: vi.fn() }));
 vi.mock('@/lib/api/memberDetails', () => detailsApi);
 
 const rolesApi = vi.hoisted(() => ({ listRoles: vi.fn() }));
@@ -47,13 +47,13 @@ const details = {
   ],
   interactions: [],
   milestones: [],
-  timelineActivities: [],
   memberNotes: [],
 } as unknown as MemberDetails;
 
 beforeEach(() => {
   vi.resetAllMocks();
   rolesApi.listRoles.mockResolvedValue([]);
+  detailsApi.getMemberTimeline.mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 20 });
 });
 
 describe('MemberProfile', () => {
@@ -102,7 +102,12 @@ describe('MemberProfile', () => {
     expect(screen.getByText('Head of Family')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('tab', { name: /Timeline/ }));
-    expect(screen.getByText('No timeline activities found')).toBeTruthy();
+    expect(await screen.findByText('No timeline activities found')).toBeTruthy();
+    expect(detailsApi.getMemberTimeline).toHaveBeenCalledWith(
+      'u1',
+      { page: 1, pageSize: 20 },
+      expect.anything(),
+    );
 
     fireEvent.click(screen.getByRole('tab', { name: /Interactions/ }));
     expect(screen.getByText('No interactions found')).toBeTruthy();
@@ -125,6 +130,71 @@ describe('MemberProfile', () => {
       'Email Communications: Opted in',
     );
     expect(screen.getByText('SMS/Text Messages')).toHaveTextContent('SMS/Text Messages: Opted out');
+  });
+
+  it('shows the computed timeline from its own endpoint and pages through it', async () => {
+    detailsApi.getMemberDetails.mockResolvedValue(details);
+    detailsApi.getMemberTimeline.mockImplementation((_id: string, params: { page: number }) =>
+      Promise.resolve({
+        items:
+          params.page === 1
+            ? [
+                {
+                  kind: 'milestone',
+                  id: 'm1',
+                  date: '2026-04-05T12:00:00.000Z',
+                  title: 'Baptised',
+                  summary: 'Easter service',
+                },
+                {
+                  kind: 'attendance',
+                  id: 'a1',
+                  date: '2026-01-04T12:00:00.000Z',
+                  title: 'Attended sunday service',
+                  summary: null,
+                },
+              ]
+            : [
+                {
+                  kind: 'note',
+                  id: 'n1',
+                  date: '2025-12-01T12:00:00.000Z',
+                  title: 'General',
+                  summary: 'Older note',
+                },
+              ],
+        total: 21,
+        page: params.page,
+        pageSize: 20,
+      }),
+    );
+    await render(<MemberProfile memberId="u1" />);
+    await screen.findByRole('heading', { level: 1 });
+    fireEvent.click(screen.getByRole('tab', { name: /Timeline/ }));
+
+    expect(await screen.findByRole('heading', { level: 3, name: 'Baptised' })).toBeTruthy();
+    expect(screen.getByText('Easter service')).toBeTruthy();
+    expect(screen.getByText('Milestone')).toBeTruthy();
+    expect(screen.getByText('Attendance')).toBeTruthy();
+    expect(screen.getByText('21 activities')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    expect(await screen.findByText('Older note')).toBeTruthy();
+    expect(detailsApi.getMemberTimeline).toHaveBeenLastCalledWith(
+      'u1',
+      { page: 2, pageSize: 20 },
+      expect.anything(),
+    );
+  });
+
+  it('shows a timeline error with a retry', async () => {
+    detailsApi.getMemberDetails.mockResolvedValue(details);
+    detailsApi.getMemberTimeline.mockRejectedValue(new ApiError(500, 'Timeline exploded'));
+    await render(<MemberProfile memberId="u1" />);
+    await screen.findByRole('heading', { level: 1 });
+    fireEvent.click(screen.getByRole('tab', { name: /Timeline/ }));
+    expect((await screen.findByRole('alert')).textContent).toContain('Timeline exploded');
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
   });
 
   it('follows the ARIA tabs pattern: one tab stop, arrow keys, Home and End', async () => {
