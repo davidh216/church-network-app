@@ -14,7 +14,7 @@ import { app, bearer, createUser, login, resetDatabase } from './helpers';
 //   newcomer       (registered through POST /api/auth/register, awaiting approval)    now
 //   staffMade      member  no      never      M - 10 days  (inactive, never signed in: pending)
 //   deactivated    member  no      yes        M - 5 days   (was approved, then deactivated)
-// Staff: total 6, active 3, pendingApproval 2, newThisMonth 2. Members: total 3, active 3.
+// Staff: total 6, active 3, pendingApproval 2, newThisMonth 2. Members: total 3 (only).
 
 const email = (name: string) => `${name}@summary.test.local`;
 const DAY = 24 * 60 * 60 * 1000;
@@ -89,10 +89,11 @@ describe('GET /api/users/summary', () => {
     });
   });
 
-  it('gives members only total and active, counted over the active directory', async () => {
+  it('gives members only total, counted over the active directory', async () => {
     const res = await get(memberToken);
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ success: true, total: 3, active: 3 });
+    expect(res.body).toEqual({ success: true, total: 3 });
+    expect(res.body).not.toHaveProperty('active');
     expect(res.body).not.toHaveProperty('pendingApproval');
     expect(res.body).not.toHaveProperty('newThisMonth');
   });
@@ -108,7 +109,7 @@ describe('GET /api/users/summary', () => {
       .get('/api/users/summary?pendingApproval=1&role=admin')
       .set(bearer(memberToken));
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ success: true, total: 3, active: 3 });
+    expect(res.body).toEqual({ success: true, total: 3 });
   });
 
   it('is not captured by GET /api/users/:id', async () => {
@@ -128,7 +129,7 @@ describe('GET /api/users/summary', () => {
       .send({ isActive: true });
     expect(approved.status).toBe(200);
     expect((await get(adminToken)).body).toMatchObject({ active: 4, pendingApproval: 1 });
-    expect((await get(memberToken)).body).toEqual({ success: true, total: 4, active: 4 });
+    expect((await get(memberToken)).body).toEqual({ success: true, total: 4 });
     await prisma.user.update({ where: { id: newcomer.id }, data: { isActive: false } });
   });
 });
@@ -144,6 +145,10 @@ describe('summary month boundary', () => {
     expect(startOfUtcMonth(new Date('2026-03-31T23:59:59.999Z')).toISOString()).toBe(
       '2026-03-01T00:00:00.000Z',
     );
+  });
+
+  it('the service returns only total for members', async () => {
+    expect(await summary(false)).toEqual({ total: 3 });
   });
 
   it('counts newThisMonth from the start of the UTC month containing `now`', async () => {

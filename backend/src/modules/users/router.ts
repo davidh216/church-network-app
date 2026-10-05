@@ -37,8 +37,8 @@ router.post('/search', requireRole(...STAFF), validate({ body: searchQuery }), a
   res.json({ success: true, ...(await users.searchUsers(req.body)) });
 });
 
-// Dashboard counts. Any signed-in user; members get { total, active } over the active directory,
-// staff also get pendingApproval and newThisMonth. Registered before /:id.
+// Dashboard counts. Any signed-in user; members get { total } (the size of the active directory),
+// staff get total, active, pendingApproval and newThisMonth. Registered before /:id.
 router.get('/summary', validate({ query: summaryQuery }), async (req, res) => {
   const counts = await users.summary(isStaff(req.user!));
   res.json({ success: true, ...counts });

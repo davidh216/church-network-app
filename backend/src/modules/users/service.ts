@@ -56,12 +56,17 @@ export function searchUsers(query: z.output<typeof searchQuery>) {
   );
 }
 
-// Dashboard counts. Members get the counts of the directory they can see (active accounts only),
-// so `total` and `active` are equal for them and nothing about inactive accounts is revealed.
-// Staff also get accounts awaiting approval (inactive and never signed in: a registration, or a
+// Dashboard counts. Members get only `total`, the size of the directory they can see (active
+// accounts), so nothing about inactive accounts is revealed. Staff get the total of all accounts,
+// the active ones, accounts awaiting approval (inactive and never signed in: a registration, or a
 // staff-created inactive account) and accounts created since the start of the current UTC month.
-export type MemberSummary = { total: number; active: number };
-export type StaffSummary = MemberSummary & { pendingApproval: number; newThisMonth: number };
+type MemberSummary = { total: number };
+type StaffSummary = {
+  total: number;
+  active: number;
+  pendingApproval: number;
+  newThisMonth: number;
+};
 
 export function startOfUtcMonth(now: Date): Date {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
@@ -74,10 +79,7 @@ export async function summary(
   staff: boolean,
   now: Date = new Date(),
 ): Promise<MemberSummary | StaffSummary> {
-  if (!staff) {
-    const active = await prisma.user.count({ where: { isActive: true } });
-    return { total: active, active };
-  }
+  if (!staff) return { total: await prisma.user.count({ where: { isActive: true } }) };
   const [total, active, pendingApproval, newThisMonth] = await prisma.$transaction([
     prisma.user.count(),
     prisma.user.count({ where: { isActive: true } }),
