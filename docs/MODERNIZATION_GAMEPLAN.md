@@ -1,6 +1,6 @@
 # Church Network App: Modernization Gameplan
 
-Date: 2026-10-03. Status: APPROVED 2026-10-04 (initial scope = Phase 0 + Phase 1). Phase 0 implemented on branch `modernize/phase-0`; Phase 1 implemented on branch `modernize/phase-1` (stacked on Phase 0); Phase 2 on `modernize/phase-2` (stacked on Phase 1). PRs #1 and #2 are open; Phase 2 is PR #3.
+Date: 2026-10-03. Status: APPROVED 2026-10-04 (initial scope = Phase 0 + Phase 1). Phase 0 implemented on branch `modernize/phase-0`; Phases 0, 1 and 2 are merged into `main` (PRs #1, #2, #3, merged 2026-10-05). Phase 3 is specified in `PHASE3_SPECS.md` (draft, awaiting owner approval) on branch `modernize/phase-3`.
 
 Owner decisions (2026-10-04): D1 Postgres, moved up to the start of Phase 1 (switching the Prisma provider regenerates the migration history, so it follows the Phase 0 security fixes rather than preceding them). D2 registration requires admin approval. D3 httpOnly cookie sessions. D6 delete the lifecycle-automation tables. Remaining decisions take the recommendation unless the owner says otherwise.
 
@@ -232,17 +232,19 @@ Verified 2026-10-05 on `modernize/phase-2`: from the root, npm run typecheck, np
 
 Adversarial reviews: Stream S (3 reviewers, 25 confirmed, none blocking, all fixed); full Phase 2 (4 reviewers, 43 verifiers: 39 confirmed findings, 4 refuted, none blocking, all 39 fixed in commits c60f053 through 406596d; the largest were the shared package doubling the login bundle (fixed with an ESM build), the dropped engagement quick filter (restored through the search endpoint), colour-only status indicators, focus loss when search panels close, and the player Space key only pausing).
 
-### Phase 3: data model and analytics correctness (about 5 to 7 days)
+### Phase 3: data model and analytics correctness (about 3 weeks)
 
-Goal: a schema that means what the UI says and analytics computed from real data.
+Goal: a schema that means what the UI says and analytics computed from real data. Detailed item specifications, contracts and decisions are in `PHASE3_SPECS.md` (status: DRAFT, awaiting owner approval). One sequential stream (D1 to D8) on `modernize/phase-3`, cut from `main`.
 
-- [ ] 3.1 (M) Prisma enums for membershipStage, riskLevel, gender, maritalStatus, membershipType, Media.type, relationship, interaction/note/milestone types; shared enum exports. F026, F052, F058, F106.
-- [ ] 3.2 (M) Real relations for authorId, staffMemberId, createdBy, addedBy, leaderId, headOfFamily; indexes on hot foreign keys and query columns; fix Media cascade; decide name fields (keep first/last, derive name). F053, F054, F055, F056, F051, F107, F109.
-- [ ] 3.3 (M) `Service` model with date and type; Attendance references it; attendance denominator from services; filter by serviceDate. F025, F063.
-- [ ] 3.4 (M) Trends from engagement snapshots, risk from all signals, recompute as a background job with concurrency and admin-only trigger; guard JSON parsing; CSV escaping and formula-injection protection. F059, F064, F065, F100, F061, F104, F072.
-- [ ] 3.5 (S) Dead schema per decision D6: remove `LifecycleRule`, `TimelineActivity` and engagement automation fields, or keep behind a documented roadmap; keep Group, GroupMember, Family, tags for Phase 5. F057, F066, F108, F105.
+- [ ] 3.1 (M) Deletions decided in D6: lifecycle rules, timeline copies, family denormalised counters, engagement automation fields; the member timeline becomes a computed feed. F057, F066, F105, F108. Spec D1.
+- [ ] 3.2 (L) Prisma enums for every stringly-typed column, mirrored in `@embrace/shared` with a parity test; migrations normalise legacy values; frontend selects and labels derived from shared. F026, F052, F058, F106. Spec D2.
+- [ ] 3.3 (M) Real relations for authorId, staffMemberId, createdBy, addedBy, leaderId, headOfFamily; engagement keyed by userId; family pairs stored once; indexes on every foreign key and hot column; Media uploader optional with SetNull. F053, F054, F055, F056, F107, F109, F051 (first/last names editable). Spec D3.
+- [ ] 3.4 (M) Native Postgres types: `String[]` for skills, interests, tags, permissions; `Json` for metadata and saved-search queries; frontend parsing removed. F061, F104, F049. Spec D4.
+- [ ] 3.5 (L) `Service` model with date and type, attendance referencing it, services and attendance API, staff attendance sheet and profile attendance tab (decision P3-D2), attendance denominators from services. F025, F063. Spec D5, D7.
+- [ ] 3.6 (L) Honest engagement: attendance, community and communication components only (giving and volunteer removed, decision D7); deterministic stage and risk rules; monthly snapshots driving trends; refresh as a background job with a CLI entry for cron; lastActivity from all signals. F059, F064, F065, F100. Spec D6.
+- [ ] 3.7 (M) Migration tests against a Phase 2 database with legacy fixtures; Playwright covering service creation, attendance and the analytics refresh; route matrix complete. Spec D8.
 
-Exit criteria: migration applies on SQLite and (in CI) Postgres; analytics tests assert scores from seeded attendance and activities.
+Exit criteria: migrations apply on a database holding Phase 2 data and on Postgres in CI with no drift; every stage and risk rule has a test that triggers it; analytics tests assert scores from seeded services and attendance; no JSON-string column or stringly-typed enum remains; all root checks and Playwright with axe green; Phase 3 PR into `main`.
 
 ### Phase 4: platform upgrades (about 4 to 6 days, only after Phase 1 tests exist)
 
