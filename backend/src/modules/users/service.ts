@@ -191,6 +191,8 @@ export async function createUser(
       bio: body.bio ?? null,
       isActive: body.isActive ?? true,
       roles: { create: roleIds.map((roleId) => ({ roleId })) },
+      // Every account has an engagement row (defaults: score 0, visitor, low risk).
+      engagement: { create: {} },
     },
     select: staffSelect,
   });

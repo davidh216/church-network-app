@@ -32,6 +32,8 @@ export async function register(body: z.output<typeof registerInput>): Promise<vo
         phone: body.phone ?? null,
         isActive: false,
         roles: memberRole ? { create: [{ roleId: memberRole.id }] } : undefined,
+        // Every account has an engagement row (defaults: score 0, visitor, low risk).
+        engagement: { create: {} },
       },
     });
   } catch (err) {

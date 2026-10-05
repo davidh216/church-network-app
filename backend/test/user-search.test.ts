@@ -3,7 +3,7 @@ import request from 'supertest';
 import { BETWEEN_ORDER_MESSAGE, SEARCH_FIELD_OPERATORS, type SearchField } from '@embrace/shared';
 import { prisma } from '../src/lib/prisma';
 import { endOfDay } from '../src/modules/users/search';
-import { app, bearer, createUser, login, resetDatabase } from './helpers';
+import { app, backfillEngagementRows, bearer, createUser, login, resetDatabase } from './helpers';
 
 // GET /api/users filters, sorting and paging, and POST /api/users/search (PHASE2_SPECS 1.2, S2).
 //
@@ -12,7 +12,8 @@ import { app, bearer, createUser, login, resetDatabase } from './helpers';
 //   Alice Anders  555-0101     Sings in the choir  member  80    core_member  low    2026-01-10            2026-09-15T10:00Z
 //   Bob Brown     null         null                leader  45    new_member   medium 2026-02-20T15:00Z     null
 //   Carol Cruz    +1 555 0303  ''                  member  20    at_risk      high   2026-03-05T18:00Z     2026-08-01
-//   Dan Diaz      555-0404     CHOIR director      admin   (no engagement row)        2026-03-31T23:30Z     2026-10-01T12:00Z
+//   Dan Diaz      555-0404     CHOIR director      admin   0     visitor      low    2026-03-31T23:30Z     2026-10-01T12:00Z
+// Dan was created without an engagement row; the backfill migration gives him the default row.
 
 type Name = 'Alice Anders' | 'Bob Brown' | 'Carol Cruz' | 'Dan Diaz';
 const ALL: Name[] = ['Alice Anders', 'Bob Brown', 'Carol Cruz', 'Dan Diaz'];
@@ -64,6 +65,7 @@ beforeAll(async () => {
       { userId: carol.id, engagementScore: 20, membershipStage: 'at_risk', riskLevel: 'high' },
     ],
   });
+  expect(await backfillEngagementRows()).toBe(1);
 });
 
 const names = (body: { users: { name: string }[] }) => body.users.map((u) => u.name);
@@ -110,8 +112,8 @@ const CASES: Record<SearchField, Record<string, { value?: unknown; matches: Name
   'engagement.engagementScore': {
     gt: { value: 45, matches: ['Alice Anders'] },
     gte: { value: 45, matches: ['Alice Anders', 'Bob Brown'] },
-    lt: { value: 45, matches: ['Carol Cruz'] },
-    lte: { value: 45, matches: ['Bob Brown', 'Carol Cruz'] },
+    lt: { value: 45, matches: ['Carol Cruz', 'Dan Diaz'] },
+    lte: { value: 45, matches: ['Bob Brown', 'Carol Cruz', 'Dan Diaz'] },
     between: { value: [20, 45], matches: ['Bob Brown', 'Carol Cruz'] },
   },
   'engagement.membershipStage': {
@@ -120,7 +122,7 @@ const CASES: Record<SearchField, Record<string, { value?: unknown; matches: Name
   },
   'engagement.riskLevel': {
     equals: { value: 'high', matches: ['Carol Cruz'] },
-    in: { value: ['low', 'medium'], matches: ['Alice Anders', 'Bob Brown'] },
+    in: { value: ['low', 'medium'], matches: ['Alice Anders', 'Bob Brown', 'Dan Diaz'] },
   },
   // Calendar dates are whole UTC days: before and after exclude the day, between includes both.
   createdAt: {
@@ -249,14 +251,14 @@ describe('POST /api/users/search', () => {
   it('sorts in both directions and pages the result', async () => {
     const scored = [{ field: 'engagement.engagementScore', operator: 'gte', value: 0 }];
     const asc = await search({ conditions: scored, logic: 'AND', sort: 'engagementScore' });
-    expect(names(asc.body)).toEqual(['Carol Cruz', 'Bob Brown', 'Alice Anders']);
+    expect(names(asc.body)).toEqual(['Dan Diaz', 'Carol Cruz', 'Bob Brown', 'Alice Anders']);
     const desc = await search({
       conditions: scored,
       logic: 'AND',
       sort: 'engagementScore',
       order: 'desc',
     });
-    expect(names(desc.body)).toEqual(['Alice Anders', 'Bob Brown', 'Carol Cruz']);
+    expect(names(desc.body)).toEqual(['Alice Anders', 'Bob Brown', 'Carol Cruz', 'Dan Diaz']);
     const page2 = await search({
       conditions: scored,
       logic: 'AND',
@@ -265,8 +267,8 @@ describe('POST /api/users/search', () => {
       page: 2,
       pageSize: 2,
     });
-    expect(page2.body).toMatchObject({ total: 3, page: 2, pageSize: 2 });
-    expect(names(page2.body)).toEqual(['Carol Cruz']);
+    expect(page2.body).toMatchObject({ total: 4, page: 2, pageSize: 2 });
+    expect(names(page2.body)).toEqual(['Carol Cruz', 'Dan Diaz']);
   });
 
   it.each([
@@ -422,26 +424,38 @@ describe('GET /api/users', () => {
       'Carol Cruz',
       'Bob Brown',
     ]);
-    // Dan has no engagement row; the others sort by their engagement values.
-    const scored = async (query: string) =>
-      names((await list(query)).body).filter((n) => n !== 'Dan Diaz');
-    expect(await scored('sort=engagementScore')).toEqual([
+  });
+
+  it('sorts by the engagement values, the previously unscored user by its default row', async () => {
+    // Dan had no engagement row; he now has one with the defaults and sorts by its score of 0.
+    const dan = (await list('q=dan')).body.users[0];
+    expect(dan.engagement).toMatchObject({
+      engagementScore: 0,
+      membershipStage: 'visitor',
+      riskLevel: 'low',
+    });
+    expect(await prisma.memberEngagement.count({ where: { userId: dan.id } })).toBe(1);
+    expect(names((await list('sort=engagementScore')).body)).toEqual([
+      'Dan Diaz',
       'Carol Cruz',
       'Bob Brown',
       'Alice Anders',
     ]);
-    expect(await scored('sort=engagementScore&order=desc')).toEqual([
+    expect(names((await list('sort=engagementScore&order=desc')).body)).toEqual([
       'Alice Anders',
       'Bob Brown',
       'Carol Cruz',
+      'Dan Diaz',
     ]);
-    // at_risk < core_member < new_member
-    expect(await scored('sort=membershipStage')).toEqual([
+    // at_risk < core_member < new_member < visitor
+    expect(names((await list('sort=membershipStage')).body)).toEqual([
       'Carol Cruz',
       'Alice Anders',
       'Bob Brown',
+      'Dan Diaz',
     ]);
-    expect(await scored('sort=membershipStage&order=desc')).toEqual([
+    expect(names((await list('sort=membershipStage&order=desc')).body)).toEqual([
+      'Dan Diaz',
       'Bob Brown',
       'Alice Anders',
       'Carol Cruz',

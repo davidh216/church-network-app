@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import bcrypt from 'bcryptjs';
 import request from 'supertest';
 import { prisma } from '../src/lib/prisma';
@@ -39,6 +41,20 @@ export async function createUser(opts: {
       roles: { create: [{ roleId: role.id }] },
     },
   });
+}
+
+// createUser inserts rows directly, like accounts created before every account got an
+// engagement row. This runs the data migration that backfilled those rows, returning the
+// number of rows it inserted.
+export const ENGAGEMENT_BACKFILL_SQL = readFileSync(
+  resolve(
+    __dirname,
+    '../prisma/migrations/20261005000000_engagement_rows_for_all_users/migration.sql',
+  ),
+  'utf8',
+);
+export function backfillEngagementRows(): Promise<number> {
+  return prisma.$executeRawUnsafe(ENGAGEMENT_BACKFILL_SQL);
 }
 
 // The JWT from the session cookie of a successful login (the body carries no token). Tests send
