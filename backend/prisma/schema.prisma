@@ -347,7 +347,7 @@ model MemberActivity {
   userId      String
   activityType ActivityType
   description String?
-  metadata    Json?    // Additional data (an object)
+  metadata    Json?    // Additional data: an object (legacy text that did not parse is kept as a JSON string)
   points      Int      @default(0) // Points awarded for this activity
   
   // Timestamps
@@ -378,7 +378,7 @@ model MemberInteraction {
   responseReceived Boolean @default(false)
   
   // Metadata
-  metadata       Json?    // Additional data (an object)
+  metadata       Json?    // Additional data: an object (legacy text that did not parse is kept as a JSON string)
   responseTime   Int?     // Minutes to respond (for two-way communications)
   
   // Timestamps

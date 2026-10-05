@@ -18,6 +18,26 @@ export function formatLocalDate(
   return parseDate(value)?.toLocaleDateString(undefined, options) ?? null;
 }
 
+/**
+ * True when the value is a calendar date sent as UTC midnight ('2026-10-04' or
+ * '2026-10-04T00:00:00.000Z'), the way the API sends `date` columns and all-day dates.
+ */
+export function isUtcMidnight(value?: string | null): boolean {
+  const date = parseDate(value);
+  return date !== null && date.getTime() % 86_400_000 === 0;
+}
+
+/**
+ * A calendar date in the browser's locale, read as its UTC day so a viewer west of UTC does not
+ * see the day before; null without a real date.
+ */
+export function formatCalendarDate(
+  value?: string | null,
+  options?: Intl.DateTimeFormatOptions,
+): string | null {
+  return formatLocalDate(value, { ...options, timeZone: 'UTC' });
+}
+
 /** The date and time in the browser's locale; null without a real date. */
 export function formatLocalDateTime(
   value?: string | null,

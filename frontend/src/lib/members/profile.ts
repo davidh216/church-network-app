@@ -1,6 +1,12 @@
 /** Formatting helpers for the member profile at `/members/[id]`. */
 import type { Impact, InteractionType, MilestoneType, Priority } from '@embrace/shared';
-import { formatLocalDate, formatLocalDateTime, parseDate } from '@/lib/format/date';
+import {
+  formatCalendarDate,
+  formatLocalDate,
+  formatLocalDateTime,
+  isUtcMidnight,
+  parseDate,
+} from '@/lib/format/date';
 
 /** A long date in the viewer's locale ("January 5, 2024" in en-US), or null without a real date. */
 export function profileDate(dateString?: string | null): string | null {
@@ -10,6 +16,21 @@ export function profileDate(dateString?: string | null): string | null {
 /** A long date in the viewer's locale, or "Not set" for a field the profile always lists. */
 export function formatDate(dateString?: string | null): string {
   return profileDate(dateString) ?? 'Not set';
+}
+
+/**
+ * A long calendar date (a service date, an all-day timeline item) as its UTC day, so it shows the
+ * same day in every time zone, or "Not set".
+ */
+export function formatDay(dateString?: string | null): string {
+  return (
+    formatCalendarDate(dateString, { year: 'numeric', month: 'long', day: 'numeric' }) ?? 'Not set'
+  );
+}
+
+/** A milestone's achievedDate: its UTC day when it is a calendar date (UTC midnight). */
+export function formatMilestoneDate(dateString?: string | null): string {
+  return isUtcMidnight(dateString) ? formatDay(dateString) : formatDate(dateString);
 }
 
 /** Date and time in the viewer's locale ("Jan 5, 2024, 09:30 AM" in en-US), or "Not set". */

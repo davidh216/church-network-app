@@ -1,5 +1,5 @@
 import type { MemberDetails } from '@/types/domain';
-import { formatDate, membershipDuration } from '@/lib/members/profile';
+import { formatDate, formatDay, membershipDuration } from '@/lib/members/profile';
 import { Field } from './Field';
 
 /** The "Church Info" tab: membership, background and engagement analytics. */
@@ -27,7 +27,7 @@ export default function ChurchInfo({ member }: { member: MemberDetails }) {
         <Field label="How Did You Hear About Us?">
           {member.howHeardAboutUs || 'Not specified'}
         </Field>
-        <Field label="Last Attended">{formatDate(member.lastAttended)}</Field>
+        <Field label="Last Attended">{formatDay(member.lastAttended)}</Field>
         {member.engagement && (
           <div className="mt-6">
             <h2 className="text-lg font-medium text-gray-900">Engagement Analytics</h2>

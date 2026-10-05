@@ -1,5 +1,5 @@
 import type { MemberDetails } from '@/types/domain';
-import { formatDate, impactClass, milestoneIcon } from '@/lib/members/profile';
+import { formatMilestoneDate, impactClass, milestoneIcon } from '@/lib/members/profile';
 import { EmptyTab, SectionHeader, pillClass } from './Field';
 
 /** The "Milestones" tab: baptism, confirmation, first volunteering and the like. */
@@ -18,7 +18,7 @@ export default function Milestones({ member }: { member: MemberDetails }) {
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-medium text-gray-900">{milestone.title}</h3>
                     <span className="text-xs text-gray-500">
-                      {formatDate(milestone.achievedDate)}
+                      {formatMilestoneDate(milestone.achievedDate)}
                     </span>
                   </div>
                   {milestone.description && (

@@ -9,20 +9,32 @@ export const isRequired = (label: string) => `${label} is required`;
 export const EMAIL_MESSAGE = 'Enter a valid email address';
 export const ID_MESSAGE = 'Must be a valid id';
 export const DATE_MESSAGE = 'Enter a valid date';
+export const invalidCharacter = (label: string) => `${label} contains an invalid character`;
+
+// PostgreSQL cannot store U+0000 in text, text[] or jsonb, so every free-text input rejects it
+// with a 400 instead of failing at the database with a 500.
+const NUL = '\u0000';
+const hasNoNul = (value: string) => !value.includes(NUL);
 
 // Every primary key in the schema is a Prisma cuid().
 export const cuid = z.string({ error: ID_MESSAGE }).cuid({ error: ID_MESSAGE });
 
 // A required free-text field: trimmed, at least one character, at most `max`.
 export const requiredText = (label: string, max: number, required = isRequired(label)) =>
-  z.string({ error: required }).trim().min(1, required).max(max, tooLong(label, max));
+  z
+    .string({ error: required })
+    .trim()
+    .min(1, required)
+    .max(max, tooLong(label, max))
+    .refine(hasNoNul, invalidCharacter(label));
 
 // An optional free-text field kept as a string: trimmed, at most `max`.
 export const boundedText = (label: string, max: number) =>
   z
     .string({ error: `${label} must be text` })
     .trim()
-    .max(max, tooLong(label, max));
+    .max(max, tooLong(label, max))
+    .refine(hasNoNul, invalidCharacter(label));
 
 // An email address as the account forms take it.
 export const emailAddress = z.email({ error: EMAIL_MESSAGE }).max(254, tooLong('Email', 254));
@@ -55,8 +67,43 @@ export const labelList = (label: string, maxItems: number, maxLength = 50) =>
       ),
     );
 
-// Arbitrary JSON metadata attached to activities and interactions (stored as a JSON object).
-export const metadata = z.record(z.string(), z.unknown()).optional();
+// Arbitrary JSON metadata attached to activities and interactions (stored as a JSONB object).
+// Nesting is limited to MAX_METADATA_DEPTH levels (the object itself is level 1) and no key or
+// string value may contain U+0000. The walk uses an explicit stack, never recursion, so a deeply
+// nested body cannot overflow the call stack, and it stops at the first problem.
+export const MAX_METADATA_DEPTH = 32;
+export const METADATA_TOO_DEEP = `Metadata must be nested at most ${MAX_METADATA_DEPTH} levels deep`;
+export const METADATA_INVALID_CHARACTER = invalidCharacter('Metadata');
+
+export function metadataProblem(value: unknown): string | null {
+  const stack: Array<{ value: unknown; depth: number }> = [{ value, depth: 0 }];
+  while (stack.length > 0) {
+    const { value: current, depth } = stack.pop()!;
+    if (typeof current === 'string') {
+      if (!hasNoNul(current)) return METADATA_INVALID_CHARACTER;
+      continue;
+    }
+    if (current === null || typeof current !== 'object') continue;
+    if (depth + 1 > MAX_METADATA_DEPTH) return METADATA_TOO_DEEP;
+    if (Array.isArray(current)) {
+      for (const item of current) stack.push({ value: item, depth: depth + 1 });
+      continue;
+    }
+    for (const [key, item] of Object.entries(current)) {
+      if (!hasNoNul(key)) return METADATA_INVALID_CHARACTER;
+      stack.push({ value: item, depth: depth + 1 });
+    }
+  }
+  return null;
+}
+
+export const metadata = z
+  .record(z.string(), z.unknown())
+  .superRefine((value, ctx) => {
+    const problem = metadataProblem(value);
+    if (problem) ctx.addIssue({ code: 'custom', message: problem });
+  })
+  .optional();
 
 // The longest free-text search term (member `q`, media `search`, search condition values).
 export const MAX_QUERY_TEXT = 200;

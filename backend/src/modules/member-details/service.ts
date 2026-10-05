@@ -12,6 +12,7 @@ import { HttpError } from '../../lib/http-error';
 import { isAdmin } from '../../middleware/auth';
 import type { AuthenticatedUser } from '../../types/auth';
 import type { interactionsQuery, milestonesQuery, notesQuery } from './schemas';
+import { today } from '../services/service';
 
 // Private notes are visible only to their author and to admins.
 function visibleNotes(viewer: AuthenticatedUser): Prisma.MemberNoteWhereInput {
@@ -96,6 +97,16 @@ export async function getMemberDetails(id: string, viewer: AuthenticatedUser) {
   });
   if (!user) throw new HttpError(404, 'User not found');
 
+  // lastAttended is the date of the latest service the member was marked present at, never one
+  // dated after today (UTC). The legacy users.lastAttended column is not written by anything, so
+  // the response field keeps its name and type but no longer reads the column.
+  const latestAttended = await prisma.attendance.findFirst({
+    where: { userId: id, present: true, service: { date: { lte: today() } } },
+    orderBy: [{ service: { date: 'desc' } }, { id: 'asc' }],
+    select: { service: { select: { date: true } } },
+  });
+  const lastAttended = latestAttended?.service.date ?? null;
+
   // Relationships in both directions, flattened and de-duplicated by person. Each entry's
   // relationshipType is the relative's relation to this member: a stored type is the primary's
   // relation to the related user, so it is inverted where this member is the primary.
@@ -118,7 +129,7 @@ export async function getMemberDetails(id: string, viewer: AuthenticatedUser) {
   // Head of family is derived from the family row (users.isHeadOfFamily was dropped in P3-D3).
   const isHeadOfFamily = user.family?.headOfFamilyId === user.id;
 
-  return { ...user, isHeadOfFamily, familyMembers: uniqueFamilyMembers };
+  return { ...user, lastAttended, isHeadOfFamily, familyMembers: uniqueFamilyMembers };
 }
 
 // "call_made" -> "Call made"
@@ -135,6 +146,11 @@ function summarise(text: string | null | undefined): string | null {
 
 interface FeedItem extends Omit<TimelineItem, 'date'> {
   date: Date;
+}
+
+// A calendar date stored as a timestamp sits at UTC midnight.
+function isUtcMidnight(date: Date): boolean {
+  return date.getTime() % 86_400_000 === 0;
 }
 
 // Newest first; ties broken by kind then id so pages are stable.
@@ -155,6 +171,9 @@ export async function listTimeline(
   viewer: AuthenticatedUser,
   query: z.output<typeof timelineQuery>,
 ): Promise<{ items: TimelineItem[]; total: number }> {
+  const exists = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+  if (!exists) throw new HttpError(404, 'User not found');
+
   const take = query.page * query.pageSize;
   const noteWhere: Prisma.MemberNoteWhereInput = { AND: [{ userId }, visibleNotes(viewer)] };
   const attendanceWhere: Prisma.AttendanceWhereInput = { userId, present: true };
@@ -207,6 +226,7 @@ export async function listTimeline(
       kind: 'interaction' as const,
       id: i.id,
       date: i.createdAt,
+      dateOnly: false,
       title: i.subject || humanise(i.interactionType),
       summary: summarise(i.content),
     })),
@@ -214,6 +234,7 @@ export async function listTimeline(
       kind: 'milestone' as const,
       id: m.id,
       date: m.achievedDate,
+      dateOnly: isUtcMidnight(m.achievedDate),
       title: m.title,
       summary: summarise(m.description),
     })),
@@ -221,6 +242,7 @@ export async function listTimeline(
       kind: 'note' as const,
       id: n.id,
       date: n.createdAt,
+      dateOnly: false,
       title: n.title || humanise(n.noteType),
       summary: summarise(n.content),
     })),
@@ -228,6 +250,7 @@ export async function listTimeline(
       kind: 'attendance' as const,
       id: a.id,
       date: a.service.date,
+      dateOnly: true,
       title: `Attended ${a.service.title || humanise(a.service.type).toLowerCase()}`,
       summary: summarise(a.notes),
     })),

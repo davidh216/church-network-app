@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { DEFAULT_TIMELINE_PAGE_SIZE, type TimelineKind } from '@embrace/shared';
 import type { MemberDetails } from '@/types/domain';
-import { formatDate } from '@/lib/members/profile';
+import { formatDate, formatDay } from '@/lib/members/profile';
 import { useMemberTimeline } from '@/lib/queries/memberDetails';
 import InlineError from '@/components/ui/InlineError';
 import Pagination from '@/components/ui/Pagination';
@@ -65,7 +65,9 @@ export default function Timeline({ member }: { member: MemberDetails }) {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-medium text-gray-900">{item.title}</h3>
-                  <span className="text-xs text-gray-500">{formatDate(item.date)}</span>
+                  <span className="text-xs text-gray-500">
+                    {item.dateOnly ? formatDay(item.date) : formatDate(item.date)}
+                  </span>
                 </div>
                 {item.summary && <p className="text-sm text-gray-600 mt-1">{item.summary}</p>}
                 <div className="flex items-center space-x-2 mt-2">

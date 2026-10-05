@@ -1,5 +1,5 @@
 import { fireEvent, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import MemberProfile from '@/components/members/MemberProfile';
 import { ApiError } from '@/lib/api/client';
 import { render } from '@/test/render';
@@ -260,5 +260,73 @@ describe('MemberProfile', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Member not found');
     expect(screen.queryByRole('button', { name: /Retry/ })).toBeNull();
     expect(screen.getByRole('link', { name: '← Back to members' })).toBeTruthy();
+  });
+});
+
+// Calendar dates arrive as UTC midnight; a viewer west of UTC must still see the same day.
+describe('MemberProfile calendar dates west of UTC', () => {
+  const originalTz = process.env.TZ;
+  beforeAll(() => {
+    process.env.TZ = 'America/Chicago';
+  });
+  afterAll(() => {
+    if (originalTz === undefined) delete process.env.TZ;
+    else process.env.TZ = originalTz;
+  });
+
+  it('runs in a time zone where UTC midnight is the previous local day', () => {
+    expect(new Date('2026-01-04T00:00:00.000Z').getDate()).toBe(3);
+  });
+
+  it('shows date-only timeline items, milestones and last attended on their own day', async () => {
+    detailsApi.getMemberDetails.mockResolvedValue({
+      ...details,
+      lastAttended: '2026-01-04T00:00:00.000Z',
+      milestones: [
+        {
+          id: 'm1',
+          milestoneType: 'baptism',
+          title: 'Baptised',
+          achievedDate: '2026-04-05T00:00:00.000Z',
+          impact: 'high',
+        },
+      ],
+    });
+    detailsApi.getMemberTimeline.mockResolvedValue({
+      items: [
+        {
+          kind: 'attendance',
+          id: 'a1',
+          date: '2026-01-04T00:00:00.000Z',
+          dateOnly: true,
+          title: 'Attended sunday service',
+          summary: null,
+        },
+        {
+          kind: 'interaction',
+          id: 'i1',
+          date: '2026-01-02T03:00:00.000Z',
+          dateOnly: false,
+          title: 'Late call',
+          summary: null,
+        },
+      ],
+      total: 2,
+      page: 1,
+      pageSize: 20,
+    });
+    await render(<MemberProfile memberId="u1" />);
+    await screen.findByRole('heading', { level: 1 });
+
+    fireEvent.click(screen.getByRole('tab', { name: /Timeline/ }));
+    expect(await screen.findByText('January 4, 2026')).toBeTruthy();
+    // A real timestamp still shows the viewer's local day (9 pm on January 1 in Chicago).
+    expect(screen.getByText('January 1, 2026')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('tab', { name: /Milestones/ }));
+    expect(screen.getByText('April 5, 2026')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('tab', { name: /Church Info/ }));
+    expect(screen.getByText('January 4, 2026')).toBeTruthy();
   });
 });

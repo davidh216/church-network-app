@@ -174,7 +174,8 @@ export interface MemberDetails {
 
   // Notes and tracking
   notes?: string;
-  lastAttended?: string;
+  /** Date of the latest attended service (UTC midnight), derived on the server. */
+  lastAttended?: string | null;
   volunteerSkills?: string[];
   interests?: string[];
 

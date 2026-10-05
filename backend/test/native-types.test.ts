@@ -161,3 +161,76 @@ describe('saved search queries', () => {
     expect(typeof stored.query).toBe('object');
   });
 });
+
+// Postgres cannot store U+0000 in text, text[] or jsonb, and Prisma cannot write deeply nested
+// JSON, so the shared schemas reject both and the API answers 400 VALIDATION, never 500.
+describe('input the database cannot store', () => {
+  const NUL = '\u0000';
+  const expectValidation = (res: request.Response) => {
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('VALIDATION');
+  };
+
+  it('a member gets 400 for U+0000 in a saved-search value or a profile list entry', async () => {
+    const query = {
+      conditions: [{ field: 'name', operator: 'contains', value: `a${NUL}` }],
+      logic: 'AND',
+    };
+    expectValidation(
+      await request(app)
+        .post('/api/users/saved-searches')
+        .set(bearer(member))
+        .send({ name: 'Bad', query }),
+    );
+    for (const body of [{ interests: [`x${NUL}`] }, { volunteerSkills: [`x${NUL}`] }])
+      expectValidation(
+        await request(app).put(`/api/users/${memberId}`).set(bearer(member)).send(body),
+      );
+    expectValidation(
+      await request(app).put(`/api/users/${memberId}`).set(bearer(member)).send({ bio: NUL }),
+    );
+  });
+
+  it('staff get 400 for U+0000 in media tags', async () => {
+    expectValidation(
+      await request(app)
+        .post('/api/media')
+        .set(bearer(admin))
+        .send({
+          title: 'Bad tags',
+          type: 'YOUTUBE_VIDEO',
+          url: 'https://youtu.be/ddddddddddd',
+          tags: [`a${NUL}b`],
+        }),
+    );
+  });
+
+  it('staff get 400 for U+0000 in metadata keys or values and for deep metadata', async () => {
+    let deep: unknown = 1;
+    for (let i = 0; i < 200; i += 1) deep = { d: deep };
+    for (const metadata of [{ a: NUL }, { [`k${NUL}`]: 1 }, deep]) {
+      expectValidation(
+        await request(app)
+          .post(`/api/analytics/members/${memberId}/activities`)
+          .set(bearer(admin))
+          .send({ activityType: 'other', metadata }),
+      );
+      expectValidation(
+        await request(app)
+          .post(`/api/analytics/members/${memberId}/interactions`)
+          .set(bearer(admin))
+          .send({ interactionType: 'call_made', channel: 'phone', metadata }),
+      );
+    }
+    // About 60 KB of nested arrays, sent as raw JSON (the test client would overflow serialising
+    // it): within the body limit and far beyond any sane depth.
+    const veryDeep = `{"activityType":"other","metadata":{"d":${'['.repeat(30_000)}${']'.repeat(30_000)}}}`;
+    expectValidation(
+      await request(app)
+        .post(`/api/analytics/members/${memberId}/activities`)
+        .set(bearer(admin))
+        .set('Content-Type', 'application/json')
+        .send(veryDeep),
+    );
+  });
+});

@@ -71,11 +71,14 @@ export type TimelineQuery = z.input<typeof timelineQuery>;
 export type ListTimelineParams = WithNumericPaging<TimelineQuery>;
 
 // One entry of the timeline feed. `date` is an ISO timestamp in responses; `id` is the id of the
-// source row (unique within its kind).
+// source row (unique within its kind). `dateOnly` is true when `date` is a calendar date sent as
+// UTC midnight (attendance, and milestones whose achievedDate has no time of day): show its UTC
+// day, never the day in the viewer's time zone.
 export interface TimelineItem {
   kind: TimelineKind;
   id: string;
   date: string;
+  dateOnly: boolean;
   title: string;
   summary: string | null;
 }

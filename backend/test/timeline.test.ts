@@ -16,6 +16,7 @@ interface Item {
   kind: string;
   id: string;
   date: string;
+  dateOnly: boolean;
   title: string;
   summary: string | null;
 }
@@ -148,5 +149,99 @@ describe('member timeline', () => {
       expect(res.status).toBe(400);
       expect(res.body.code).toBe('VALIDATION');
     }
+  });
+});
+
+const UNKNOWN_ID = 'cjld2cjxh0000qzrmn831i7rn';
+
+describe('member timeline: unknown member and calendar dates', () => {
+  let otherId: string;
+
+  beforeAll(async () => {
+    otherId = (await createUser({ email: 'timeline-dates@timeline.test.local', role: 'member' }))
+      .id;
+    const midnight = new Date('2026-06-07T00:00:00.000Z');
+    const service = await prisma.service.create({ data: { date: midnight, type: 'bible_study' } });
+    await prisma.attendance.create({ data: { userId: otherId, serviceId: service.id } });
+    await prisma.memberMilestone.createMany({
+      data: [
+        { userId: otherId, milestoneType: 'wedding', title: 'Wedding', achievedDate: midnight },
+        {
+          userId: otherId,
+          milestoneType: 'other',
+          title: 'Timed',
+          achievedDate: new Date('2026-06-01T15:30:00.000Z'),
+        },
+      ],
+    });
+    await prisma.memberInteraction.create({
+      data: {
+        userId: otherId,
+        interactionType: 'visit_logged',
+        channel: 'in_person',
+        createdAt: new Date('2026-06-02T00:00:00.000Z'),
+      },
+    });
+  });
+
+  it('answers 404 for a member that does not exist, like the profile route', async () => {
+    for (const path of [UNKNOWN_ID, `${UNKNOWN_ID}/timeline`]) {
+      const res = await request(app).get(`/api/member-details/${path}`).set(bearer(admin));
+      expect(res.status).toBe(404);
+      expect(res.body.error).toBe('User not found');
+    }
+  });
+
+  it('marks attendance and midnight milestones as date-only, timestamps as not', async () => {
+    const res = await request(app)
+      .get(`/api/member-details/${otherId}/timeline`)
+      .set(bearer(admin));
+    expect(res.status).toBe(200);
+    const items = res.body.items as Item[];
+    expect(items.map((i) => [i.kind, i.title, i.date, i.dateOnly])).toEqual([
+      ['attendance', 'Attended bible study', '2026-06-07T00:00:00.000Z', true],
+      ['milestone', 'Wedding', '2026-06-07T00:00:00.000Z', true],
+      // An interaction logged exactly at UTC midnight is still a timestamp.
+      ['interaction', 'Visit logged', '2026-06-02T00:00:00.000Z', false],
+      ['milestone', 'Timed', '2026-06-01T15:30:00.000Z', false],
+    ]);
+  });
+
+  it('derives lastAttended from the latest present attendance up to today', async () => {
+    const lastAttended = async () => {
+      const res = await request(app).get(`/api/member-details/${otherId}`).set(bearer(admin));
+      expect(res.status).toBe(200);
+      return res.body.user.lastAttended as string | null;
+    };
+    expect(await lastAttended()).toBe('2026-06-07T00:00:00.000Z');
+
+    const dayFromToday = (offset: number) => {
+      const now = new Date();
+      return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + offset));
+    };
+    const [yesterday, todayService, tomorrow] = await Promise.all(
+      [-1, 0, 1].map((offset) =>
+        prisma.service.create({ data: { date: dayFromToday(offset), type: 'prayer_meeting' } }),
+      ),
+    );
+    // A later absence and a future service do not count; the legacy column is ignored.
+    await prisma.attendance.createMany({
+      data: [
+        { userId: otherId, serviceId: yesterday!.id },
+        { userId: otherId, serviceId: todayService!.id, present: false },
+        { userId: otherId, serviceId: tomorrow!.id },
+      ],
+    });
+    await prisma.user.update({
+      where: { id: otherId },
+      data: { lastAttended: new Date('2020-01-01T00:00:00.000Z') },
+    });
+    expect(await lastAttended()).toBe(dayFromToday(-1).toISOString());
+
+    await prisma.attendance.updateMany({
+      where: { userId: otherId, serviceId: todayService!.id },
+      data: { present: true },
+    });
+    expect(await lastAttended()).toBe(dayFromToday(0).toISOString());
   });
 });
