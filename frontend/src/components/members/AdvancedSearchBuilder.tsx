@@ -9,9 +9,12 @@ interface AdvancedSearchBuilderProps {
   onClose: () => void;
 }
 
-export default function AdvancedSearchBuilder({ onApplyQuery, onClose }: AdvancedSearchBuilderProps) {
+export default function AdvancedSearchBuilder({
+  onApplyQuery,
+  onClose,
+}: AdvancedSearchBuilderProps) {
   const [conditions, setConditions] = useState<SearchCondition[]>([
-    { id: '1', field: 'name', operator: 'contains', value: '', logic: 'AND' }
+    { id: '1', field: 'name', operator: 'contains', value: '', logic: 'AND' },
   ]);
 
   const fieldOptions = [
@@ -25,7 +28,7 @@ export default function AdvancedSearchBuilder({ onApplyQuery, onClose }: Advance
     { value: 'engagement.riskLevel', label: 'Risk Level' },
     { value: 'createdAt', label: 'Join Date' },
     { value: 'lastLoginAt', label: 'Last Login' },
-    { value: 'isActive', label: 'Active Status' }
+    { value: 'isActive', label: 'Active Status' },
   ];
 
   const operatorOptions = {
@@ -34,31 +37,37 @@ export default function AdvancedSearchBuilder({ onApplyQuery, onClose }: Advance
       { value: 'equals', label: 'Equals' },
       { value: 'starts_with', label: 'Starts with' },
       { value: 'ends_with', label: 'Ends with' },
-      { value: 'not_contains', label: 'Does not contain' }
+      { value: 'not_contains', label: 'Does not contain' },
     ],
     number: [
       { value: 'equals', label: 'Equals' },
       { value: 'greater_than', label: 'Greater than' },
       { value: 'less_than', label: 'Less than' },
-      { value: 'between', label: 'Between' }
+      { value: 'between', label: 'Between' },
     ],
     date: [
       { value: 'equals', label: 'On date' },
       { value: 'before', label: 'Before' },
       { value: 'after', label: 'After' },
-      { value: 'between', label: 'Between' }
+      { value: 'between', label: 'Between' },
     ],
     select: [
       { value: 'equals', label: 'Is' },
       { value: 'not_equals', label: 'Is not' },
-      { value: 'in', label: 'Is one of' }
-    ]
+      { value: 'in', label: 'Is one of' },
+    ],
   };
 
   const getFieldType = (field: string): keyof typeof operatorOptions => {
     if (field.includes('Date') || field.includes('At')) return 'date';
     if (field.includes('Score') || field.includes('Count')) return 'number';
-    if (field.includes('Stage') || field.includes('Level') || field === 'roles' || field === 'isActive') return 'select';
+    if (
+      field.includes('Stage') ||
+      field.includes('Level') ||
+      field === 'roles' ||
+      field === 'isActive'
+    )
+      return 'select';
     return 'text';
   };
 
@@ -68,23 +77,25 @@ export default function AdvancedSearchBuilder({ onApplyQuery, onClose }: Advance
       field: 'name',
       operator: 'contains',
       value: '',
-      logic: 'AND'
+      logic: 'AND',
     };
     setConditions([...conditions, newCondition]);
   };
 
   const updateCondition = (id: string, updates: Partial<SearchCondition>) => {
-    setConditions(conditions.map(condition => 
-      condition.id === id ? { ...condition, ...updates } : condition
-    ));
+    setConditions(
+      conditions.map((condition) =>
+        condition.id === id ? { ...condition, ...updates } : condition,
+      ),
+    );
   };
 
   const removeCondition = (id: string) => {
-    setConditions(conditions.filter(condition => condition.id !== id));
+    setConditions(conditions.filter((condition) => condition.id !== id));
   };
 
   const handleApply = () => {
-    const validConditions = conditions.filter(c => c.value.trim() !== '');
+    const validConditions = conditions.filter((c) => c.value.trim() !== '');
     onApplyQuery({ conditions: validConditions, type: 'advanced' });
     onClose();
   };
@@ -98,12 +109,14 @@ export default function AdvancedSearchBuilder({ onApplyQuery, onClose }: Advance
     <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-6 mb-4">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-medium text-gray-900">Advanced Search Builder</h3>
-        <button
-          onClick={onClose}
-          className="text-gray-400 hover:text-gray-600"
-        >
+        <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M6 18L18 6M6 6l12 12"
+            />
           </svg>
         </button>
       </div>
@@ -114,7 +127,9 @@ export default function AdvancedSearchBuilder({ onApplyQuery, onClose }: Advance
             {index > 0 && (
               <select
                 value={condition.logic}
-                onChange={(e) => updateCondition(condition.id, { logic: e.target.value as 'AND' | 'OR' })}
+                onChange={(e) =>
+                  updateCondition(condition.id, { logic: e.target.value as 'AND' | 'OR' })
+                }
                 className="px-2 py-1 text-sm border border-gray-300 rounded"
               >
                 <option value="AND">AND</option>
@@ -124,14 +139,18 @@ export default function AdvancedSearchBuilder({ onApplyQuery, onClose }: Advance
 
             <select
               value={condition.field}
-              onChange={(e) => updateCondition(condition.id, { 
-                field: e.target.value,
-                operator: operatorOptions[getFieldType(e.target.value)][0].value
-              })}
+              onChange={(e) =>
+                updateCondition(condition.id, {
+                  field: e.target.value,
+                  operator: operatorOptions[getFieldType(e.target.value)][0].value,
+                })
+              }
               className="px-3 py-2 border border-gray-300 rounded"
             >
-              {fieldOptions.map(field => (
-                <option key={field.value} value={field.value}>{field.label}</option>
+              {fieldOptions.map((field) => (
+                <option key={field.value} value={field.value}>
+                  {field.label}
+                </option>
               ))}
             </select>
 
@@ -140,8 +159,10 @@ export default function AdvancedSearchBuilder({ onApplyQuery, onClose }: Advance
               onChange={(e) => updateCondition(condition.id, { operator: e.target.value })}
               className="px-3 py-2 border border-gray-300 rounded"
             >
-              {operatorOptions[getFieldType(condition.field)].map(op => (
-                <option key={op.value} value={op.value}>{op.label}</option>
+              {operatorOptions[getFieldType(condition.field)].map((op) => (
+                <option key={op.value} value={op.value}>
+                  {op.label}
+                </option>
               ))}
             </select>
 
@@ -160,7 +181,8 @@ export default function AdvancedSearchBuilder({ onApplyQuery, onClose }: Advance
                 placeholder="Enter number..."
                 className="px-3 py-2 border border-gray-300 rounded"
               />
-            ) : getFieldType(condition.field) === 'select' && condition.field === 'engagement.membershipStage' ? (
+            ) : getFieldType(condition.field) === 'select' &&
+              condition.field === 'engagement.membershipStage' ? (
               <select
                 value={condition.value}
                 onChange={(e) => updateCondition(condition.id, { value: e.target.value })}
@@ -175,7 +197,8 @@ export default function AdvancedSearchBuilder({ onApplyQuery, onClose }: Advance
                 <option value="at_risk">At Risk</option>
                 <option value="inactive">Inactive</option>
               </select>
-            ) : getFieldType(condition.field) === 'select' && condition.field === 'engagement.riskLevel' ? (
+            ) : getFieldType(condition.field) === 'select' &&
+              condition.field === 'engagement.riskLevel' ? (
               <select
                 value={condition.value}
                 onChange={(e) => updateCondition(condition.id, { value: e.target.value })}
@@ -212,7 +235,12 @@ export default function AdvancedSearchBuilder({ onApplyQuery, onClose }: Advance
               className="text-red-600 hover:text-red-800 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                />
               </svg>
             </button>
           </div>

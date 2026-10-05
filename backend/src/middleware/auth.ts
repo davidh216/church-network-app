@@ -1,11 +1,22 @@
-import type { RequestHandler } from 'express';
+import type { CookieOptions, RequestHandler } from 'express';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env';
 import { prisma } from '../lib/prisma';
-import { selfSelect } from '../lib/user-selects';
+import { selfSelect } from '../modules/users/selects';
 import type { AuthenticatedUser, RoleName } from '../types/auth';
 
 export const STAFF: RoleName[] = ['admin', 'leader'];
+
+// Session cookie of the shared contract (PHASE1_SPECS 1.1). Its value is the same JWT a
+// bearer client sends.
+export const SESSION_COOKIE = 'embrace_session';
+
+// Secure in production unless COOKIE_SECURE says otherwise (plain-HTTP production builds).
+export function sessionCookieOptions(): CookieOptions {
+  const secure =
+    env.COOKIE_SECURE !== undefined ? env.COOKIE_SECURE === 'true' : env.NODE_ENV === 'production';
+  return { httpOnly: true, path: '/', sameSite: 'lax', secure };
+}
 
 export function signToken(userId: string): string {
   return jwt.sign({ userId }, env.JWT_SECRET, {
@@ -27,8 +38,11 @@ export function isStaff(user: AuthenticatedUser): boolean {
 }
 
 export const authenticate: RequestHandler = async (req, res, next) => {
+  // The session cookie first, then `Authorization: Bearer` (tests, scripts, non-browser clients).
+  const cookies = req.cookies as Record<string, string | undefined> | undefined;
   const header = req.headers.authorization;
-  const token = header?.startsWith('Bearer ') ? header.slice(7) : undefined;
+  const token =
+    cookies?.[SESSION_COOKIE] || (header?.startsWith('Bearer ') ? header.slice(7) : undefined);
   if (!token) {
     res.status(401).json({ error: 'Access token required' });
     return;

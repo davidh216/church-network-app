@@ -12,8 +12,16 @@ const prisma = new PrismaClient();
 // Single source of truth for roles. Permissions are a JSON array of strings.
 const ROLES = [
   { name: 'admin', description: 'Administrator with full access', permissions: ['*'] },
-  { name: 'leader', description: 'Church leader: manage members and content', permissions: ['members:read', 'members:write', 'media:write', 'analytics:read'] },
-  { name: 'member', description: 'Regular church member', permissions: ['directory:read', 'media:read'] },
+  {
+    name: 'leader',
+    description: 'Church leader: manage members and content',
+    permissions: ['members:read', 'members:write', 'media:write', 'analytics:read'],
+  },
+  {
+    name: 'member',
+    description: 'Regular church member',
+    permissions: ['directory:read', 'media:read'],
+  },
 ] as const;
 
 async function main() {
@@ -21,7 +29,11 @@ async function main() {
     await prisma.role.upsert({
       where: { name: role.name },
       update: { description: role.description, permissions: JSON.stringify(role.permissions) },
-      create: { name: role.name, description: role.description, permissions: JSON.stringify(role.permissions) },
+      create: {
+        name: role.name,
+        description: role.description,
+        permissions: JSON.stringify(role.permissions),
+      },
     });
   }
   console.log(`Seeded ${ROLES.length} roles`);

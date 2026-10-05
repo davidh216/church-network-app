@@ -1,5 +1,5 @@
 import type { Prisma } from '@prisma/client';
-import type { selfSelect } from '../lib/user-selects';
+import type { selfSelect } from '../modules/users/selects';
 
 export type RoleName = 'admin' | 'leader' | 'member';
 

@@ -1,0 +1,16 @@
+# Allowlist for frontend/Dockerfile (build context: repository root).
+*
+!package.json
+!package-lock.json
+!tsconfig.base.json
+!backend/package.json
+!frontend/
+frontend/node_modules/
+frontend/.next/
+frontend/.env*
+!frontend/.env.example
+frontend/test-results/
+frontend/playwright-report/
+frontend/**/*.test.ts
+frontend/**/*.test.tsx
+frontend/*.tsbuildinfo

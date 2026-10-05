@@ -43,13 +43,13 @@ A comprehensive church management platform built with modern web technologies, d
 - **Express.js**: Fast, unopinionated web framework
 - **TypeScript**: Type-safe server-side development
 - **Prisma**: Next-generation ORM with type safety
-- **SQLite**: current datastore; the move to PostgreSQL is scheduled in `docs/MODERNIZATION_GAMEPLAN.md`
+- **PostgreSQL 16**: primary datastore (local install or the `db` service in `docker-compose.yml`)
 
 ### **Security & Authentication**
-- **JWT**: JSON Web Tokens for stateless authentication
+- **JWT in an httpOnly cookie** (`embrace_session`): the browser talks to the API through a same-origin Next.js rewrite; `Authorization: Bearer` is also accepted for scripts and tests
 - **bcryptjs**: Password hashing and security
 - **CORS**: Cross-Origin Resource Sharing configuration
-- **Helmet**: Security middleware for Express
+- **Helmet**, zod request validation, pino logging, and three login rate limits (per client IP, per account, per client IP and account); client IPs are read from `X-Forwarded-For` according to `TRUST_PROXY`, so production must run behind a reverse proxy that sets that header and must not expose the web app directly
 
 ## 📋 Database Schema
 
@@ -92,79 +92,89 @@ A comprehensive church management platform built with modern web technologies, d
 
 ### **Prerequisites**
 - Node.js 22 (see `.nvmrc`) and npm 10
-- Git for version control
+- PostgreSQL 16, either installed locally or started with `docker compose up -d db`
 
 ### **Installation**
 
-1. **Clone the repository**
+1. **Clone and install** (one npm workspace, one lockfile at the root)
    ```bash
    git clone https://github.com/davidh216/church-network-app.git
    cd church-network-app
+   npm ci
    ```
 
-2. **Backend Setup**
+2. **Database and backend configuration**
    ```bash
-   cd backend
-   cp .env.example .env        # then set JWT_SECRET (32+ random chars) and the SEED_ADMIN_* values
-   npm ci
-   npm run db:migrate          # applies prisma/migrations
-   npm run db:seed             # creates the roles and, if SEED_ADMIN_* are set, the first admin
-   npm run dev
+   docker compose up -d db          # or use your own Postgres; the default credentials are church / church
+   cp backend/.env.example backend/.env   # set JWT_SECRET (32+ random chars) and the SEED_ADMIN_* values
+   npm run -w backend db:migrate    # applies prisma/migrations
+   npm run -w backend db:seed       # creates the roles and, if SEED_ADMIN_* are set, the first admin
    ```
 
-3. **Frontend Setup**
+3. **Run both apps**
    ```bash
-   cd ../frontend
-   cp .env.example .env.local   # NEXT_PUBLIC_API_URL, defaults to http://localhost:5000/api
-   npm ci
-   npm run dev
+   npm run dev                      # API on http://localhost:5000, web on http://localhost:3000
    ```
+   The web app proxies `/api/*` to the API (`API_URL`, see `frontend/.env.example`), so the session cookie is first-party.
 
 4. **Access the Application**
    - Frontend: http://localhost:3000
    - Backend API: http://localhost:5000
    - Health Check: http://localhost:5000/health
 
+### **Containers**
+`docker compose up --build` starts `db`, `api` (runs `prisma migrate deploy`, the idempotent seed, then the compiled server) and `web` (standalone Next.js build). Ports are published on 127.0.0.1 only. The api service reads `backend/.env` for `JWT_SECRET` and the `SEED_ADMIN_*` values, and runs with `COOKIE_SECURE=false` because the stack is plain http; a real deployment sits behind TLS, leaves `COOKIE_SECURE` unset, and runs behind a reverse proxy that sets `X-Forwarded-For` (see `TRUST_PROXY` in `backend/.env.example`).
+
 ### **Accounts and Roles**
 - Self-registration creates an **inactive** account. An admin or leader activates it (edit the member and tick Active) before the person can sign in.
-- The first admin comes from the seed (`SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD`, 12+ characters). Change that password after first login.
+- The first admin comes from the seed (`SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD`). Passwords must be at least 12 characters and not a common password. Signed-in users change theirs with `POST /api/auth/change-password`; admins reset others with `POST /api/users/:id/reset-password`.
 - `admin` and `leader` can see member contact details, CRM notes, analytics and exports and can create members. Only `admin` can grant the `leader` or `admin` role, change roles, or edit another staff account. `member` sees a name-only directory and their own profile.
-- Emails are stored lowercase; the `20251004120000_lowercase_emails` migration normalises existing rows (it fails if two accounts differ only by case; merge those by hand first).
+- Emails are stored lowercase. The Postgres baseline migration starts from an empty database, so data imported from the old SQLite deployment must be lowercased on import.
 
 ### **Quality checks**
 ```bash
-# backend
-npm run typecheck && npm test
-# frontend (lint fails on any warning)
-npm run typecheck && npm run lint && npm run build
+npm run typecheck && npm run lint && npm test && npm run build   # both workspaces, from the root
+npm run format:check                                             # prettier
+npx -w frontend playwright install chromium                     # once; CI does this itself
+E2E_WEB_PORT=3111 E2E_API_PORT=5111 npm run -w frontend test:e2e # Playwright smoke; starts both dev servers and needs SEED_ADMIN_* in backend/.env
 ```
+A husky pre-commit hook runs lint-staged (eslint --fix and prettier on staged files). CI (`.github/workflows/ci.yml`) runs typecheck, lint, format check, tests against a Postgres service, builds, the compiled seed, a migration drift check and the Playwright smoke on pull requests and on pushes to `main` and `modernize/**`.
 
 ## 📁 Project Structure
 
 ```
 church-network-app/
+├── package.json                # npm workspaces: backend, frontend; root scripts
+├── tsconfig.base.json          # shared strict compiler options
+├── docker-compose.yml          # db, api, web
+├── .github/workflows/ci.yml    # typecheck, lint, test, build, migrate diff, e2e
 ├── backend/                    # Express 5 API
+│   ├── Dockerfile
 │   ├── prisma/
-│   │   ├── schema.prisma       # Prisma schema (SQLite today, Postgres in Phase 1)
-│   │   ├── migrations/         # Migration history
-│   │   └── seed.ts             # Roles and optional first admin (npm run db:seed)
+│   │   ├── schema.prisma       # PostgreSQL schema
+│   │   ├── migrations/         # baseline migration
+│   │   └── seed.ts             # roles and optional first admin
+│   ├── prisma.config.ts
 │   ├── src/
-│   │   ├── app.ts              # Express app: middleware, routers, 404/error handlers
-│   │   ├── server.ts           # Listen and graceful shutdown
+│   │   ├── app.ts              # Express app: middleware, modules, 404/error handlers
+│   │   ├── server.ts           # listen and graceful shutdown
 │   │   ├── config/env.ts       # zod-validated environment
-│   │   ├── lib/                # prisma singleton, user projections, validation helpers
-│   │   ├── middleware/auth.ts  # authenticate, requireRole
-│   │   ├── routes/             # auth, users, saved-searches, roles, media, analytics, member-details
-│   │   ├── services/           # memberAnalytics
-│   │   └── types/              # AuthenticatedUser, Express Request augmentation
-│   ├── test/                   # vitest + supertest
+│   │   ├── lib/                # prisma singleton, logger, HttpError, shared zod schemas
+│   │   ├── middleware/         # authenticate, requireRole, validate, error handler, not found
+│   │   └── modules/            # auth, users, saved-searches, roles, media, analytics, member-details
+│   │                           #   each with router.ts, service.ts, schemas.ts
+│   ├── test/                   # vitest + supertest, including a route matrix
 │   └── .env.example
 ├── frontend/                   # Next.js App Router
+│   ├── Dockerfile
 │   ├── src/
-│   │   ├── app/                # layout and the dashboard page
-│   │   ├── components/         # auth, members, media, analytics
-│   │   ├── lib/                # auth client, error helpers
+│   │   ├── app/                # layout, providers, dashboard, login, register
+│   │   ├── middleware.ts       # redirects to /login without a session cookie
+│   │   ├── components/         # auth, members, media, analytics (+ tests)
+│   │   ├── lib/api/            # apiFetch client and typed endpoint modules
+│   │   ├── lib/auth/           # AuthProvider, useAuth, useIsStaff
 │   │   └── types/domain.ts     # shared domain types
+│   ├── e2e/                    # Playwright smoke
 │   └── .env.example
 ├── docs/
 │   ├── MODERNIZATION_GAMEPLAN.md
@@ -174,12 +184,15 @@ church-network-app/
 
 ## 🔧 API Endpoints
 
-All routes except `/health`, `POST /api/auth/register` and `POST /api/auth/login` require a bearer token. Routes marked *staff* require the `admin` or `leader` role.
+All routes except `/health`, `POST /api/auth/register`, `POST /api/auth/login` and `POST /api/auth/logout` require a session (the `embrace_session` cookie set by login, or a bearer token). Routes marked *staff* require the `admin` or `leader` role.
 
 ### **Authentication**
 - `POST /api/auth/register` - Register (account stays inactive until approved)
 - `POST /api/auth/login` - User login
 - `GET /api/auth/me` - Get current user profile
+- `POST /api/auth/logout` - Clear the session cookie (refused with 403 `CROSS_SITE` for cross-site requests)
+- `POST /api/auth/change-password` - Change own password
+- `POST /api/users/:id/reset-password` - Reset a member's password *(admin)*
 
 ### **User Management**
 - `GET /api/users` - Member directory (full details for staff, name-only for members)

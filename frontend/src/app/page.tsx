@@ -1,9 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { authService, type User } from '../lib/auth';
-import LoginForm from '../components/auth/LoginForm';
-import RegisterForm from '../components/auth/RegisterForm';
+import { useState } from 'react';
+import Link from 'next/link';
+import { useAuth, useIsStaff } from '../lib/auth/AuthProvider';
 import MemberList from '../components/members/MemberList';
 import AddEditMemberModal from '../components/members/AddEditMemberModal';
 import SimpleMediaLibrary from '../components/media/SimpleMediaLibrary';
@@ -11,10 +10,11 @@ import VideoPlayer from '../components/media/VideoPlayer';
 import MemberAnalyticsDashboard from '../components/analytics/MemberAnalyticsDashboard';
 import type { Member, MediaItem } from '../types/domain';
 
+// The authenticated shell. The middleware sends visitors without a session cookie
+// to /login; if the API rejects the cookie, the AuthProvider routes there instead.
 export default function Home() {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [showRegister, setShowRegister] = useState(false);
+  const { user, status, logout, refresh } = useAuth();
+  const canManage = useIsStaff();
   const [showMembers, setShowMembers] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<Member | null>(null);
@@ -25,53 +25,32 @@ export default function Home() {
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
   const [showAnalytics, setShowAnalytics] = useState(false);
 
-  useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const currentUser = await authService.getCurrentUser();
-        setUser(currentUser);
-      } catch (error) {
-        console.error('Auth check failed:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
+  // The API could not be reached (network error, 5xx): offer a retry rather than a sign-in link.
+  if (status === 'error') {
+    return <ServerUnavailable onRetry={refresh} />;
+  }
 
-    checkAuth();
-  }, []);
-
-  const handleLogout = () => {
-    authService.logout();
-    setUser(null);
-  };
-
-  const handleAuthSuccess = (user: User) => {
-    setUser(user);
-  };
-
-  if (loading) {
+  // A 401 from the API makes the AuthProvider clear the cookie and route to /login;
+  // this covers the moment before that redirect, and a 403 from /me.
+  if (status === 'anonymous') {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
-        </div>
+        <p className="text-gray-600">
+          You are signed out.{' '}
+          <Link href="/login" className="text-blue-600 font-medium">
+            Sign in
+          </Link>
+        </p>
       </div>
     );
   }
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4">
-        <div>
-          {showRegister ? (
-            <RegisterForm onSwitchToLogin={() => setShowRegister(false)} />
-          ) : (
-            <LoginForm
-              onSuccess={handleAuthSuccess}
-              onSwitchToRegister={() => setShowRegister(true)}
-            />
-          )}
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
         </div>
       </div>
     );
@@ -91,9 +70,7 @@ export default function Home() {
                 }}
                 className="text-left hover:opacity-80 transition-opacity"
               >
-                <h1 className="text-3xl font-bold text-gray-900">
-                  Embrace
-                </h1>
+                <h1 className="text-3xl font-bold text-gray-900">Embrace</h1>
               </button>
               <p className="text-gray-600">Welcome back, {user.name}!</p>
             </div>
@@ -102,24 +79,24 @@ export default function Home() {
                 <p className="text-sm font-medium text-gray-900">{user.name}</p>
                 <p className="text-sm text-gray-500">{user.email}</p>
                 <div className="flex flex-wrap gap-1 mt-1">
-                {user.roles && user.roles.length > 0 ? (
-                  user.roles.map((userRole) => (
-                    <span
-                      key={userRole.role.id}
-                      className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
-                    >
-                      {userRole.role.name}
+                  {user.roles && user.roles.length > 0 ? (
+                    user.roles.map((userRole) => (
+                      <span
+                        key={userRole.role.id}
+                        className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+                      >
+                        {userRole.role.name}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                      member
                     </span>
-                  ))
-                ) : (
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                    member
-                  </span>
-                )}
+                  )}
                 </div>
               </div>
               <button
-                onClick={handleLogout}
+                onClick={() => void logout()}
                 className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500"
               >
                 Logout
@@ -133,7 +110,7 @@ export default function Home() {
         {/* Dashboard Section */}
         {!showMembers && !showMedia && !showAnalytics && (
           <div className="px-4 py-6 sm:px-0">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Profile Card */}
               <div className="bg-white overflow-hidden shadow rounded-lg">
                 <div className="p-5">
@@ -174,67 +151,30 @@ export default function Home() {
                     >
                       👥 View Members
                     </button>
-                    <button className="w-full text-left px-3 py-2 bg-green-50 hover:bg-green-100 rounded-md text-sm text-green-700">
-                      📅 Upcoming Events
-                    </button>
-                    <button 
+                    <button
                       onClick={() => setShowMedia(true)}
                       className="w-full text-left px-3 py-2 bg-purple-50 hover:bg-purple-100 rounded-md text-sm text-purple-700"
                     >
                       🎵 Media Library
                     </button>
-                    <button 
-                      onClick={() => setShowAnalytics(true)}
-                      className="w-full text-left px-3 py-2 bg-indigo-50 hover:bg-indigo-100 rounded-md text-sm text-indigo-700"
-                    >
-                      📊 Member Analytics
-                    </button>
-                    <button className="w-full text-left px-3 py-2 bg-yellow-50 hover:bg-yellow-100 rounded-md text-sm text-yellow-700">
-                      💬 Slack Workspace
-                    </button>
-                  </div>
-                </div>
-              </div>
-              {/* Membership Stats Card */}
-              <div className="bg-white overflow-hidden shadow rounded-lg">
-                <div className="p-5">
-                  <h3 className="text-lg font-medium text-gray-900">Membership Overview</h3>
-                  <div className="mt-4 space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-sm text-gray-600">Total Members:</span>
-                      <span className="text-sm font-medium text-green-600">Active System</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-gray-600">Member Profiles:</span>
-                      <span className="text-sm font-medium text-blue-600">Enhanced</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-gray-600">Search & Filter:</span>
-                      <span className="text-sm font-medium text-purple-600">Advanced</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-gray-600">View Modes:</span>
-                      <span className="text-sm font-medium text-indigo-600">Table & Cards</span>
-                    </div>
+                    {canManage && (
+                      <button
+                        onClick={() => setShowAnalytics(true)}
+                        className="w-full text-left px-3 py-2 bg-indigo-50 hover:bg-indigo-100 rounded-md text-sm text-indigo-700"
+                      >
+                        📊 Member Analytics
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
             </div>
             {/* Welcome Section */}
             <div className="mt-8 bg-white shadow rounded-lg p-6">
-              <h2 className="text-xl font-bold text-gray-900 mb-4">
-                🎉 Welcome to Embrace!
-              </h2>
+              <h2 className="text-xl font-bold text-gray-900 mb-4">🎉 Welcome to Embrace!</h2>
               <p className="text-gray-600 mb-4">
                 You&apos;re successfully logged in! This is your church network platform.
               </p>
-              <div className="mt-6 p-4 bg-green-50 rounded-md">
-                <p className="text-sm text-green-800">
-                  <strong>🎉 Latest Updates:</strong> Enhanced membership management system with detailed profiles, 
-                  advanced search & filtering, and modern video player are now live! 
-                  Ready for member communication tools and family management.
-                </p>
-              </div>
             </div>
           </div>
         )}
@@ -297,7 +237,7 @@ export default function Home() {
               onPlayMedia={(media: MediaItem, playlist: MediaItem[] = []) => {
                 setPlayingMedia(media);
                 setMediaPlaylist(playlist);
-                const index = playlist.findIndex(item => item.id === media.id);
+                const index = playlist.findIndex((item) => item.id === media.id);
                 setCurrentMediaIndex(index >= 0 ? index : 0);
               }}
             />
@@ -335,6 +275,12 @@ export default function Home() {
               setPlayingMedia(mediaPlaylist[nextIndex]);
             }
           }}
+          onSelect={(index) => {
+            const item = mediaPlaylist[index];
+            if (!item) return;
+            setCurrentMediaIndex(index);
+            setPlayingMedia(item);
+          }}
           onPlayPrevious={() => {
             if (currentMediaIndex > 0) {
               const prevIndex = currentMediaIndex - 1;
@@ -346,11 +292,37 @@ export default function Home() {
       )}
 
       {/* Member Analytics Dashboard Modal */}
-      {showAnalytics && (
-        <MemberAnalyticsDashboard
-          onClose={() => setShowAnalytics(false)}
-        />
+      {canManage && showAnalytics && (
+        <MemberAnalyticsDashboard onClose={() => setShowAnalytics(false)} />
       )}
+    </div>
+  );
+}
+
+function ServerUnavailable({ onRetry }: { onRetry: () => Promise<void> }) {
+  const [retrying, setRetrying] = useState(false);
+  const retry = async () => {
+    setRetrying(true);
+    try {
+      await onRetry();
+    } finally {
+      setRetrying(false);
+    }
+  };
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div role="alert" className="text-center">
+        <p className="text-gray-900 font-medium">The server is unavailable</p>
+        <p className="mt-1 text-sm text-gray-600">Please try again in a moment.</p>
+        <button
+          type="button"
+          onClick={() => void retry()}
+          disabled={retrying}
+          className="mt-4 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+        >
+          {retrying ? 'Retrying...' : 'Retry'}
+        </button>
+      </div>
     </div>
   );
 }

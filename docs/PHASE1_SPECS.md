@@ -21,7 +21,7 @@ Companion to `MODERNIZATION_GAMEPLAN.md` section 6, Phase 1. Written by the plan
 - Cookie name `embrace_session`; value is the existing HS256 JWT (`{ userId }`), signed with `JWT_SECRET`, lifetime `JWT_EXPIRES_IN`.
 - Attributes: `HttpOnly; Path=/; SameSite=Lax; Max-Age=<JWT_EXPIRES_IN in seconds>`; `Secure` when `NODE_ENV=production`.
 - `POST /api/auth/login` sets the cookie and responds `200 { success: true, user }` with NO `token` field.
-- `POST /api/auth/logout` clears the cookie and responds `204`.
+- `POST /api/auth/logout` clears the cookie and responds `204`; requests with `Sec-Fetch-Site: cross-site` are refused with `403 { code: "CROSS_SITE" }`.
 - `GET /api/auth/me` responds `200 { success: true, user }` or `401`.
 - `authenticate` middleware accepts, in this order: the cookie; then `Authorization: Bearer <jwt>` (kept for tests, scripts and future mobile clients). Both carry the same JWT.
 - The browser talks to the API through a same-origin Next.js rewrite (`/api/:path*` on the frontend origin proxies to the backend), so the cookie is first-party and `SameSite=Lax` is sufficient. Cross-site browser calls are not supported. CORS stays restricted to `CORS_ORIGIN` for non-browser or direct-origin clients.
@@ -39,7 +39,7 @@ Companion to `MODERNIZATION_GAMEPLAN.md` section 6, Phase 1. Written by the plan
 - Text search uses `mode: 'insensitive'`.
 
 ### 1.4 Environment variables
-Backend (`backend/.env.example`): `NODE_ENV`, `PORT`, `DATABASE_URL`, `JWT_SECRET`, `JWT_EXPIRES_IN`, `CORS_ORIGIN`, `LOG_LEVEL`, `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD`, `SEED_ADMIN_NAME`, `RATE_LIMIT_AUTH_MAX` (default 10), `RATE_LIMIT_AUTH_WINDOW_MINUTES` (default 15).
+Backend (`backend/.env.example`): `NODE_ENV`, `PORT`, `DATABASE_URL`, `JWT_SECRET`, `JWT_EXPIRES_IN`, `CORS_ORIGIN`, `LOG_LEVEL`, `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD`, `SEED_ADMIN_NAME`, `RATE_LIMIT_AUTH_MAX` (default 10), `RATE_LIMIT_AUTH_WINDOW_MINUTES` (default 15), `TRUST_PROXY` (Express trust-proxy setting, default `loopback, uniquelocal`; set `false` when no reverse proxy sets `X-Forwarded-For`), `COOKIE_SECURE` (`true`/`false`, overrides the Secure flag that otherwise follows `NODE_ENV`).
 Frontend (`frontend/.env.example`): `API_URL` (server-side, used by the rewrite, default `http://localhost:5000`). No `NEXT_PUBLIC_API_URL` any more: the browser always calls the relative `/api`.
 
 ## 2. Stream A: backend (worktree branch `modernize/phase-1-backend`, directory `backend/` only)
@@ -64,7 +64,7 @@ Frontend (`frontend/.env.example`): `API_URL` (server-side, used by the rewrite,
 - Accept: `npm run build && node dist/server.js` serves `/health`; `grep -rn "console\." src` is empty; `npm run lint` clean; all tests pass; malformed input on every mutating route yields a 400 with `details` (add a parameterised test).
 
 ### A3 (items 1.6, 1.7) authentication hardening and cookie sessions
-- Rate limiting with `express-rate-limit@8`: `/api/auth/login` and `/api/auth/register` limited per IP to `RATE_LIMIT_AUTH_MAX` per `RATE_LIMIT_AUTH_WINDOW_MINUTES`, response 429 `{ error, code: "RATE_LIMITED" }`; `standardHeaders: 'draft-8'`; disabled when `NODE_ENV=test` unless the test opts in via `RATE_LIMIT_AUTH_MAX`.
+- Rate limiting with `express-rate-limit@8` (as revised after review): `/api/auth/register` per client IP at `RATE_LIMIT_AUTH_MAX`; `/api/auth/login` through three layers: per client IP at `RATE_LIMIT_AUTH_MAX * 5`, per account (email only, so forged `X-Forwarded-For` cannot defeat it) at `RATE_LIMIT_AUTH_MAX * 5`, and per client IP and account at `RATE_LIMIT_AUTH_MAX`; window `RATE_LIMIT_AUTH_WINDOW_MINUTES`, response 429 `{ error, code: "RATE_LIMITED" }`; `standardHeaders: 'draft-8'`; disabled when `NODE_ENV=test` unless the test opts in via `RATE_LIMIT_AUTH_MAX`.
 - Password policy: min 12, max 128, must not equal the email local part, must not be in a short built-in list of the most common passwords (ship a 1000-entry list as a TS array). Applies to register, staff create and password changes.
 - `POST /api/auth/change-password` `{ currentPassword, newPassword }` for the signed-in user; `POST /api/users/:id/reset-password` `{ newPassword }` admin only. Both invalidate nothing server-side (stateless JWT) but respond 200 and the frontend re-logs in.
 - Cookie session per 1.1: `cookie-parser` (or manual parsing) in `authenticate`; `login` sets the cookie and omits `token`; `logout` clears it; keep bearer support.
@@ -84,7 +84,7 @@ Frontend (`frontend/.env.example`): `API_URL` (server-side, used by the rewrite,
 - `src/types/domain.ts` stays the single source of types; extend it for anything the endpoint modules need (for example `MemberDetails`, `MemberAnalytics`, `ApiEnvelope<T>`). Zero `any` (already enforced by lint).
 
 ### B2 (items 1.11 and the client half of 1.7) auth provider and route protection
-- `src/lib/auth/AuthProvider.tsx` exposing `{ user, status: 'loading' | 'authenticated' | 'anonymous', login(email, password), logout(), refresh() }` via `useAuth()`; `useHasRole(...names)`; `useIsStaff()`. Mount in `src/app/providers.tsx` from `layout.tsx`. On mount it calls `me()`; on `embrace:unauthenticated` it sets `anonymous` and routes to `/login`.
+- `src/lib/auth/AuthProvider.tsx` exposing `{ user, status: 'loading' | 'authenticated' | 'anonymous' | 'error', login(email, password), logout(), refresh() }` (`error` means the API was unreachable or failed with something other than 401/403; the UI offers a retry instead of a sign-in link) via `useAuth()`; `useHasRole(...names)`; `useIsStaff()`. Mount in `src/app/providers.tsx` from `layout.tsx`. On mount it calls `me()`; on `embrace:unauthenticated` it sets `anonymous` and routes to `/login`.
 - Routes: `src/app/login/page.tsx` and `src/app/register/page.tsx` host the existing forms; `src/app/page.tsx` becomes the authenticated shell (it keeps the current view toggles; Phase 2 splits them). `src/middleware.ts` redirects requests without the `embrace_session` cookie to `/login?next=<path>` for every path except `/login`, `/register`, `/_next/*`, `/api/*`, static assets; and redirects `/login` to `/` when the cookie is present. Presence of the cookie is only a UX hint; the API is the authority.
 - Role gating in the UI with `useIsStaff()`: hide `Add Member`, `Edit`, `View` (profile), `Export`, the analytics quick action, `Add Video`, and the saved-search save form for non-staff. Members see the directory (name, avatar, roles) and their own profile card.
 - Logout calls `POST /api/auth/logout` then routes to `/login`.
@@ -122,3 +122,9 @@ Frontend (`frontend/.env.example`): `API_URL` (server-side, used by the rewrite,
 2. Run the full check set in both packages against local Postgres.
 3. Launch C on the merged result; merge; run everything again, including the Playwright smoke.
 4. Adversarial review of the full Phase 1 diff, fix, then push and report.
+
+## 6. Post-review amendments (2026-10-04)
+- Deployment requirement: the Next.js rewrite forwards an incoming `X-Forwarded-For` unchanged but never adds one, so client IPs are real only when a TLS/reverse proxy in front of the web app sets the header and the web app is not reachable directly. Development and the compose stack see every client as the Next server; the per-account limiter is the protection there.
+- `backend/Dockerfile` entrypoint runs `prisma migrate deploy`, then the compiled idempotent seed (`dist/prisma/seed.js`, built by `tsconfig.seed.json`), then the server. CI also runs the compiled seed.
+- Compose publishes ports on 127.0.0.1 only (`DB_PORT` overrides the host port for the database) and runs the API with `COOKIE_SECURE=false` because the stack is plain http.
+- CI runs on pull requests and on pushes to `main` and `modernize/**`, with job timeouts and a Prettier check.

@@ -1,0 +1,17 @@
+# Fallback for builders without per-Dockerfile ignore files. BuildKit (docker compose, docker
+# build) uses the allowlists in backend/Dockerfile.dockerignore and frontend/Dockerfile.dockerignore.
+**/node_modules
+**/.env
+**/.env.*
+!**/.env.example
+**/*.db
+.git
+.github
+.husky
+.claude
+docs
+backend/dist
+frontend/.next
+frontend/test-results
+frontend/playwright-report
+coverage

@@ -1,39 +1,53 @@
-import express, { type ErrorRequestHandler } from 'express';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import express from 'express';
+import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import helmet from 'helmet';
-import { corsOrigins } from './config/env';
+import { corsOrigins, trustProxy } from './config/env';
 import { prisma } from './lib/prisma';
+import { requestLogger } from './lib/request-logger';
 import { authenticate, requireRole, STAFF } from './middleware/auth';
-import authRoutes from './routes/auth';
-import usersRoutes from './routes/users';
-import rolesRoutes from './routes/roles';
-import mediaRoutes from './routes/simple-media';
-import analyticsRoutes from './routes/analytics';
-import memberDetailsRoutes from './routes/member-details';
+import { errorHandler } from './middleware/error-handler';
+import { notFound } from './middleware/not-found';
+import authRoutes from './modules/auth/router';
+import usersRoutes from './modules/users/router';
+import rolesRoutes from './modules/roles/router';
+import mediaRoutes from './modules/media/router';
+import analyticsRoutes from './modules/analytics/router';
+import memberDetailsRoutes from './modules/member-details/router';
 
-// A 4xx status carried by an error (body-parser 413/415, http-errors, ...), if any.
-function clientErrorStatus(err: unknown): number | undefined {
-  if (!err || typeof err !== 'object') return undefined;
-  const { status, statusCode } = err as { status?: unknown; statusCode?: unknown };
-  const code = typeof status === 'number' ? status : typeof statusCode === 'number' ? statusCode : undefined;
-  return code !== undefined && code >= 400 && code <= 499 ? code : undefined;
-}
+// package.json sits one level above both src/ (tsx) and dist/ (node).
+const { version } = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8')) as {
+  version: string;
+};
 
 export function createApp() {
   const app = express();
 
   app.disable('x-powered-by');
+  // req.ip comes from X-Forwarded-For only when the connection is from a trusted proxy (TRUST_PROXY).
+  app.set('trust proxy', trustProxy);
+  app.use(requestLogger);
   app.use(helmet());
   // Content-Disposition is exposed so the browser can read the export's filename.
-  app.use(cors({ origin: corsOrigins, credentials: true, exposedHeaders: ['Content-Disposition'] }));
+  app.use(
+    cors({ origin: corsOrigins, credentials: true, exposedHeaders: ['Content-Disposition'] }),
+  );
   app.use(express.json({ limit: '100kb' }));
+  app.use(cookieParser());
 
   app.get('/health', async (_req, res) => {
+    const info = {
+      version,
+      uptime: Math.round(process.uptime()),
+      timestamp: new Date().toISOString(),
+    };
     try {
       await prisma.$queryRaw`SELECT 1`;
-      res.json({ status: 'OK', message: 'Church app backend is running', timestamp: new Date().toISOString() });
+      res.json({ status: 'OK', message: 'Church app backend is running', ...info });
     } catch {
-      res.status(503).json({ status: 'DEGRADED', message: 'Database unavailable', timestamp: new Date().toISOString() });
+      res.status(503).json({ status: 'DEGRADED', message: 'Database unavailable', ...info });
     }
   });
 
@@ -45,24 +59,7 @@ export function createApp() {
   app.use('/api/analytics', authenticate, requireRole(...STAFF), analyticsRoutes);
   app.use('/api/member-details', authenticate, requireRole(...STAFF), memberDetailsRoutes);
 
-  app.use((_req, res) => {
-    res.status(404).json({ error: 'Not found' });
-  });
-
-  const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
-    if (err && typeof err === 'object' && 'type' in err && err.type === 'entity.parse.failed') {
-      res.status(400).json({ error: 'Malformed JSON body' });
-      return;
-    }
-    const status = clientErrorStatus(err);
-    if (status !== undefined) {
-      const { expose, message } = err as { expose?: unknown; message?: unknown };
-      res.status(status).json({ error: expose === true && typeof message === 'string' ? message : 'Bad request' });
-      return;
-    }
-    console.error(err);
-    res.status(500).json({ error: 'Internal server error' });
-  };
+  app.use(notFound);
   app.use(errorHandler);
 
   return app;
