@@ -98,10 +98,12 @@ export type EngagementJobStatus = 'running' | 'completed' | 'failed';
 export interface EngagementJob {
   jobId: string;
   status: EngagementJobStatus;
-  /** Members refreshed so far, failures included. */
+  /** Members refreshed so far, failures and skipped members included. */
   processed: number;
   /** Of those, members whose refresh failed (logged by the API). */
   failed: number;
+  /** Of those, members deleted while the job ran (not a failure). */
+  skipped: number;
   total: number;
   startedAt: string;
   finishedAt: string | null;

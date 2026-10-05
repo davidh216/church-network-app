@@ -28,7 +28,15 @@ import { monthsBefore, today } from '../services/service';
 //
 // Windows are whole UTC days ending today: "the last N weeks" is the 7N days up to and including
 // today, "weeks 9 to 26" the days 56 to 181 before today, "12 months" starts on the same day 12
-// calendar months ago.
+// calendar months ago. Services dated after today never count, in any window or in "ever".
+//
+// Account age: a scoring service held before the day the account was created never counts
+// against the member (it counts only if they attended it). This applies to every windowed
+// service count: the 12-week attendanceScore denominator, the 8-week medium risk rate and the
+// 26-week inactive check.
+//
+// The refresh-all job (jobs.ts) refreshes every account, inactive ones included, and keeps the
+// status of its last 20 jobs in memory, for the single API instance.
 
 // Request metadata (a JSON object validated by the shared schema) as a Prisma JSON input.
 const jsonOrUndefined = (value: Record<string, unknown> | undefined) =>
@@ -51,12 +59,15 @@ export const RULES = {
   visitorAttendances: 3,
   /** medium risk: recent attendance rate below this. */
   mediumRiskRate: 0.25,
-  /** communicationScore when there were no two-way interactions. */
+  /** communicationScore when there were neither asks nor responses. */
   neutralCommunication: 50,
 } as const;
 
-/** Interaction types that expect an answer, and the ones that are an answer. */
-const TWO_WAY_TYPES: InteractionType[] = ['email_sent', 'email_opened', 'sms_sent', 'sms_replied'];
+// communicationScore = responses / asks over the last 12 months. Asks are the outbound messages
+// (ASK_TYPES) plus any other interaction marked responseRequired. Responses are the reply rows
+// (RESPONSE_TYPES, counted only as responses, never as asks) plus asks marked responseReceived or
+// with a responseTime. So a logged sms_sent and its sms_replied score 100.
+const ASK_TYPES: InteractionType[] = ['email_sent', 'sms_sent'];
 const RESPONSE_TYPES: InteractionType[] = ['email_opened', 'sms_replied'];
 const MINISTRY_ACTIVITIES: ActivityType[] = ['volunteer', 'ministry_participation'];
 
@@ -68,15 +79,18 @@ export interface EngagementFacts {
   /** Holds the admin or leader role. */
   hasLeaderRole: boolean;
   membershipDate: Date | null;
-  /** Scoring services held in the last 12 weeks, and how many of them the member attended. */
+  /**
+   * Scoring services held in the last 12 weeks that count for the member (held on or after the
+   * day the account was created, or attended), and how many of them the member attended.
+   */
   scoringServices: number;
   attendedScoring: number;
   /** The same for the last 8 weeks (the medium risk rate). */
   recentScoringServices: number;
   recentAttendedScoring: number;
-  /** Scoring services in the last 26 weeks held on or after the day the account was created. */
+  /** The same count for the last 26 weeks (the inactive rule). */
   lapsedWindowScoringServices: number;
-  /** Attendance at services of any type: last 8 weeks, weeks 9 to 26, and ever. */
+  /** Attendance at services of any type up to today: last 8 weeks, weeks 9 to 26, and ever. */
   attendedRecent: number;
   attendedEarlier: number;
   attendedEver: number;
@@ -84,22 +98,29 @@ export interface EngagementFacts {
   activeGroups: number;
   /** volunteer or ministry_participation activities in the last 12 months. */
   ministryActivities: number;
-  /** Two-way interactions in the last 12 months, and how many of them got a response. */
+  /** Asks (messages expecting an answer) and responses in the last 12 months. */
   twoWayInteractions: number;
   respondedInteractions: number;
 }
 
 const percent = (part: number, whole: number) => Math.round(Math.min(part / whole, 1) * 100);
 
-/** The three components (0-100, whole numbers) and their weighted sum. */
+/**
+ * The three components (0-100, whole numbers) and their weighted sum. Each component is rounded
+ * first and engagementScore weights the rounded components, so it can be reproduced from the
+ * components the UI shows (1 of 7 services: attendance 14, engagement round(18.4) = 18, not the
+ * 19 the unrounded ratio would give).
+ */
 export function scoreEngagement(facts: EngagementFacts): EngagementComponents {
   const attendanceScore =
     facts.scoringServices > 0 ? percent(facts.attendedScoring, facts.scoringServices) : 0;
+  // Community: active memberships of active groups only (inactive memberships or groups do not
+  // count); the core_member rule reads the same count.
   const communityScore = facts.activeGroups === 0 ? 0 : facts.activeGroups === 1 ? 60 : 100;
+  const asks = facts.twoWayInteractions;
+  const responses = facts.respondedInteractions;
   const communicationScore =
-    facts.twoWayInteractions > 0
-      ? percent(facts.respondedInteractions, facts.twoWayInteractions)
-      : RULES.neutralCommunication;
+    asks > 0 ? percent(responses, asks) : responses > 0 ? 100 : RULES.neutralCommunication;
   const engagementScore = Math.round(
     ENGAGEMENT_WEIGHTS.attendance * attendanceScore +
       ENGAGEMENT_WEIGHTS.community * communityScore +
@@ -111,6 +132,8 @@ export function scoreEngagement(facts: EngagementFacts): EngagementComponents {
 /** The first rule that matches, in the order of PHASE3_SPECS.md 1.5. */
 export function determineStage(facts: EngagementFacts, now = new Date()): MembershipStage {
   if (facts.hasLeaderRole) return 'leader';
+  // The presence checks (inactive, at_risk, visitor) count attendance at a service of any type;
+  // only the rates (attendanceScore, the medium risk rate) use the scoring set.
   const attended26 = facts.attendedRecent + facts.attendedEarlier;
   if (!facts.isActive || (attended26 === 0 && facts.lapsedWindowScoringServices > 0))
     return 'inactive';
@@ -127,6 +150,8 @@ export function determineStage(facts: EngagementFacts, now = new Date()): Member
 
 export function determineRisk(stage: MembershipStage, facts: EngagementFacts): RiskLevel {
   if (stage === 'at_risk' || stage === 'inactive') return 'high';
+  // With no scoring service in the last 8 weeks (that counts for the member) the rate rule does
+  // not apply.
   const lowRecentRate =
     facts.recentScoringServices > 0 &&
     facts.recentAttendedScoring / facts.recentScoringServices < RULES.mediumRiskRate;
@@ -141,20 +166,45 @@ interface Gathered {
   eventsAttended: number;
 }
 
-/** Reads the facts for one member. Throws Prisma P2025 (404) for an unknown member. */
-async function gatherFacts(
-  userId: string,
-  types: readonly ServiceType[],
-  now: Date,
-): Promise<Gathered> {
+/** The windows of the rules for a given `now` (whole UTC days ending today). */
+function windowsAt(now: Date) {
   const day = today(now);
   const daysBefore = (n: number) => new Date(day.getTime() - n * DAY_MS);
-  const lastWeeks = (weeks: number) => ({ gte: daysBefore(weeks * 7 - 1), lte: day });
-  const scoring = (date: Prisma.DateTimeFilter): Prisma.ServiceWhereInput => ({
-    date,
-    type: { in: [...types] },
+  return {
+    day,
+    daysBefore,
+    /** First day of "the last N weeks". */
+    weeksStart: (weeks: number) => daysBefore(weeks * 7 - 1),
+    twelveMonths: monthsBefore(day, RULES.communicationMonths),
+  };
+}
+
+/**
+ * What the rules need that is the same for every member: the scoring services held in the last
+ * 26 weeks (the longest service window), up to and including today. A refresh-all job reads it
+ * once and passes it to every member's refresh.
+ */
+export interface ScoringContext {
+  now: Date;
+  types: ServiceType[];
+  services: Array<{ id: string; date: Date }>;
+}
+
+export async function loadScoringContext(
+  types: readonly ServiceType[] = DEFAULT_SCORING_SERVICE_TYPES,
+  now = new Date(),
+): Promise<ScoringContext> {
+  const { day, weeksStart } = windowsAt(now);
+  const services = await prisma.service.findMany({
+    where: { date: { gte: weeksStart(RULES.lapsedWeeks), lte: day }, type: { in: [...types] } },
+    select: { id: true, date: true },
   });
-  const twelveMonths = monthsBefore(day, RULES.communicationMonths);
+  return { now, types: [...types], services };
+}
+
+/** Reads the facts for one member. Throws Prisma P2025 (404) for an unknown member. */
+async function gatherFacts(userId: string, context: ScoringContext): Promise<Gathered> {
+  const { day, daysBefore, weeksStart, twelveMonths } = windowsAt(context.now);
 
   const user = await prisma.user.findUniqueOrThrow({
     where: { id: userId },
@@ -166,53 +216,48 @@ async function gatherFacts(
       roles: { select: { role: { select: { name: true } } } },
     },
   });
-  const lapsedStart = new Date(
-    Math.max(daysBefore(RULES.lapsedWeeks * 7 - 1).getTime(), today(user.createdAt).getTime()),
-  );
   const present = (service?: Prisma.ServiceWhereInput): Prisma.AttendanceWhereInput => ({
     userId,
     present: true,
     ...(service ? { service } : {}),
   });
   const interactionWindow = { userId, createdAt: { gte: twelveMonths } };
-  const twoWay: Prisma.MemberInteractionWhereInput = {
-    OR: [{ interactionType: { in: TWO_WAY_TYPES } }, { responseRequired: true }],
+  const asks: Prisma.MemberInteractionWhereInput = {
+    OR: [
+      { interactionType: { in: ASK_TYPES } },
+      { responseRequired: true, interactionType: { notIn: RESPONSE_TYPES } },
+    ],
   };
 
   const [
-    scoringServices,
-    attendedScoring,
-    recentScoringServices,
-    recentAttendedScoring,
-    lapsedWindowScoringServices,
+    attendedScoringRows,
     attendedRecent,
     attendedEarlier,
     attendedEver,
     activeGroups,
     ministryActivities,
     twoWayInteractions,
-    respondedInteractions,
+    replies,
+    answeredAsks,
     servicesAttended,
     eventsAttended,
     lastAttended,
     lastInteraction,
     lastMemberActivity,
   ] = await Promise.all([
-    prisma.service.count({ where: scoring(lastWeeks(RULES.scoreWeeks)) }),
-    prisma.attendance.count({ where: present(scoring(lastWeeks(RULES.scoreWeeks))) }),
-    prisma.service.count({ where: scoring(lastWeeks(RULES.recentWeeks)) }),
-    prisma.attendance.count({ where: present(scoring(lastWeeks(RULES.recentWeeks))) }),
-    prisma.service.count({ where: scoring({ gte: lapsedStart, lte: day }) }),
-    prisma.attendance.count({ where: present({ date: lastWeeks(RULES.recentWeeks) }) }),
+    prisma.attendance.findMany({
+      where: present({ id: { in: context.services.map((s) => s.id) } }),
+      select: { serviceId: true },
+    }),
+    prisma.attendance.count({
+      where: present({ date: { gte: weeksStart(RULES.recentWeeks), lte: day } }),
+    }),
     prisma.attendance.count({
       where: present({
-        date: {
-          gte: daysBefore(RULES.lapsedWeeks * 7 - 1),
-          lte: daysBefore(RULES.recentWeeks * 7),
-        },
+        date: { gte: weeksStart(RULES.lapsedWeeks), lte: daysBefore(RULES.recentWeeks * 7) },
       }),
     }),
-    prisma.attendance.count({ where: present() }),
+    prisma.attendance.count({ where: present({ date: { lte: day } }) }),
     prisma.groupMember.count({ where: { userId, isActive: true, group: { isActive: true } } }),
     prisma.memberActivity.count({
       where: {
@@ -221,20 +266,14 @@ async function gatherFacts(
         createdAt: { gte: monthsBefore(day, RULES.ministryMonths) },
       },
     }),
-    prisma.memberInteraction.count({ where: { ...interactionWindow, ...twoWay } }),
+    prisma.memberInteraction.count({ where: { ...interactionWindow, ...asks } }),
+    prisma.memberInteraction.count({
+      where: { ...interactionWindow, interactionType: { in: RESPONSE_TYPES } },
+    }),
     prisma.memberInteraction.count({
       where: {
         ...interactionWindow,
-        AND: [
-          twoWay,
-          {
-            OR: [
-              { interactionType: { in: RESPONSE_TYPES } },
-              { responseReceived: true },
-              { responseTime: { not: null } },
-            ],
-          },
-        ],
+        AND: [asks, { OR: [{ responseReceived: true }, { responseTime: { not: null } }] }],
       },
     }),
     prisma.attendance.count({ where: present({ date: { gte: twelveMonths, lte: day } }) }),
@@ -258,6 +297,21 @@ async function gatherFacts(
     }),
   ]);
 
+  // Scoring services count for the member when held on or after the day the account was created,
+  // or when the member attended them (see the account-age rule at the top of this file).
+  const attended = new Set(attendedScoringRows.map((a) => a.serviceId));
+  const createdDay = today(user.createdAt).getTime();
+  const servicesSince = (weeks: number) => {
+    const start = weeksStart(weeks).getTime();
+    const inWindow = context.services.filter((s) => s.date.getTime() >= start);
+    return {
+      held: inWindow.filter((s) => attended.has(s.id) || s.date.getTime() >= createdDay).length,
+      attended: inWindow.filter((s) => attended.has(s.id)).length,
+    };
+  };
+  const score = servicesSince(RULES.scoreWeeks);
+  const recent = servicesSince(RULES.recentWeeks);
+
   const candidates = [
     lastAttended?.service.date,
     lastInteraction?.createdAt,
@@ -273,18 +327,18 @@ async function gatherFacts(
       isActive: user.isActive,
       hasLeaderRole: user.roles.some((r) => r.role.name === 'admin' || r.role.name === 'leader'),
       membershipDate: user.membershipDate,
-      scoringServices,
-      attendedScoring,
-      recentScoringServices,
-      recentAttendedScoring,
-      lapsedWindowScoringServices,
+      scoringServices: score.held,
+      attendedScoring: score.attended,
+      recentScoringServices: recent.held,
+      recentAttendedScoring: recent.attended,
+      lapsedWindowScoringServices: servicesSince(RULES.lapsedWeeks).held,
       attendedRecent,
       attendedEarlier,
       attendedEver,
       activeGroups,
       ministryActivities,
       twoWayInteractions,
-      respondedInteractions,
+      respondedInteractions: replies + answeredAsks,
     },
     lastActivity,
     servicesAttended,
@@ -308,7 +362,7 @@ export async function calculateMemberEngagement(
   types: readonly ServiceType[] = DEFAULT_SCORING_SERVICE_TYPES,
   now = new Date(),
 ): Promise<MemberEngagement> {
-  const { facts, lastActivity } = await gatherFacts(userId, types, now);
+  const { facts, lastActivity } = await gatherFacts(userId, await loadScoringContext(types, now));
   const membershipStage = determineStage(facts, now);
   return {
     ...scoreEngagement(facts),
@@ -326,13 +380,17 @@ export function snapshotMonth(now = new Date()): Date {
 
 /**
  * Recalculates and stores a member's engagement row (default scoring set) and upserts the
- * snapshot of the current month. Throws Prisma P2025 (404) for an unknown member.
+ * snapshot of the current month. `context` (loadScoringContext with the default scoring set and
+ * the same `now`) is read when not given. Throws Prisma P2025 (404) for an unknown member.
  */
-export async function updateMemberEngagement(userId: string, now = new Date()): Promise<void> {
+export async function updateMemberEngagement(
+  userId: string,
+  now = new Date(),
+  context?: ScoringContext,
+): Promise<void> {
   const { facts, lastActivity, servicesAttended, eventsAttended } = await gatherFacts(
     userId,
-    DEFAULT_SCORING_SERVICE_TYPES,
-    now,
+    context ?? (await loadScoringContext(DEFAULT_SCORING_SERVICE_TYPES, now)),
   );
   const components = scoreEngagement(facts);
   const membershipStage = determineStage(facts, now);
@@ -368,9 +426,9 @@ const zeroed = <K extends string>(keys: readonly K[]) =>
 /**
  * Member analytics for the dashboard, over active accounts and their stored engagement rows.
  */
-export async function getMemberAnalytics() {
-  const now = new Date();
-  const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+export async function getMemberAnalytics(now = new Date()) {
+  // New this month: accounts created since the first day of the current UTC month.
+  const firstOfMonth = snapshotMonth(now);
   const activeAccount: Prisma.MemberEngagementWhereInput = { user: { isActive: true } };
 
   const [
@@ -391,6 +449,7 @@ export async function getMemberAnalytics() {
       },
     }),
     prisma.user.count({ where: { isActive: true, createdAt: { gte: firstOfMonth } } }),
+    // atRiskMembers: active accounts at high risk (stage at_risk or inactive).
     prisma.memberEngagement.count({ where: { ...activeAccount, riskLevel: 'high' } }),
     prisma.memberEngagement.aggregate({
       where: activeAccount,

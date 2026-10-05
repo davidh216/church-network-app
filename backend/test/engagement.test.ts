@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import type { MembershipStage, RiskLevel, ServiceType } from '@embrace/shared';
 import { app, bearer, createUser, login, resetDatabase } from './helpers';
@@ -18,6 +18,7 @@ import {
   engagementRefreshIdle,
   runEngagementRefresh,
   startEngagementRefresh,
+  waitForEngagementRefresh,
 } from '../src/modules/analytics/jobs';
 
 // Engagement, stage and risk (PHASE3_SPECS.md 1.5): the score arithmetic, every stage rule with a
@@ -100,6 +101,38 @@ describe('engagement score arithmetic', () => {
       },
     },
     {
+      // Components are rounded first and engagementScore weights the rounded components:
+      // attendance 14 (14.29), 0.6 * 14 + 0.2 * 50 = 18.4 -> 18 (the raw ratio would give 19).
+      name: '1 of 7 services, nothing else (engagementScore from the rounded components)',
+      input: facts({ scoringServices: 7, attendedScoring: 1 }),
+      expected: {
+        attendanceScore: 14,
+        communityScore: 0,
+        communicationScore: 50,
+        engagementScore: 18,
+      },
+    },
+    {
+      name: 'responses without a logged ask: communication 100',
+      input: facts({ twoWayInteractions: 0, respondedInteractions: 1 }),
+      expected: {
+        attendanceScore: 0,
+        communityScore: 0,
+        communicationScore: 100,
+        engagementScore: 20,
+      },
+    },
+    {
+      name: 'more responses than asks: communication capped at 100',
+      input: facts({ twoWayInteractions: 1, respondedInteractions: 3 }),
+      expected: {
+        attendanceScore: 0,
+        communityScore: 0,
+        communicationScore: 100,
+        engagementScore: 20,
+      },
+    },
+    {
       name: 'every service, two groups, every message answered',
       input: facts({
         scoringServices: 12,
@@ -168,6 +201,8 @@ type Seed = {
   sundays?: number[];
   /** Bible studies attended, days before NOW (services are created on demand). */
   bibleStudies?: number[];
+  /** Sunday services attended that are dated this many days after NOW. */
+  futureServices?: number[];
   groups?: Array<{ active: boolean; groupActive?: boolean }>;
   activities?: Array<{
     type: 'volunteer' | 'ministry_participation' | 'donation';
@@ -221,10 +256,47 @@ const STAGE_CASES: StageCase[] = [
     risk: 'medium',
   },
   {
-    rule: 'visitor: a new account with no service held since it was created',
+    rule: 'visitor: created today, services held only before today',
     seed: { membershipDate: null, createdAt: daysBefore(0) },
     stage: 'visitor',
     risk: 'medium',
+    scores: { attendanceScore: 0 },
+  },
+  {
+    rule: 'visitor: a service dated after today does not count towards 3 attendances ever',
+    seed: { membershipDate: null, sundays: [0, 1], futureServices: [6] },
+    stage: 'visitor',
+    risk: 'medium',
+  },
+  {
+    rule: 'inactive: created yesterday, a scoring service held since, never attended',
+    seed: { createdAt: daysBefore(1), groups: [{ active: true }] },
+    stage: 'inactive',
+    risk: 'high',
+  },
+  {
+    rule: 'core_member, low risk: created today with an old membership, services only before today',
+    seed: { createdAt: daysBefore(0), groups: [{ active: true }] },
+    stage: 'core_member',
+    risk: 'low',
+    // No scoring service counts for the account: the 8-week rate rule does not apply.
+    scores: { attendanceScore: 0 },
+  },
+  {
+    rule: 'active_member: services before the account was created do not count against it',
+    // Created 16 days ago: 3 Sundays held since, 1 attended (without the clamp: 1 of 12).
+    seed: { createdAt: daysBefore(16), sundays: [0] },
+    stage: 'active_member',
+    risk: 'low',
+    scores: { attendanceScore: 33 },
+  },
+  {
+    rule: 'active_member: an attended service from before the account was created counts',
+    // 3 Sundays held since creation plus the attended one before it: 2 of 4.
+    seed: { createdAt: daysBefore(16), sundays: [0, 5] },
+    stage: 'active_member',
+    risk: 'low',
+    scores: { attendanceScore: 50 },
   },
   {
     rule: 'new_member: membership date within 6 months',
@@ -318,6 +390,13 @@ async function seedMember(email: string, seed: Seed): Promise<string> {
     await prisma.attendance.create({
       data: { userId: user.id, serviceId: await serviceId(sunday(k), 'sunday_service') },
     });
+  for (const d of seed.futureServices ?? [])
+    await prisma.attendance.create({
+      data: {
+        userId: user.id,
+        serviceId: await serviceId(dayOf(daysBefore(-d)), 'sunday_service'),
+      },
+    });
   for (const d of seed.bibleStudies ?? [])
     await prisma.attendance.create({
       data: { userId: user.id, serviceId: await serviceId(dayOf(daysBefore(d)), 'bible_study') },
@@ -387,7 +466,46 @@ describe('engagement refresh', () => {
     );
   });
 
-  it('scores communication on two-way interactions of the last 12 months', async () => {
+  it.each<{
+    name: string;
+    data: Array<{ interactionType: 'sms_sent' | 'sms_replied' | 'email_sent' | 'email_opened' }>;
+    score: number;
+  }>([
+    {
+      name: 'sms_sent and its sms_replied',
+      data: [{ interactionType: 'sms_sent' }, { interactionType: 'sms_replied' }],
+      score: 100,
+    },
+    {
+      name: 'two sms_sent, one sms_replied',
+      data: [
+        { interactionType: 'sms_sent' },
+        { interactionType: 'sms_sent' },
+        { interactionType: 'sms_replied' },
+      ],
+      score: 50,
+    },
+    { name: 'nothing logged', data: [], score: 50 },
+    { name: 'only an email_opened', data: [{ interactionType: 'email_opened' }], score: 100 },
+  ])('communication: $name -> $score', async ({ name, data, score }) => {
+    const userId = await seedMember(
+      `${PREFIX}talk-${name.replace(/\W+/g, '-')}@engagement.test.local`,
+      {},
+    );
+    await prisma.memberInteraction.createMany({
+      data: data.map((d) => ({
+        userId,
+        ...d,
+        channel: d.interactionType.startsWith('sms') ? ('sms' as const) : ('email' as const),
+        createdAt: daysBefore(20),
+      })),
+    });
+    await updateMemberEngagement(userId, NOW);
+    const row = await prisma.memberEngagement.findUniqueOrThrow({ where: { userId } });
+    expect(row.communicationScore).toBe(score);
+  });
+
+  it('scores communication as responses over asks in the last 12 months', async () => {
     const userId = await seedMember(`${PREFIX}talk@engagement.test.local`, {
       sundays: ALL_TWELVE,
       groups: [{ active: true }, { active: true }],
@@ -405,19 +523,20 @@ describe('engagement refresh', () => {
           responseReceived: true,
           createdAt: at,
         },
-        // Not two-way, and outside the window: neither counts.
+        // Not an ask, and outside the window: neither counts.
         { userId, interactionType: 'visit_logged', channel: 'in_person', createdAt: at },
         { userId, interactionType: 'email_sent', channel: 'email', createdAt: daysBefore(400) },
       ],
     });
     await updateMemberEngagement(userId, NOW);
     const row = await prisma.memberEngagement.findUniqueOrThrow({ where: { userId } });
-    // 2 of 3 answered -> 67; 0.6 * 100 + 0.2 * 100 + 0.2 * 67 = 93.4
+    // Asks: email_sent and the call marked responseRequired. Responses: the sms_replied row and
+    // the answered call. 2 of 2 -> 100; 0.6 * 100 + 0.2 * 100 + 0.2 * 100 = 100
     expect(row).toMatchObject({
       attendanceScore: 100,
       communityScore: 100,
-      communicationScore: 67,
-      engagementScore: 93,
+      communicationScore: 100,
+      engagementScore: 100,
       servicesAttended: 12,
     });
   });
@@ -560,6 +679,27 @@ describe('engagement refresh', () => {
     );
     expect(analytics.topEngagedMembers[0]).not.toHaveProperty('givingScore');
   });
+
+  it('counts new members from the first day of the UTC month, whatever the server time zone', async () => {
+    const tz = process.env.TZ;
+    // 31 October 12:00 UTC is already 1 November in this zone (UTC+14).
+    process.env.TZ = 'Pacific/Kiritimati';
+    try {
+      await prisma.user.update({
+        where: { email: `${PREFIX}staff@engagement.test.local` },
+        data: { createdAt: new Date('2026-10-15T12:00:00.000Z') },
+      });
+      const analytics = await getMemberAnalytics(new Date('2026-10-31T12:00:00.000Z'));
+      const expected = await prisma.user.count({
+        where: { isActive: true, createdAt: { gte: new Date('2026-10-01T00:00:00.000Z') } },
+      });
+      expect(expected).toBeGreaterThan(0);
+      expect(analytics.newMembersThisMonth).toBe(expected);
+    } finally {
+      if (tz === undefined) delete process.env.TZ;
+      else process.env.TZ = tz;
+    }
+  });
 });
 
 describe('refresh-all job', () => {
@@ -645,5 +785,89 @@ describe('refresh-all job', () => {
       { cwd: backend, env: process.env, stdio: 'pipe' },
     );
     expect(await prisma.engagementSnapshot.count()).toBe(9);
+  });
+
+  describe('failures', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('counts a member deleted while the job runs as skipped, not failed', async () => {
+      const gone = await createUser({
+        email: `${PREFIX}job-gone@engagement.test.local`,
+        role: 'member',
+      });
+      const stale = await prisma.user.findMany({ select: { id: true }, orderBy: { id: 'asc' } });
+      await prisma.user.delete({ where: { id: gone.id } });
+      vi.spyOn(prisma.user, 'findMany').mockResolvedValueOnce(stale as never);
+
+      const job = await runEngagementRefresh();
+      expect(job).toMatchObject({
+        status: 'completed',
+        processed: 10,
+        failed: 0,
+        skipped: 1,
+        total: 10,
+      });
+    });
+
+    it('marks the job failed when the member list cannot be read', async () => {
+      vi.spyOn(prisma.user, 'findMany').mockRejectedValueOnce(new Error('database down'));
+      const job = await runEngagementRefresh();
+      expect(job.status).toBe('failed');
+      expect(job.finishedAt).toBeInstanceOf(Date);
+    });
+
+    it('counts a member whose refresh throws in failed, completes, and the CLI exits 1', async () => {
+      const broken = await createUser({
+        email: `${PREFIX}job-broken@engagement.test.local`,
+        role: 'member',
+      });
+      // A trigger that rejects this member's engagement row makes their refresh throw.
+      await prisma.$executeRawUnsafe(`
+        CREATE OR REPLACE FUNCTION engagement_test_reject() RETURNS trigger AS $$
+        BEGIN
+          IF NEW."userId" = '${broken.id}' THEN RAISE EXCEPTION 'refresh rejected by test'; END IF;
+          RETURN NEW;
+        END $$ LANGUAGE plpgsql`);
+      await prisma.$executeRawUnsafe(`
+        CREATE TRIGGER engagement_test_reject BEFORE INSERT OR UPDATE ON member_engagement
+        FOR EACH ROW EXECUTE FUNCTION engagement_test_reject()`);
+      try {
+        const job = await runEngagementRefresh();
+        expect(job).toMatchObject({
+          status: 'completed',
+          processed: 10,
+          failed: 1,
+          skipped: 0,
+          total: 10,
+        });
+
+        const backend = resolve(__dirname, '..');
+        let exitCode = 0;
+        try {
+          execFileSync(
+            process.execPath,
+            ['--import', 'tsx', resolve(backend, 'src/jobs/refresh-engagement.ts')],
+            { cwd: backend, env: process.env, stdio: 'pipe' },
+          );
+        } catch (err) {
+          exitCode = (err as { status: number }).status;
+        }
+        expect(exitCode).toBe(1);
+      } finally {
+        await prisma.$executeRawUnsafe(
+          'DROP TRIGGER IF EXISTS engagement_test_reject ON member_engagement',
+        );
+        await prisma.$executeRawUnsafe('DROP FUNCTION IF EXISTS engagement_test_reject()');
+      }
+    });
+  });
+
+  it('lets shutdown wait for a running job, within a time limit', async () => {
+    expect(await waitForEngagementRefresh(0)).toBe(true);
+    startEngagementRefresh();
+    expect(await waitForEngagementRefresh(0)).toBe(false);
+    expect(await waitForEngagementRefresh(25_000)).toBe(true);
   });
 });
