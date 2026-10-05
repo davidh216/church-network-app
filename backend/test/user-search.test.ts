@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { BETWEEN_ORDER_MESSAGE, SEARCH_FIELD_OPERATORS, type SearchField } from '@embrace/shared';
 import { prisma } from '../src/lib/prisma';
+import { endOfDay } from '../src/modules/users/search';
 import { app, bearer, createUser, login, resetDatabase } from './helpers';
 
 // GET /api/users filters, sorting and paging, and POST /api/users/search (PHASE2_SPECS 1.2, S2).
@@ -165,6 +166,51 @@ describe('POST /api/users/search', () => {
     expect(
       sorted((await at('between', ['2026-02-20T15:00:00Z', '2026-03-05T18:00:00+00:00'])).body),
     ).toEqual(['Bob Brown', 'Carol Cruz']);
+  });
+
+  it('accepts the last representable day, 9999-12-31, with inclusive bounds', async () => {
+    const at = async (field: string, operator: string, value: unknown) => {
+      const res = await search({ conditions: [{ field, operator, value }], logic: 'AND' });
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      return sorted(res.body);
+    };
+    expect(await at('createdAt', 'after', '9999-12-31')).toEqual([]);
+    expect(await at('lastLoginAt', 'after', '9999-12-31')).toEqual([]);
+    expect(await at('createdAt', 'between', ['2026-02-20', '9999-12-31'])).toEqual([
+      'Bob Brown',
+      'Carol Cruz',
+      'Dan Diaz',
+    ]);
+    expect(await at('lastLoginAt', 'between', ['2026-08-01', '9999-12-31'])).toEqual([
+      'Alice Anders',
+      'Carol Cruz',
+      'Dan Diaz',
+    ]);
+    expect(await at('createdAt', 'between', ['9999-12-31', '9999-12-31'])).toEqual([]);
+  });
+
+  it('includes the last millisecond of the day in between and excludes it from after', async () => {
+    const dan = await prisma.user.findUniqueOrThrow({ where: { email: email('dan') } });
+    await prisma.user.update({
+      where: { id: dan.id },
+      data: { createdAt: new Date('2026-03-31T23:59:59.999Z') },
+    });
+    try {
+      const at = async (operator: string, value: unknown) =>
+        names(
+          (await search({ conditions: [{ field: 'createdAt', operator, value }], logic: 'AND' }))
+            .body,
+        );
+      expect(await at('between', ['2026-03-31', '2026-03-31'])).toEqual(['Dan Diaz']);
+      expect(await at('after', '2026-03-30')).toEqual(['Dan Diaz']);
+      expect(await at('after', '2026-03-31')).toEqual([]);
+      expect(names((await list('joinedFrom=2026-03-31&joinedTo=2026-03-31')).body)).toEqual([
+        'Dan Diaz',
+      ]);
+      expect(names((await list('joinedTo=2026-03-30')).body)).not.toContain('Dan Diaz');
+    } finally {
+      await prisma.user.update({ where: { id: dan.id }, data: { createdAt: dan.createdAt } });
+    }
   });
 
   it('combines conditions with AND', async () => {
@@ -350,6 +396,11 @@ describe('GET /api/users', () => {
     ]);
     expect(names((await list('joinedTo=2026-01-10')).body)).toEqual(['Alice Anders']);
     expect(names((await list('joinedFrom=2026-03-31')).body)).toEqual(['Dan Diaz']);
+    expect(names((await list('joinedTo=9999-12-31')).body)).toEqual(ALL);
+    expect(names((await list('joinedFrom=2026-03-31&joinedTo=9999-12-31')).body)).toEqual([
+      'Dan Diaz',
+    ]);
+    expect(names((await list('joinedFrom=9999-12-31&joinedTo=9999-12-31')).body)).toEqual([]);
     expect((await list('status=bogus')).status).toBe(400);
     expect((await list('joinedFrom=yesterday')).status).toBe(400);
   });
@@ -446,5 +497,12 @@ describe('GET /api/users', () => {
       expect(res.status).toBe(403);
       expect(res.body.error).toMatch(/only staff/i);
     });
+  });
+});
+
+describe('endOfDay', () => {
+  it('is the last millisecond of the UTC day, also for 9999-12-31', () => {
+    expect(endOfDay('2026-03-31').toISOString()).toBe('2026-03-31T23:59:59.999Z');
+    expect(endOfDay('9999-12-31').toISOString()).toBe('9999-12-31T23:59:59.999Z');
   });
 });

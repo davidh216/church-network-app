@@ -10,23 +10,23 @@ type ListQuery = z.output<typeof listUsersQuery>;
 type SearchQuery = z.output<typeof searchQuery>;
 
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 // The first instant of a date (midnight UTC for a calendar date) or the timestamp itself.
 const startOf = (value: string) => new Date(value);
 const isDate = (value: string) => DATE_ONLY.test(value);
-// The first instant of the day after a calendar date.
-const nextDay = (value: string) => new Date(new Date(value).getTime() + DAY_MS);
+// The last instant of a calendar date in UTC, at the millisecond precision of the timestamp(3)
+// columns. Unlike "the start of the next day" it stays representable for 9999-12-31.
+export const endOfDay = (value: string) => new Date(`${value}T23:59:59.999Z`);
 
 // `before` excludes the given day; `after` excludes it too; `between` includes both ends.
 function dateFilter(operator: 'before' | 'after' | 'between', value: string | [string, string]) {
   if (operator === 'before') return { lt: startOf(value as string) };
   if (operator === 'after') {
     const v = value as string;
-    return isDate(v) ? { gte: nextDay(v) } : { gt: startOf(v) };
+    return { gt: isDate(v) ? endOfDay(v) : startOf(v) };
   }
   const [low, high] = value as [string, string];
-  return { gte: startOf(low), ...(isDate(high) ? { lt: nextDay(high) } : { lte: startOf(high) }) };
+  return { gte: startOf(low), lte: isDate(high) ? endOfDay(high) : startOf(high) };
 }
 
 const insensitive = 'insensitive' as const;
@@ -100,7 +100,7 @@ export function listWhere(query: ListQuery, staff: boolean): Prisma.UserWhereInp
     and.push({
       createdAt: {
         ...(query.joinedFrom ? { gte: startOf(query.joinedFrom) } : {}),
-        ...(query.joinedTo ? { lt: nextDay(query.joinedTo) } : {}),
+        ...(query.joinedTo ? { lte: endOfDay(query.joinedTo) } : {}),
       },
     });
   }
