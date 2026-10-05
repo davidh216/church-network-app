@@ -1155,3 +1155,424 @@ describe('20261006050000_engagement_rules_and_snapshots (D6)', () => {
     expect(await rows(`SELECT * FROM "$s"."engagement_snapshots"`)).toEqual([]);
   });
 });
+
+// The whole chain (PHASE3_SPECS.md D8): a database as Phase 2 left it (the first two migrations,
+// recorded in _prisma_migrations the way `migrate deploy` recorded them there), holding every
+// legacy shape at once, upgraded by `prisma migrate deploy` itself rather than by replaying SQL.
+describe('a Phase 2 database upgraded by prisma migrate deploy (whole chain)', () => {
+  const schema = 'fixture_chain_phase2';
+  const schemaUrl = `${TEST_DATABASE_URL}?schema=${schema}`;
+  const phase2 = ['20261004000000_init_postgres', '20261005000000_engagement_rows_for_all_users'];
+  const rows = <T>(sql: string) => prisma.$queryRawUnsafe<T[]>(sql.replaceAll('$s', schema));
+  const prismaCli = (args: string) =>
+    execSync(`npx prisma ${args}`, {
+      cwd: BACKEND,
+      env: { ...process.env, DATABASE_URL: schemaUrl },
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }).toString();
+  let deployOutput = '';
+
+  beforeAll(() => {
+    expect(migrationNames.slice(0, 2)).toEqual(phase2);
+    execute(
+      [
+        clearArchive(schema),
+        `DROP SCHEMA IF EXISTS "${schema}" CASCADE;`,
+        `CREATE SCHEMA "${schema}";`,
+        `SET search_path TO "${schema}";`,
+        ...phase2.map(migrationSql),
+        `
+        INSERT INTO "roles" ("id", "name", "permissions") VALUES
+          ('role_admin', 'admin', '["*"]'),
+          ('role_leader', 'leader', '["members:read", " media:write ", 7]'),
+          ('role_member', 'member', 'not json');
+        INSERT INTO "families" ("id", "familyName", "headOfFamily", "familyEngagementScore", "totalMembers", "activeMembers", "updatedAt") VALUES
+          ('f1', 'Doe', 'u1', 61.5, 3, 3, now()),
+          ('f2', 'Ghost', 'ghost', 0, 0, 0, now());
+        INSERT INTO "users" ("id", "email", "password", "name", "createdAt", "updatedAt", "gender", "maritalStatus", "membershipType", "familyId", "isHeadOfFamily", "volunteerSkills", "interests") VALUES
+          ('admin', 'admin@example.org', 'x', 'Admin', '2019-01-01', now(), 'Male', 'married', 'member', NULL, false, NULL, NULL),
+          ('u1', 'u1@example.org', 'x', 'U1', '2020-01-01', now(), 'Female', 'Married', 'Regular Attendee', 'f1', true, '["Music", "Teaching"]', '["Hiking"]'),
+          ('u2', 'u2@example.org', 'x', 'U2', '2020-02-01', now(), 'M', 'complicated', 'guest', 'f1', true, 'Music, Teaching', ''),
+          ('u3', 'u3@example.org', 'x', 'U3', '2020-03-01', now(), NULL, NULL, NULL, 'f1', false, NULL, 'null');
+        INSERT INTO "user_roles" ("id", "userId", "roleId") VALUES
+          ('ur1', 'admin', 'role_admin'), ('ur2', 'u1', 'role_leader'), ('ur3', 'u2', 'role_member');
+        INSERT INTO "member_engagement" ("id", "userId", "updatedAt", "engagementScore", "attendanceScore", "givingScore", "volunteerScore", "communityScore", "communicationScore", "membershipStage", "riskLevel", "automationTriggers", "followUpRequired") VALUES
+          ('e_admin', 'admin', now(), 10, 10, 0, 0, 0, 50, 'leader', 'low', NULL, false),
+          ('e1', 'u1', now(), 72.5, 80, 90, 70, 60, 50, 'Core Member', 'HIGH', '["welcome"]', true),
+          ('e2', 'u2', now(), 12, 5, 0, 0, 0, 50, 'champion', 'severe', 'not json', false),
+          ('e3', 'u3', now(), 0, 0, 0, 0, 0, 50, 'new-member', 'low', NULL, false);
+        INSERT INTO "media" ("id", "title", "type", "url", "tags", "uploadedById", "updatedAt") VALUES
+          ('m1', 'Sermon', 'VIDEO', 'https://www.youtube.com/watch?v=abcdefghijk', '["worship","youth"]', 'u1', now()),
+          ('m2', 'Broken tags', 'YOUTUBE_VIDEO', 'https://www.youtube.com/watch?v=abcdefghijk', '[worship', 'u2', now());
+        INSERT INTO "groups" ("id", "name", "type", "leaderId", "updatedAt") VALUES
+          ('g1', 'Choir', 'Small Group', 'u1', now()),
+          ('g2', 'Gone', 'book club', 'ghost', now());
+        INSERT INTO "group_members" ("id", "userId", "groupId", "role") VALUES
+          ('gm1', 'u1', 'g1', 'co-leader'), ('gm2', 'u2', 'g1', 'Leader'), ('gm3', 'u3', 'g1', 'captain');
+        -- a1/a2: one member twice on the same Sunday, both with notes; a4: an unknown type.
+        INSERT INTO "attendance" ("id", "userId", "serviceDate", "serviceType", "present", "notes", "createdAt") VALUES
+          ('a1', 'u1', '2026-01-04 10:00', 'Sunday Service', false, 'arrived late', '2026-01-04 10:05'),
+          ('a2', 'u1', '2026-01-04 18:00', 'sunday_service', true, 'evening', '2026-01-04 18:05'),
+          ('a3', 'u2', '2026-01-04 10:00', 'sunday_service', true, NULL, '2026-01-04 09:30'),
+          ('a4', 'u2', '2026-01-07 19:00', 'youth night', true, NULL, '2026-01-07 19:05'),
+          ('a5', 'u3', '2026-01-07 19:00', 'Bible-Study', false, NULL, '2026-01-07 19:10');
+        -- Mirrored pairs in both directions, in the legacy meaning (the related user's relation).
+        INSERT INTO "family_relationships" ("id", "primaryUserId", "relatedUserId", "relationshipType", "isActive", "familyId", "createdAt", "updatedAt") VALUES
+          ('fr1', 'u1', 'u2', 'parent', true, 'f1', '2026-01-01', now()),
+          ('fr2', 'u2', 'u1', 'child', true, 'f1', '2026-01-02', now()),
+          ('fr3', 'u3', 'u1', 'Spouse', true, 'f1', '2026-01-01', now()),
+          ('fr4', 'u1', 'u3', 'spouse', false, 'f1', '2026-01-03', now());
+        INSERT INTO "member_notes" ("id", "userId", "authorId", "content", "noteType", "updatedAt") VALUES
+          ('n1', 'u1', 'admin', 'kept', 'Prayer Request', now()),
+          ('n2', 'u1', 'ghost', 'repointed', 'random', now());
+        INSERT INTO "member_interactions" ("id", "userId", "interactionType", "channel", "status", "category", "priority", "staffMemberId", "metadata") VALUES
+          ('i1', 'u1', 'Call Made', 'In Person', 'completed', 'follow-up', 'urgent', 'admin', '{"duration": 12}'),
+          ('i2', 'u1', 'letter', 'Fax', 'pending', 'random', 'whatever', 'ghost', 'oops'),
+          ('i3', 'u2', 'email_sent', 'email', 'completed', NULL, 'normal', NULL, '${nestedJson(200)}');
+        INSERT INTO "member_activities" ("id", "userId", "activityType", "metadata") VALUES
+          ('act1', 'u1', 'Volunteer', '{"hours": 3}'),
+          ('act2', 'u1', 'group_participation', '{hours: 3}');
+        INSERT INTO "member_milestones" ("id", "userId", "milestoneType", "title", "achievedDate", "category", "impact") VALUES
+          ('ms1', 'u1', 'Baptism', 'Baptised', '2026-01-01', 'Spiritual', 'HIGH'),
+          ('ms2', 'u2', 'graduation', 'Graduated', '2026-01-01', 'academic', 'huge');
+        INSERT INTO "member_tags" ("id", "name", "category") VALUES ('t1', 'Youth', 'Demographic'), ('t2', 'Mystery', 'mystery');
+        INSERT INTO "user_tags" ("id", "userId", "tagId", "addedBy") VALUES ('ut1', 'u1', 't1', 'admin'), ('ut2', 'u2', 't2', 'ghost');
+        INSERT INTO "saved_searches" ("id", "name", "query", "createdBy", "updatedAt") VALUES
+          ('s1', 'Valid', '{"conditions":[{"field":"name","operator":"contains","value":"a"}],"logic":"AND"}', 'admin', now()),
+          ('s2', 'Broken', '{not json', 'admin', now()),
+          ('s3', 'Deep', '${nestedJson(200)}', 'admin', now()),
+          ('s4', 'Orphan', '{}', 'ghost', now());
+        INSERT INTO "lifecycle_rules" ("id", "name", "triggerCondition", "actionType", "actionData", "updatedAt") VALUES
+          ('lr1', 'Welcome', '{}', 'email', '{}', now());
+        INSERT INTO "timeline_activities" ("id", "userId", "activityDate", "activityType", "title", "category") VALUES
+          ('ta1', 'u1', '2026-01-01', 'note', 'Old', 'general');
+        `,
+      ].join('\n'),
+    );
+    for (const name of phase2) prismaCli(`migrate resolve --applied ${name}`);
+    deployOutput = prismaCli('migrate deploy');
+  }, 180_000);
+
+  afterAll(() => dropSchema(schema));
+
+  const column = async (table: string, col: string) =>
+    Object.fromEntries(
+      (
+        await rows<{ id: string; v: string | null }>(
+          `SELECT "id", "${col}"::text AS v FROM "$s"."${table}" ORDER BY "id"`,
+        )
+      ).map(({ id, v }) => [id, v]),
+    );
+
+  it('applies every Phase 3 migration and reports the database up to date', async () => {
+    expect(deployOutput).toContain('All migrations have been successfully applied.');
+    const applied = await rows<{ name: string; finished: boolean; rolledBack: boolean }>(
+      `SELECT "migration_name" AS name, "finished_at" IS NOT NULL AS finished,
+         "rolled_back_at" IS NOT NULL AS "rolledBack"
+       FROM "$s"."_prisma_migrations" ORDER BY "migration_name"`,
+    );
+    expect(applied).toEqual(
+      migrationNames.map((name) => ({ name, finished: true, rolledBack: false })),
+    );
+    expect(prismaCli('migrate status')).toContain('Database schema is up to date!');
+  });
+
+  it('ends with exactly the schema a fresh database gets from the migrations', async () => {
+    // The suite's own "public" schema was built from the same migrations on an empty database.
+    const describeSchema = async (name: string) => {
+      const strip = (text: string) => text.replaceAll(`"${name}".`, '').replaceAll(`${name}.`, '');
+      const columns = await prisma.$queryRawUnsafe<{ d: string }[]>(
+        `SELECT table_name || '.' || column_name || ':' || udt_name || ':' || is_nullable || ':' ||
+           coalesce(column_default, '') AS d
+         FROM information_schema.columns WHERE table_schema = $1 AND table_name <> '_prisma_migrations'
+         ORDER BY 1`,
+        name,
+      );
+      const indexes = await prisma.$queryRawUnsafe<{ d: string }[]>(
+        `SELECT indexdef AS d FROM pg_indexes WHERE schemaname = $1 AND tablename <> '_prisma_migrations' ORDER BY indexname`,
+        name,
+      );
+      const constraints = await prisma.$queryRawUnsafe<{ d: string }[]>(
+        `SELECT c.conname || ' ' || pg_get_constraintdef(c.oid) AS d FROM pg_constraint c
+         JOIN pg_namespace n ON n.oid = c.connamespace
+         WHERE n.nspname = $1 AND c.conname <> '_prisma_migrations_pkey' ORDER BY 1`,
+        name,
+      );
+      return [...columns, ...indexes, ...constraints].map((r) => strip(r.d));
+    };
+    const upgraded = await describeSchema(schema);
+    expect(upgraded.length).toBeGreaterThan(200);
+    expect(upgraded).toEqual(await describeSchema('public'));
+  });
+
+  it('drops the lifecycle and timeline tables and the giving and volunteer columns', async () => {
+    const tables = await rows<{ t: string }>(
+      `SELECT table_name AS t FROM information_schema.tables WHERE table_schema = '$s' ORDER BY 1`,
+    );
+    expect(tables.map((r) => r.t)).not.toEqual(
+      expect.arrayContaining([expect.stringMatching(/^(lifecycle_rules|timeline_activities)$/)]),
+    );
+    expect(tables.map((r) => r.t)).toEqual(
+      expect.arrayContaining(['services', 'engagement_snapshots']),
+    );
+    const engagement = await rows<Record<string, unknown>>(
+      `SELECT * FROM "$s"."member_engagement" ORDER BY "userId"`,
+    );
+    for (const row of engagement) {
+      for (const gone of ['id', 'givingScore', 'volunteerScore', 'automationTriggers'])
+        expect(row).not.toHaveProperty(gone);
+    }
+    expect(
+      engagement.map((e) => [e.userId, e.engagementScore, e.membershipStage, e.riskLevel]),
+    ).toEqual([
+      ['admin', 10, 'leader', 'low'],
+      ['u1', 72.5, 'core_member', 'high'],
+      ['u2', 12, 'visitor', 'low'],
+      ['u3', 0, 'new_member', 'low'],
+    ]);
+  });
+
+  it('normalises enum values, rewriting co-leader and mapping unknown values', async () => {
+    expect(await column('users', 'gender')).toEqual({
+      admin: 'male',
+      u1: 'female',
+      u2: 'other',
+      u3: null,
+    });
+    expect(await column('users', 'membershipType')).toEqual({
+      admin: 'member',
+      u1: 'regular_attendee',
+      u2: null,
+      u3: null,
+    });
+    expect(await column('group_members', 'role')).toEqual({
+      gm1: 'co_leader',
+      gm2: 'leader',
+      gm3: 'member',
+    });
+    expect(await column('groups', 'type')).toEqual({ g1: 'small_group', g2: 'ministry' });
+    expect(await column('media', 'type')).toEqual({ m1: 'YOUTUBE_VIDEO', m2: 'YOUTUBE_VIDEO' });
+    expect(await column('member_milestones', 'milestoneType')).toEqual({
+      ms1: 'baptism',
+      ms2: 'other',
+    });
+    expect(await column('member_interactions', 'channel')).toEqual({
+      i1: 'in_person',
+      i2: 'in_person',
+      i3: 'email',
+    });
+    expect(await column('member_tags', 'category')).toEqual({ t1: 'demographic', t2: 'general' });
+  });
+
+  it('turns JSON strings into native lists and objects', async () => {
+    const values = async <V>(table: string, col: string) =>
+      Object.fromEntries(
+        (
+          await rows<{ id: string; v: V }>(
+            `SELECT "id", "${col}" AS v FROM "$s"."${table}" ORDER BY "id"`,
+          )
+        ).map(({ id, v }) => [id, v]),
+      );
+    expect(await values('users', 'volunteerSkills')).toEqual({
+      admin: [],
+      u1: ['Music', 'Teaching'],
+      u2: [],
+      u3: [],
+    });
+    expect(await values('users', 'interests')).toEqual({
+      admin: [],
+      u1: ['Hiking'],
+      u2: [],
+      u3: [],
+    });
+    expect(await values('roles', 'permissions')).toEqual({
+      role_admin: ['*'],
+      role_leader: ['members:read', 'media:write', '7'],
+      role_member: [],
+    });
+    expect(await values('media', 'tags')).toEqual({ m1: ['worship', 'youth'], m2: [] });
+    expect(await values('member_interactions', 'metadata')).toEqual({
+      i1: { duration: 12 },
+      i2: 'oops',
+      i3: nestedJson(200),
+    });
+    expect(await values('member_activities', 'metadata')).toEqual({
+      act1: { hours: 3 },
+      act2: '{hours: 3}',
+    });
+    expect(await values('saved_searches', 'query')).toEqual({
+      s1: {
+        conditions: [{ field: 'name', operator: 'contains', value: 'a' }],
+        logic: 'AND',
+      },
+    });
+  });
+
+  it('repoints references: head of family, dangling ids and orphaned note authors', async () => {
+    expect(await column('families', 'headOfFamilyId')).toEqual({ f1: 'u1', f2: null });
+    expect(await column('groups', 'leaderId')).toEqual({ g1: 'u1', g2: null });
+    expect(await column('member_notes', 'authorId')).toEqual({ n1: 'admin', n2: 'admin' });
+    expect(await column('member_interactions', 'staffMemberId')).toEqual({
+      i1: 'admin',
+      i2: null,
+      i3: null,
+    });
+    expect(await column('user_tags', 'addedById')).toEqual({ ut1: 'admin', ut2: null });
+    expect(await column('saved_searches', 'createdById')).toEqual({ s1: 'admin' });
+  });
+
+  it('stores each family pair once, ordered and in the new meaning', async () => {
+    expect(
+      await rows(
+        `SELECT "id", "primaryUserId", "relatedUserId", "relationshipType"::text AS type, "isActive"
+         FROM "$s"."family_relationships" ORDER BY "id"`,
+      ),
+    ).toEqual([
+      // u1 is u2's child: the legacy rows said u2 is u1's parent (fr1) and u1 is u2's child (fr2).
+      { id: 'fr1', primaryUserId: 'u1', relatedUserId: 'u2', type: 'child', isActive: true },
+      { id: 'fr4', primaryUserId: 'u1', relatedUserId: 'u3', type: 'spouse', isActive: true },
+    ]);
+  });
+
+  it('builds services from the legacy attendance and collapses same-day duplicates', async () => {
+    expect(
+      await rows(
+        `SELECT s."date"::text AS date, s."type"::text AS type, count(a."id")::int AS rows
+         FROM "$s"."services" s LEFT JOIN "$s"."attendance" a ON a."serviceId" = s."id"
+         GROUP BY s."id" ORDER BY 1, 2`,
+      ),
+    ).toEqual([
+      { date: '2026-01-04', type: 'sunday_service', rows: 2 },
+      { date: '2026-01-07', type: 'bible_study', rows: 1 },
+      { date: '2026-01-07', type: 'other', rows: 1 },
+    ]);
+    expect(
+      await rows(
+        `SELECT a."id", a."userId", s."date"::text AS date, s."type"::text AS type, a."present", a."notes"
+         FROM "$s"."attendance" a JOIN "$s"."services" s ON s."id" = a."serviceId" ORDER BY a."id"`,
+      ),
+    ).toEqual([
+      {
+        id: 'a1',
+        userId: 'u1',
+        date: '2026-01-04',
+        type: 'sunday_service',
+        present: true,
+        notes: 'arrived late\nevening',
+      },
+      {
+        id: 'a3',
+        userId: 'u2',
+        date: '2026-01-04',
+        type: 'sunday_service',
+        present: true,
+        notes: null,
+      },
+      {
+        id: 'a4',
+        userId: 'u2',
+        date: '2026-01-07',
+        type: 'other',
+        present: true,
+        notes: 'Legacy service type: youth night',
+      },
+      {
+        id: 'a5',
+        userId: 'u3',
+        date: '2026-01-07',
+        type: 'bible_study',
+        present: false,
+        notes: null,
+      },
+    ]);
+  });
+
+  it('archives every deleted row and records every remapped value in phase3_archive', async () => {
+    const archived = async (table: string) =>
+      (await archivedRows(schema, table)).map((r) => ({
+        id: r.id,
+        migration: r.migration,
+        row: r.row,
+      }));
+    expect(await archived('attendance')).toEqual([
+      {
+        id: 'a2',
+        migration: '20261006040000_services_and_attendance',
+        row: expect.objectContaining({ userId: 'u1', notes: 'evening', present: true }),
+      },
+    ]);
+    expect(await archived('family_relationships')).toEqual([
+      {
+        id: 'fr2',
+        migration: '20261006020000_relations_keys_indexes',
+        row: expect.objectContaining({ primaryUserId: 'u2', relatedUserId: 'u1' }),
+      },
+      {
+        id: 'fr3',
+        migration: '20261006020000_relations_keys_indexes',
+        row: expect.objectContaining({ primaryUserId: 'u3', relatedUserId: 'u1' }),
+      },
+    ]);
+    expect(await archived('saved_searches')).toEqual([
+      {
+        id: 's2',
+        migration: '20261006030000_native_column_types',
+        row: expect.objectContaining({ name: 'Broken', query: '{not json' }),
+      },
+      {
+        id: 's3',
+        migration: '20261006030000_native_column_types',
+        row: expect.objectContaining({ name: 'Deep', query: nestedJson(200) }),
+      },
+      {
+        id: 's4',
+        migration: '20261006020000_relations_keys_indexes',
+        row: expect.objectContaining({ name: 'Orphan', createdById: 'ghost' }),
+      },
+    ]);
+    expect(await valueChanges(schema)).toEqual([
+      'attendance.serviceType:a4 youth night -> other',
+      'families.headOfFamilyId:f2 ghost -> null',
+      'group_members.role:gm3 captain -> member',
+      'groups.leaderId:g2 ghost -> null',
+      'groups.type:g2 book club -> ministry',
+      'media.type:m1 VIDEO -> YOUTUBE_VIDEO',
+      'member_activities.activityType:act2 group_participation -> other',
+      'member_engagement.membershipStage:e2 champion -> visitor',
+      'member_engagement.riskLevel:e2 severe -> low',
+      'member_interactions.category:i2 random -> null',
+      'member_interactions.channel:i2 Fax -> in_person',
+      'member_interactions.interactionType:i2 letter -> note_added',
+      'member_interactions.priority:i2 whatever -> normal',
+      'member_interactions.staffMemberId:i2 ghost -> null',
+      'member_interactions.status:i2 pending -> completed',
+      'member_milestones.category:ms2 academic -> general',
+      'member_milestones.impact:ms2 huge -> medium',
+      'member_milestones.milestoneType:ms2 graduation -> other',
+      'member_notes.authorId:n2 ghost -> admin',
+      'member_notes.noteType:n2 random -> general',
+      'member_tags.category:t2 mystery -> general',
+      'user_tags.addedById:ut2 ghost -> null',
+      'users.gender:u2 M -> other',
+      'users.maritalStatus:u2 complicated -> null',
+      'users.membershipType:u2 guest -> null',
+    ]);
+  });
+
+  it('serves the upgraded data through the Prisma client', async () => {
+    const client = new PrismaClient({ datasourceUrl: schemaUrl });
+    try {
+      const member = await client.user.findUnique({
+        where: { id: 'u1' },
+        include: { attendances: { include: { service: true } }, engagement: true },
+      });
+      expect(member?.volunteerSkills).toEqual(['Music', 'Teaching']);
+      expect(member?.attendances.map((a) => [a.service.type, a.present])).toEqual([
+        ['sunday_service', true],
+      ]);
+      expect(member?.engagement?.membershipStage).toBe('core_member');
+    } finally {
+      await client.$disconnect();
+    }
+  });
+});
