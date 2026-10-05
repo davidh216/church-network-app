@@ -13,8 +13,12 @@
 --   same service and would break the new unique key (userId, serviceId); they are collapsed into
 --   one: the oldest row (by createdAt, then id) is kept, it is present if any collapsed row was,
 --   and its notes become the distinct non-blank notes of the collapsed rows, oldest first, joined
---   by a newline. Every deleted duplicate id is listed by RAISE NOTICE when the migration runs.
---   No other row is deleted. recordedById starts NULL for every legacy row.
+--   by a newline. Every deleted duplicate is first copied whole (as JSON) into
+--   phase3_archive.attendance and its id is listed by RAISE NOTICE. No other row is deleted.
+--   recordedById starts NULL for every legacy row.
+--
+-- Audit trail: the schema phase3_archive is outside Prisma's "public" schema (no drift) and can be
+-- dropped (DROP SCHEMA "phase3_archive" CASCADE) once the operator has checked it.
 
 -- CreateTable
 CREATE TABLE "services" (
@@ -48,6 +52,16 @@ FROM "services" AS s
 WHERE s."date" = a."serviceDate"::date AND s."type" = a."serviceType";
 
 -- Collapse rows that now name the same (userId, serviceId)
+CREATE SCHEMA IF NOT EXISTS "phase3_archive";
+CREATE TABLE IF NOT EXISTS "phase3_archive"."attendance" (
+  "sourceSchema" TEXT NOT NULL,
+  "id" TEXT NOT NULL,
+  "row" JSONB NOT NULL,
+  "migration" TEXT NOT NULL,
+  "reason" TEXT NOT NULL,
+  "archivedAt" TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 DO $$
 DECLARE
   ids TEXT;
@@ -55,6 +69,7 @@ BEGIN
   CREATE TEMP TABLE "phase3_attendance_ranked" ON COMMIT DROP AS
   SELECT "id", "userId", "serviceId",
          row_number() OVER w AS rn,
+         first_value("id") OVER w AS kept_id,
          bool_or("present") OVER g AS any_present
   FROM "attendance"
   WINDOW g AS (PARTITION BY "userId", "serviceId"),
@@ -62,7 +77,12 @@ BEGIN
 
   SELECT string_agg("id", ', ' ORDER BY "id") INTO ids FROM "phase3_attendance_ranked" WHERE rn > 1;
   IF ids IS NOT NULL THEN
-    RAISE NOTICE 'attendance rows collapsed into an earlier row for the same member and service (deleted): %', ids;
+    RAISE NOTICE 'attendance rows collapsed into an earlier row for the same member and service (deleted, copied to phase3_archive.attendance): %', ids;
+
+    INSERT INTO "phase3_archive"."attendance" ("sourceSchema", "id", "row", "migration", "reason")
+      SELECT current_schema(), a."id", to_jsonb(a), '20261006040000_services_and_attendance',
+             'collapsed into attendance row ' || r.kept_id || ' (same member and service day)'
+      FROM "attendance" AS a JOIN "phase3_attendance_ranked" AS r ON r."id" = a."id" AND r.rn > 1;
 
     UPDATE "attendance" AS a
     SET "present" = r.any_present,

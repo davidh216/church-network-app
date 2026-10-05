@@ -8,70 +8,109 @@
 -- Dangling references (ids that name no user) are cleaned before the foreign keys are added:
 --   families.headOfFamilyId, groups.leaderId, member_interactions.staffMemberId and
 --   user_tags.addedById are set to NULL (their new delete rule is SET NULL);
---   member_notes.authorId is repointed to the oldest admin (the oldest user when there is no
---   admin), because notes keep a required author (RESTRICT);
+--   member_notes.authorId is repointed to the oldest admin, because notes keep a required author
+--   (RESTRICT); when such notes exist and there is no admin the migration stops with an error
+--   (create an admin and rerun it: the failed migration is rolled back), because repointing to
+--   another account would show it private notes it never wrote;
 --   saved_searches whose createdById names no user are deleted (their delete rule is CASCADE:
 --   the owner is gone and nobody else can manage a private search).
--- Every repointed or deleted id is listed by RAISE NOTICE when the migration runs.
+-- Every changed reference is recorded (table, row id, column, old value, new value) in
+-- phase3_archive.value_changes, every deleted row is copied whole (as JSON) into
+-- phase3_archive.saved_searches or phase3_archive.family_relationships, and the ids are also
+-- listed by RAISE NOTICE. The schema phase3_archive is outside Prisma's "public" schema and can be
+-- dropped (DROP SCHEMA "phase3_archive" CASCADE) once the operator has checked it.
 --
 -- users.isHeadOfFamily is dropped; it is derived from families.headOfFamilyId from now on. Before
 -- the drop, a family without a head takes the oldest member flagged isHeadOfFamily.
 --
 -- member_engagement: the surrogate "id" is dropped and "userId" (already unique) becomes the key.
 --
--- family_relationships stores each pair once, with primaryUserId < relatedUserId, and
--- relationshipType is the primary's relation to the related user. Rows stored the other way round
--- are swapped and their type inverted (parent <-> child, grandparent <-> grandchild; spouse,
--- sibling and other are symmetric). Mirrored rows that then name the same pair are collapsed: the
--- row already stored in canonical order wins, else the oldest; the kept row stays active if any
--- collapsed row was active.
+-- family_relationships stores each pair once, with primaryUserId < relatedUserId, and from now on
+-- relationshipType is the PRIMARY user's relation to the RELATED user (PHASE3_SPECS.md 1.2).
+-- Legacy rows meant the opposite (the related user is the primary's <type>: the only legacy writer
+-- stored (head of family, their child, 'child')), so every legacy row is first translated by
+-- inverting its type (parent <-> child, grandparent <-> grandchild; spouse, sibling and other are
+-- symmetric). Then rows stored the other way round are swapped and their type inverted again.
+-- Mirrored rows that then name the same pair are collapsed: the row already stored in canonical
+-- order wins, else the oldest; the kept row stays active if any collapsed row was active.
 
 -- 1. Renames
 ALTER TABLE "families" RENAME COLUMN "headOfFamily" TO "headOfFamilyId";
 ALTER TABLE "saved_searches" RENAME COLUMN "createdBy" TO "createdById";
 ALTER TABLE "user_tags" RENAME COLUMN "addedBy" TO "addedById";
 
+-- Audit trail (see the header; the tables match those created by 20261006010000_enum_columns).
+CREATE SCHEMA IF NOT EXISTS "phase3_archive";
+CREATE TABLE IF NOT EXISTS "phase3_archive"."value_changes" (
+  "sourceSchema" TEXT NOT NULL,
+  "tableName" TEXT NOT NULL,
+  "rowId" TEXT NOT NULL,
+  "columnName" TEXT NOT NULL,
+  "oldValue" TEXT,
+  "newValue" TEXT,
+  "migration" TEXT NOT NULL,
+  "reason" TEXT NOT NULL,
+  "archivedAt" TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS "phase3_archive"."saved_searches" (
+  "sourceSchema" TEXT NOT NULL,
+  "id" TEXT NOT NULL,
+  "row" JSONB NOT NULL,
+  "migration" TEXT NOT NULL,
+  "reason" TEXT NOT NULL,
+  "archivedAt" TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS "phase3_archive"."family_relationships" (
+  "sourceSchema" TEXT NOT NULL,
+  "id" TEXT NOT NULL,
+  "row" JSONB NOT NULL,
+  "migration" TEXT NOT NULL,
+  "reason" TEXT NOT NULL,
+  "archivedAt" TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Records, then applies, the change of a dangling reference col of tbl to new_value.
+CREATE FUNCTION "phase3_repoint_dangling"(tbl TEXT, col TEXT, new_value TEXT, reason TEXT)
+  RETURNS VOID LANGUAGE plpgsql AS $$
+DECLARE
+  ids TEXT;
+  dangling TEXT := format(
+    '%I IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "users" u WHERE u."id" = %I.%I)', col, tbl, col);
+BEGIN
+  EXECUTE format('SELECT string_agg("id", '', '' ORDER BY "id") FROM %I WHERE %s', tbl, dangling)
+    INTO ids;
+  IF ids IS NULL THEN RETURN; END IF;
+  RAISE NOTICE '%.% % (recorded in phase3_archive.value_changes): %', tbl, col, reason, ids;
+  EXECUTE format(
+    'INSERT INTO "phase3_archive"."value_changes"
+       ("sourceSchema", "tableName", "rowId", "columnName", "oldValue", "newValue", "migration", "reason")
+     SELECT current_schema(), %L, "id", %L, %I, %L, %L, %L FROM %I WHERE %s',
+    tbl, col, col, new_value, '20261006020000_relations_keys_indexes', reason, tbl, dangling);
+  EXECUTE format('UPDATE %I SET %I = %L WHERE %s', tbl, col, new_value, dangling);
+END;
+$$;
+
 -- 2. Dangling references
 DO $$
 DECLARE
   fallback TEXT;
   ids TEXT;
+  dangling_notes BIGINT;
 BEGIN
-  SELECT string_agg("id", ', ' ORDER BY "id") INTO ids FROM "families"
-    WHERE "headOfFamilyId" IS NOT NULL
-      AND NOT EXISTS (SELECT 1 FROM "users" u WHERE u."id" = "families"."headOfFamilyId");
-  IF ids IS NOT NULL THEN RAISE NOTICE 'families.headOfFamilyId set to NULL: %', ids; END IF;
-  UPDATE "families" SET "headOfFamilyId" = NULL
-    WHERE "headOfFamilyId" IS NOT NULL
-      AND NOT EXISTS (SELECT 1 FROM "users" u WHERE u."id" = "families"."headOfFamilyId");
-
-  SELECT string_agg("id", ', ' ORDER BY "id") INTO ids FROM "groups"
-    WHERE "leaderId" IS NOT NULL
-      AND NOT EXISTS (SELECT 1 FROM "users" u WHERE u."id" = "groups"."leaderId");
-  IF ids IS NOT NULL THEN RAISE NOTICE 'groups.leaderId set to NULL: %', ids; END IF;
-  UPDATE "groups" SET "leaderId" = NULL
-    WHERE "leaderId" IS NOT NULL
-      AND NOT EXISTS (SELECT 1 FROM "users" u WHERE u."id" = "groups"."leaderId");
-
-  SELECT string_agg("id", ', ' ORDER BY "id") INTO ids FROM "member_interactions"
-    WHERE "staffMemberId" IS NOT NULL
-      AND NOT EXISTS (SELECT 1 FROM "users" u WHERE u."id" = "member_interactions"."staffMemberId");
-  IF ids IS NOT NULL THEN RAISE NOTICE 'member_interactions.staffMemberId set to NULL: %', ids; END IF;
-  UPDATE "member_interactions" SET "staffMemberId" = NULL
-    WHERE "staffMemberId" IS NOT NULL
-      AND NOT EXISTS (SELECT 1 FROM "users" u WHERE u."id" = "member_interactions"."staffMemberId");
-
-  SELECT string_agg("id", ', ' ORDER BY "id") INTO ids FROM "user_tags"
-    WHERE "addedById" IS NOT NULL
-      AND NOT EXISTS (SELECT 1 FROM "users" u WHERE u."id" = "user_tags"."addedById");
-  IF ids IS NOT NULL THEN RAISE NOTICE 'user_tags.addedById set to NULL: %', ids; END IF;
-  UPDATE "user_tags" SET "addedById" = NULL
-    WHERE "addedById" IS NOT NULL
-      AND NOT EXISTS (SELECT 1 FROM "users" u WHERE u."id" = "user_tags"."addedById");
+  PERFORM "phase3_repoint_dangling"('families', 'headOfFamilyId', NULL, 'set to NULL (user missing)');
+  PERFORM "phase3_repoint_dangling"('groups', 'leaderId', NULL, 'set to NULL (user missing)');
+  PERFORM "phase3_repoint_dangling"('member_interactions', 'staffMemberId', NULL, 'set to NULL (user missing)');
+  PERFORM "phase3_repoint_dangling"('user_tags', 'addedById', NULL, 'set to NULL (user missing)');
 
   SELECT string_agg("id", ', ' ORDER BY "id") INTO ids FROM "saved_searches"
     WHERE NOT EXISTS (SELECT 1 FROM "users" u WHERE u."id" = "saved_searches"."createdById");
-  IF ids IS NOT NULL THEN RAISE NOTICE 'saved_searches deleted (owner missing): %', ids; END IF;
+  IF ids IS NOT NULL THEN
+    RAISE NOTICE 'saved_searches deleted (owner missing, copied to phase3_archive.saved_searches): %', ids;
+  END IF;
+  INSERT INTO "phase3_archive"."saved_searches" ("sourceSchema", "id", "row", "migration", "reason")
+    SELECT current_schema(), s."id", to_jsonb(s), '20261006020000_relations_keys_indexes', 'owner missing'
+    FROM "saved_searches" s
+    WHERE NOT EXISTS (SELECT 1 FROM "users" u WHERE u."id" = s."createdById");
   DELETE FROM "saved_searches"
     WHERE NOT EXISTS (SELECT 1 FROM "users" u WHERE u."id" = "saved_searches"."createdById");
 
@@ -79,17 +118,15 @@ BEGIN
     JOIN "user_roles" ur ON ur."userId" = u."id"
     JOIN "roles" r ON r."id" = ur."roleId" AND r."name" = 'admin'
     ORDER BY u."createdAt", u."id" LIMIT 1;
-  IF fallback IS NULL THEN
-    SELECT u."id" INTO fallback FROM "users" u ORDER BY u."createdAt", u."id" LIMIT 1;
-  END IF;
-  SELECT string_agg("id", ', ' ORDER BY "id") INTO ids FROM "member_notes"
+  SELECT count(*) INTO dangling_notes FROM "member_notes"
     WHERE NOT EXISTS (SELECT 1 FROM "users" u WHERE u."id" = "member_notes"."authorId");
-  IF ids IS NOT NULL THEN
-    RAISE NOTICE 'member_notes.authorId repointed to %: %', fallback, ids;
+  IF dangling_notes > 0 AND fallback IS NULL THEN
+    RAISE EXCEPTION 'member_notes: % note(s) reference a missing author and there is no admin account to own them; create an admin and rerun the migration', dangling_notes;
   END IF;
-  UPDATE "member_notes" SET "authorId" = fallback
-    WHERE NOT EXISTS (SELECT 1 FROM "users" u WHERE u."id" = "member_notes"."authorId");
+  PERFORM "phase3_repoint_dangling"('member_notes', 'authorId', fallback, 'repointed to the oldest admin (author missing)');
 END $$;
+
+DROP FUNCTION "phase3_repoint_dangling"(TEXT, TEXT, TEXT, TEXT);
 
 -- 3. Head of family: keep the flag's information before the column goes
 UPDATE "families" f SET "headOfFamilyId" = (
@@ -111,6 +148,16 @@ ADD CONSTRAINT "member_engagement_pkey" PRIMARY KEY ("userId");
 -- 5. Family relationships: one row per pair, primaryUserId < relatedUserId
 DROP INDEX "family_relationships_primaryUserId_relatedUserId_relationsh_key";
 
+-- Legacy meaning -> spec meaning (see the header): invert every row's type.
+UPDATE "family_relationships" SET "relationshipType" = CASE "relationshipType"
+    WHEN 'parent' THEN 'child'::"RelationshipType"
+    WHEN 'child' THEN 'parent'::"RelationshipType"
+    WHEN 'grandparent' THEN 'grandchild'::"RelationshipType"
+    WHEN 'grandchild' THEN 'grandparent'::"RelationshipType"
+    ELSE "relationshipType"
+  END
+  WHERE "relationshipType" IN ('parent', 'child', 'grandparent', 'grandchild');
+
 DO $$
 DECLARE
   ids TEXT;
@@ -118,6 +165,7 @@ BEGIN
   CREATE TEMP TABLE "phase3_pair_rank" ON COMMIT DROP AS
     SELECT "id",
       row_number() OVER pair AS rn,
+      first_value("id") OVER pair AS kept_id,
       bool_or("isActive") OVER (PARTITION BY LEAST("primaryUserId", "relatedUserId"),
                                              GREATEST("primaryUserId", "relatedUserId")) AS any_active
     FROM "family_relationships"
@@ -127,7 +175,13 @@ BEGIN
     );
 
   SELECT string_agg(r."id", ', ' ORDER BY r."id") INTO ids FROM "phase3_pair_rank" r WHERE r.rn > 1;
-  IF ids IS NOT NULL THEN RAISE NOTICE 'family_relationships collapsed into their pair: %', ids; END IF;
+  IF ids IS NOT NULL THEN
+    RAISE NOTICE 'family_relationships collapsed into their pair (deleted, copied to phase3_archive.family_relationships): %', ids;
+  END IF;
+  INSERT INTO "phase3_archive"."family_relationships" ("sourceSchema", "id", "row", "migration", "reason")
+    SELECT current_schema(), fr."id", to_jsonb(fr), '20261006020000_relations_keys_indexes',
+           'collapsed into family_relationships row ' || r.kept_id || ' (same pair; type already in the new meaning)'
+    FROM "family_relationships" fr JOIN "phase3_pair_rank" r ON r."id" = fr."id" AND r.rn > 1;
 
   UPDATE "family_relationships" fr SET "isActive" = r.any_active
     FROM "phase3_pair_rank" r WHERE r."id" = fr."id" AND r.rn = 1 AND fr."isActive" <> r.any_active;

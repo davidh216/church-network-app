@@ -1,6 +1,7 @@
 import { execSync } from 'node:child_process';
 import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { prisma } from '../src/lib/prisma';
 
@@ -10,7 +11,15 @@ import { prisma } from '../src/lib/prisma';
 // runs, all in one `prisma db execute` session with `search_path` pointing at the fixture schema.
 const BACKEND = resolve(__dirname, '..');
 const MIGRATIONS = resolve(BACKEND, 'prisma', 'migrations');
-const TEST_DATABASE_URL = 'postgresql://church:church@localhost:5432/church_test';
+// The fixtures are built in the database the Prisma client reads (DATABASE_URL from the vitest
+// config), without its ?schema= parameter: every script sets its own search_path.
+const TEST_DATABASE_URL = (process.env.DATABASE_URL ?? '').replace(/\?.*$/, '');
+const testDatabaseName = TEST_DATABASE_URL ? new URL(TEST_DATABASE_URL).pathname.slice(1) : '';
+if (!testDatabaseName || testDatabaseName === 'church_dev') {
+  throw new Error(
+    `migrations.test needs DATABASE_URL to name a test database, not "${testDatabaseName}"`,
+  );
+}
 
 const migrationNames = readdirSync(MIGRATIONS, { withFileTypes: true })
   .filter((entry) => entry.isDirectory())
@@ -28,24 +37,71 @@ function execute(sql: string) {
   });
 }
 
-/** Builds `schema` up to (not including) `migration`, loads `fixture`, then applies `migration`. */
-function migrateFixture(schema: string, migration: string, fixture: string) {
+// The Phase 3 migrations record what they delete, repoint or remap in the shared schema
+// "phase3_archive", tagged with the schema they ran in. Each fixture clears its own rows there
+// before it is built and when it is dropped; other rows in the archive are left alone.
+const clearArchive = (schema: string) => `
+  DO $$
+  DECLARE t TEXT;
+  BEGIN
+    FOR t IN SELECT table_name FROM information_schema.tables WHERE table_schema = 'phase3_archive' LOOP
+      EXECUTE format('DELETE FROM "phase3_archive".%I WHERE "sourceSchema" = %L', t, '${schema}');
+    END LOOP;
+  END $$;`;
+
+/**
+ * Builds `schema` up to (not including) `migration`, loads `fixture`, then applies `migration`
+ * (and, with `toHead`, every later migration too).
+ */
+function migrateFixture(schema: string, migration: string, fixture: string, toHead = false) {
   const index = migrationNames.indexOf(migration);
   if (index < 0) throw new Error(`unknown migration ${migration}`);
   const before = migrationNames.slice(0, index).map(migrationSql);
+  const after = toHead ? migrationNames.slice(index + 1).map(migrationSql) : [];
   execute(
     [
+      clearArchive(schema),
       `DROP SCHEMA IF EXISTS "${schema}" CASCADE;`,
       `CREATE SCHEMA "${schema}";`,
       `SET search_path TO "${schema}";`,
       ...before,
       fixture,
       migrationSql(migration),
+      ...after,
     ].join('\n'),
   );
 }
 
-const dropSchema = (schema: string) => execute(`DROP SCHEMA IF EXISTS "${schema}" CASCADE;`);
+const dropSchema = (schema: string) =>
+  execute(`${clearArchive(schema)}\nDROP SCHEMA IF EXISTS "${schema}" CASCADE;`);
+
+type ArchivedRow = { id: string; row: Record<string, unknown>; migration: string; reason: string };
+type ValueChange = {
+  tableName: string;
+  rowId: string;
+  columnName: string;
+  oldValue: string | null;
+  newValue: string | null;
+};
+
+/** The rows `schema`'s migrations copied into phase3_archive.<table> before deleting them. */
+const archivedRows = (schema: string, table: string) =>
+  prisma.$queryRawUnsafe<ArchivedRow[]>(
+    `SELECT "id", "row", "migration", "reason" FROM "phase3_archive"."${table}"
+     WHERE "sourceSchema" = $1 ORDER BY "id"`,
+    schema,
+  );
+
+/** The references and enum values `schema`'s migrations changed, as "table.column:id old -> new". */
+const valueChanges = async (schema: string) =>
+  (
+    await prisma.$queryRawUnsafe<ValueChange[]>(
+      `SELECT "tableName", "rowId", "columnName", "oldValue", "newValue"
+       FROM "phase3_archive"."value_changes" WHERE "sourceSchema" = $1
+       ORDER BY "tableName", "columnName", "rowId"`,
+      schema,
+    )
+  ).map((c) => `${c.tableName}.${c.columnName}:${c.rowId} ${c.oldValue} -> ${c.newValue}`);
 
 describe('20261006010000_enum_columns (D2)', () => {
   const schema = 'fixture_d2_enums';
@@ -75,10 +131,14 @@ describe('20261006010000_enum_columns (D2)', () => {
         ('gm2', 'u2', 'g1', 'Leader'),
         ('gm3', 'u3', 'g1', 'captain');
       INSERT INTO "attendance" ("id", "userId", "serviceDate", "serviceType", "present", "createdAt") VALUES
-        ('a1', 'u1', '2026-01-04', 'Sunday Service', true, '2026-01-04 10:00'),
-        ('a2', 'u1', '2026-01-04', 'sunday_service', false, '2026-01-04 11:00'),
         ('a3', 'u1', '2026-01-07', 'youth night', true, '2026-01-07 19:00'),
         ('a4', 'u2', '2026-01-04', 'bible-study', false, '2026-01-04 09:00');
+      -- a1/a2 and a5/a6 collide once normalised (a5 and a6 both become 'other'); all carry notes.
+      INSERT INTO "attendance" ("id", "userId", "serviceDate", "serviceType", "present", "notes", "createdAt") VALUES
+        ('a1', 'u1', '2026-01-04', 'Sunday Service', true, 'arrived late', '2026-01-04 10:00'),
+        ('a2', 'u1', '2026-01-04', 'sunday_service', false, 'brought a guest', '2026-01-04 11:00'),
+        ('a5', 'u2', '2026-01-07 19:00', 'Youth Night', false, 'youth A', '2026-01-07 19:00'),
+        ('a6', 'u2', '2026-01-07 19:00', 'choir', true, ' choir B ', '2026-01-07 19:30');
       INSERT INTO "families" ("id", "familyName", "updatedAt") VALUES ('f1', 'Doe', now());
       INSERT INTO "family_relationships" ("id", "primaryUserId", "relatedUserId", "relationshipType", "isActive", "familyId", "createdAt", "updatedAt") VALUES
         ('r1', 'u1', 'u2', 'Spouse', true, 'f1', '2026-01-01', now()),
@@ -208,15 +268,27 @@ describe('20261006010000_enum_columns (D2)', () => {
 
   it('collapses rows that normalising made duplicates under a unique index', async () => {
     // a1 ('Sunday Service') and a2 ('sunday_service') are one service: a2 already held the
-    // canonical value, so it is kept, and present is true because a1 was.
+    // canonical value, so it is kept, present is true because a1 was, and it holds both notes.
+    // a5 and a6 both become 'other': the older a5 is kept and keeps both legacy labels.
     expect(
-      await rows<{ id: string; serviceType: string; present: boolean }>(
-        `SELECT "id", "serviceType"::text AS "serviceType", "present" FROM "$s"."attendance" ORDER BY "id"`,
+      await rows<{ id: string; serviceType: string; present: boolean; notes: string | null }>(
+        `SELECT "id", "serviceType"::text AS "serviceType", "present", "notes" FROM "$s"."attendance" ORDER BY "id"`,
       ),
     ).toEqual([
-      { id: 'a2', serviceType: 'sunday_service', present: true },
-      { id: 'a3', serviceType: 'other', present: true },
-      { id: 'a4', serviceType: 'bible_study', present: false },
+      {
+        id: 'a2',
+        serviceType: 'sunday_service',
+        present: true,
+        notes: 'arrived late\nbrought a guest',
+      },
+      { id: 'a3', serviceType: 'other', present: true, notes: 'Legacy service type: youth night' },
+      { id: 'a4', serviceType: 'bible_study', present: false, notes: null },
+      {
+        id: 'a5',
+        serviceType: 'other',
+        present: true,
+        notes: 'youth A\nLegacy service type: Youth Night\nchoir B\nLegacy service type: choir',
+      },
     ]);
     expect(
       await rows<{ id: string; relationshipType: string; isActive: boolean }>(
@@ -226,6 +298,72 @@ describe('20261006010000_enum_columns (D2)', () => {
     ).toEqual([
       { id: 'r2', relationshipType: 'spouse', isActive: true },
       { id: 'r3', relationshipType: 'other', isActive: true },
+    ]);
+  });
+
+  it('copies every collapsed row, unchanged, into phase3_archive', async () => {
+    const attendance = await archivedRows(schema, 'attendance');
+    expect(
+      attendance.map(({ id, row, migration, reason }) => ({
+        id,
+        notes: row.notes,
+        serviceType: row.serviceType,
+        migration,
+        reason,
+      })),
+    ).toEqual([
+      {
+        id: 'a1',
+        notes: 'arrived late',
+        serviceType: 'Sunday Service',
+        migration: '20261006010000_enum_columns',
+        reason: 'collapsed into attendance row a2 (same member, time and service type)',
+      },
+      {
+        id: 'a6',
+        notes: ' choir B ',
+        serviceType: 'choir',
+        migration: '20261006010000_enum_columns',
+        reason: 'collapsed into attendance row a5 (same member, time and service type)',
+      },
+    ]);
+    const relationships = await archivedRows(schema, 'family_relationships');
+    expect(
+      relationships.map(({ id, row, reason }) => ({ id, type: row.relationshipType, reason })),
+    ).toEqual([
+      {
+        id: 'r1',
+        type: 'Spouse',
+        reason: 'collapsed into family_relationships row r2 (same pair and type)',
+      },
+    ]);
+  });
+
+  it('records every value that was mapped to a fallback, and only those', async () => {
+    expect(await valueChanges(schema)).toEqual([
+      'attendance.serviceType:a3 youth night -> other',
+      'attendance.serviceType:a5 Youth Night -> other',
+      'attendance.serviceType:a6 choir -> other',
+      'family_relationships.relationshipType:r3 cousin -> other',
+      'group_members.role:gm3 captain -> member',
+      'groups.type:g2 book club -> ministry',
+      'media.type:m1 VIDEO -> YOUTUBE_VIDEO',
+      'member_activities.activityType:act1 group_participation -> other',
+      'member_engagement.membershipStage:e2 champion -> visitor',
+      'member_engagement.riskLevel:e2 severe -> low',
+      'member_interactions.category:i1 random -> null',
+      'member_interactions.channel:i1 Fax -> in_person',
+      'member_interactions.interactionType:i1 letter -> note_added',
+      'member_interactions.priority:i1 whatever -> normal',
+      'member_interactions.status:i1 pending -> completed',
+      'member_milestones.category:ms1 academic -> general',
+      'member_milestones.impact:ms1 huge -> medium',
+      'member_milestones.milestoneType:ms1 graduation -> other',
+      'member_notes.noteType:n1 random -> general',
+      'member_tags.category:t1 mystery -> general',
+      'users.gender:u2 M -> other',
+      'users.maritalStatus:u2 complicated -> null',
+      'users.membershipType:u2 guest -> null',
     ]);
   });
 
@@ -401,6 +539,40 @@ describe('20261006020000_relations_keys_indexes (D3)', () => {
     expect(await column('saved_searches', 'createdById')).toEqual({ s1: 'u1' });
   });
 
+  it('records every changed reference and archives every deleted row', async () => {
+    expect(await valueChanges(schema)).toEqual([
+      'families.headOfFamilyId:f3 ghost -> null',
+      'groups.leaderId:g2 ghost -> null',
+      'member_interactions.staffMemberId:i2 ghost -> null',
+      'member_notes.authorId:n2 ghost -> admin_old',
+      'user_tags.addedById:ut2 ghost -> null',
+    ]);
+    const searches = await archivedRows(schema, 'saved_searches');
+    expect(
+      searches.map(({ id, row, reason }) => ({
+        id,
+        name: row.name,
+        owner: row.createdById,
+        reason,
+      })),
+    ).toEqual([{ id: 's2', name: 'Orphan', owner: 'ghost', reason: 'owner missing' }]);
+    const pairs = await archivedRows(schema, 'family_relationships');
+    expect(pairs.map(({ id, migration, reason }) => ({ id, migration, reason }))).toEqual([
+      {
+        id: 'fr1',
+        migration: '20261006020000_relations_keys_indexes',
+        reason:
+          'collapsed into family_relationships row fr2 (same pair; type already in the new meaning)',
+      },
+      {
+        id: 'fr4',
+        migration: '20261006020000_relations_keys_indexes',
+        reason:
+          'collapsed into family_relationships row fr5 (same pair; type already in the new meaning)',
+      },
+    ]);
+  });
+
   it('stores each family pair once with primaryUserId < relatedUserId', async () => {
     expect(
       await rows<{
@@ -414,20 +586,23 @@ describe('20261006020000_relations_keys_indexes (D3)', () => {
          FROM "$s"."family_relationships" ORDER BY "id"`,
       ),
     ).toEqual([
-      // fr1 mirrored fr2 (u2 is the parent of u1): the canonical fr2 is kept, active because fr1 was.
+      // Legacy rows meant "related is the primary's <type>": fr1 (u2, u1, 'parent') says u1 is
+      // u2's parent and its mirror fr2 (u1, u2, 'child') says u2 is u1's child. In the new meaning
+      // (the primary's relation to the related user) that is (u1, u2, 'parent'); the canonical fr2
+      // is kept, active because fr1 was.
       {
         id: 'fr2',
         primaryUserId: 'u1',
         relatedUserId: 'u2',
-        relationshipType: 'child',
+        relationshipType: 'parent',
         isActive: true,
       },
-      // Swapped and inverted: u3 is the grandparent of u1.
+      // fr3 (u3, u1, 'grandparent') said u1 is u3's grandparent: (u1, u3, 'grandparent').
       {
         id: 'fr3',
         primaryUserId: 'u1',
         relatedUserId: 'u3',
-        relationshipType: 'grandchild',
+        relationshipType: 'grandparent',
         isActive: true,
       },
       // fr4 and fr5 name the same pair the other way round: the older fr5 wins and is swapped.
@@ -471,6 +646,35 @@ describe('20261006020000_relations_keys_indexes (D3)', () => {
   });
 });
 
+describe('20261006020000_relations_keys_indexes (D3) without an admin', () => {
+  const schema = 'fixture_d3_no_admin';
+
+  afterAll(() => dropSchema(schema));
+
+  it('stops with a clear error instead of giving orphaned notes to a non-admin', () => {
+    expect(() =>
+      migrateFixture(
+        schema,
+        '20261006020000_relations_keys_indexes',
+        `
+        INSERT INTO "roles" ("id", "name", "permissions") VALUES ('role_leader', 'leader', '[]');
+        INSERT INTO "users" ("id", "email", "password", "name", "createdAt", "updatedAt") VALUES
+          ('oldest', 'oldest@example.org', 'x', 'Oldest', '2019-01-01', now()),
+          ('u1', 'u1@example.org', 'x', 'U1', '2020-01-01', now());
+        INSERT INTO "user_roles" ("id", "userId", "roleId") VALUES ('ur1', 'oldest', 'role_leader');
+        INSERT INTO "member_notes" ("id", "userId", "authorId", "content", "isPrivate", "updatedAt") VALUES
+          ('n1', 'u1', 'ghost', 'private pastoral note', true, now());
+        `,
+      ),
+    ).toThrow(
+      /1 note\(s\) reference a missing author and there is no admin account to own them; create an admin and rerun the migration/,
+    );
+  }, 60_000);
+});
+
+/** JSON text nested `depth` objects deep: {"a":{"a":...1...}}. */
+const nestedJson = (depth: number) => `${'{"a":'.repeat(depth)}1${'}'.repeat(depth)}`;
+
 describe('20261006030000_native_column_types (D4)', () => {
   const schema = 'fixture_d4_native_types';
   const rows = <T>(sql: string) => prisma.$queryRawUnsafe<T[]>(sql.replaceAll('$s', schema));
@@ -499,15 +703,19 @@ describe('20261006030000_native_column_types (D4)', () => {
         ('a2', 'u1', 'volunteer', '{hours: 3}'),
         ('a3', 'u1', 'volunteer', NULL),
         ('a4', 'u1', 'volunteer', 'null'),
-        ('a5', 'u1', 'volunteer', '   ');
+        ('a5', 'u1', 'volunteer', '   '),
+        ('a6', 'u1', 'volunteer', '${nestedJson(63)}');
       INSERT INTO "member_interactions" ("id", "userId", "interactionType", "channel", "metadata") VALUES
         ('i1', 'u1', 'call_made', 'phone', '{"duration": 12, "tags": ["a"]}'),
-        ('i2', 'u1', 'call_made', 'phone', 'oops');
+        ('i2', 'u1', 'call_made', 'phone', 'oops'),
+        ('i3', 'u1', 'call_made', 'phone', '${nestedJson(200)}'),
+        ('i4', 'u1', 'call_made', 'phone', '{"note": "\\u0000"}');
       INSERT INTO "saved_searches" ("id", "name", "query", "createdById", "updatedAt") VALUES
         ('s1', 'Valid', '{"conditions":[{"field":"name","operator":"contains","value":"a"}],"logic":"AND"}', 'u1', now()),
         ('s2', 'Stale', '{"conditions":[{"field":"age","operator":"gt","value":30}]}', 'u1', now()),
         ('s3', 'Broken', '{not json', 'u1', now()),
-        ('s4', 'Empty', '', 'u2', now());
+        ('s4', 'Empty', '', 'u2', now()),
+        ('s5', 'Deep', '${nestedJson(200)}', 'u1', now());
       `,
     );
   }, 60_000);
@@ -571,25 +779,63 @@ describe('20261006030000_native_column_types (D4)', () => {
     });
   });
 
-  it('parses metadata; unparsable, blank and JSON null values become NULL', async () => {
+  it('parses metadata; blank and JSON null become NULL, unparsable or too deep text is kept as a string', async () => {
     expect(await values<unknown>('member_activities', 'metadata')).toEqual({
       a1: { hours: 3 },
-      a2: null,
+      a2: '{hours: 3}',
       a3: null,
       a4: null,
       a5: null,
+      a6: JSON.parse(nestedJson(63)),
     });
     expect(await values<unknown>('member_interactions', 'metadata')).toEqual({
       i1: { duration: 12, tags: ['a'] },
-      i2: null,
+      i2: 'oops',
+      i3: nestedJson(200),
+      i4: '{"note": "\\u0000"}',
     });
   });
 
-  it('keeps parsable saved searches (stale ones too) and deletes the ones that do not parse', async () => {
+  it('keeps parsable saved searches (stale ones too) and deletes the ones that do not parse or are too deep', async () => {
     expect(await values<unknown>('saved_searches', 'query')).toEqual({
       s1: { conditions: [{ field: 'name', operator: 'contains', value: 'a' }], logic: 'AND' },
       s2: { conditions: [{ field: 'age', operator: 'gt', value: 30 }] },
     });
+  });
+
+  it('copies every deleted saved search, query text included, into phase3_archive', async () => {
+    const archived = await archivedRows(schema, 'saved_searches');
+    expect(
+      archived.map(({ id, row, migration, reason }) => ({
+        id,
+        query: row.query,
+        owner: row.createdById,
+        migration,
+        reason,
+      })),
+    ).toEqual([
+      {
+        id: 's3',
+        query: '{not json',
+        owner: 'u1',
+        migration: '20261006030000_native_column_types',
+        reason: 'query is not JSON',
+      },
+      {
+        id: 's4',
+        query: '',
+        owner: 'u2',
+        migration: '20261006030000_native_column_types',
+        reason: 'query is not JSON',
+      },
+      {
+        id: 's5',
+        query: nestedJson(200),
+        owner: 'u1',
+        migration: '20261006030000_native_column_types',
+        reason: 'query nested 64 levels or deeper',
+      },
+    ]);
   });
 
   it('gives new rows an empty list and leaves no helper functions behind', async () => {
@@ -605,6 +851,48 @@ describe('20261006030000_native_column_types (D4)', () => {
        WHERE n.nspname = '$s' AND p.proname LIKE 'phase3_%'`,
     );
     expect(helpers).toEqual([]);
+  });
+});
+
+describe('legacy JSON migrated to the head schema stays readable through Prisma', () => {
+  const schema = 'fixture_d4_prisma_read';
+  let client: PrismaClient;
+
+  beforeAll(() => {
+    migrateFixture(
+      schema,
+      '20261006030000_native_column_types',
+      `
+      INSERT INTO "users" ("id", "email", "password", "name", "updatedAt") VALUES
+        ('u1', 'u1@example.org', 'x', 'U1', now());
+      INSERT INTO "member_activities" ("id", "userId", "activityType", "metadata") VALUES
+        ('a1', 'u1', 'volunteer', '${nestedJson(200)}');
+      INSERT INTO "member_interactions" ("id", "userId", "interactionType", "channel", "metadata") VALUES
+        ('i1', 'u1', 'call_made', 'phone', '${nestedJson(200)}'),
+        ('i2', 'u1', 'call_made', 'phone', '{"note": "\\u0000"}');
+      INSERT INTO "saved_searches" ("id", "name", "query", "createdById", "isPublic", "updatedAt") VALUES
+        ('s1', 'Deep', '${nestedJson(200)}', 'u1', true, now());
+      `,
+      true,
+    );
+    client = new PrismaClient({ datasourceUrl: `${TEST_DATABASE_URL}?schema=${schema}` });
+  }, 60_000);
+
+  afterAll(async () => {
+    await client.$disconnect();
+    dropSchema(schema);
+  });
+
+  it('reads the member with interactions and activities, and the saved searches', async () => {
+    const member = await client.user.findUnique({
+      where: { id: 'u1' },
+      include: { interactions: true, activities: true },
+    });
+    expect(member?.interactions.map((i) => i.metadata)).toEqual(
+      expect.arrayContaining([nestedJson(200), '{"note": "\\u0000"}']),
+    );
+    expect(member?.activities.map((a) => a.metadata)).toEqual([nestedJson(200)]);
+    expect(await client.savedSearch.findMany({ where: { isPublic: true } })).toEqual([]);
   });
 });
 
@@ -714,6 +1002,34 @@ describe('20261006040000_services_and_attendance (D5)', () => {
         present: true,
         notes: '',
         recordedById: null,
+      },
+    ]);
+  });
+
+  it('copies the collapsed duplicates, unchanged, into phase3_archive', async () => {
+    const archived = await archivedRows(schema, 'attendance');
+    expect(
+      archived.map(({ id, row, migration, reason }) => ({
+        id,
+        notes: row.notes,
+        present: row.present,
+        migration,
+        reason,
+      })),
+    ).toEqual([
+      {
+        id: 'a2',
+        notes: 'evening',
+        present: true,
+        migration: '20261006040000_services_and_attendance',
+        reason: 'collapsed into attendance row a1 (same member and service day)',
+      },
+      {
+        id: 'a3',
+        notes: ' early ',
+        present: false,
+        migration: '20261006040000_services_and_attendance',
+        reason: 'collapsed into attendance row a1 (same member and service day)',
       },
     ]);
   });
