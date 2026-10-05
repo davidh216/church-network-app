@@ -16,6 +16,7 @@ import InlineError from '@/components/ui/InlineError';
 import Skeleton from '@/components/ui/Skeleton';
 import SaveSearchForm, { type SaveSearchValues } from './search/SaveSearchForm';
 import SavedSearchItem from './search/SavedSearchItem';
+import { PANEL_IDS } from './MemberListActions';
 
 interface SavedSearchesProps {
   /** Applies a query to the member list (a saved, predefined or edited one). */
@@ -76,13 +77,14 @@ export default function SavedSearches({ onLoadSearch, onClose, currentQuery }: S
 
   return (
     <section
+      id={PANEL_IDS.saved}
       aria-labelledby="saved-searches-heading"
       className="bg-white border border-gray-200 rounded-lg shadow-lg p-6 m-4"
     >
       <div className="flex items-center justify-between mb-4">
-        <h3 id="saved-searches-heading" className="text-lg font-medium text-gray-900">
+        <h2 id="saved-searches-heading" className="text-lg font-medium text-gray-900">
           Saved Searches
-        </h3>
+        </h2>
         <div className="flex items-center gap-2">
           {currentQuery && !showSaveForm && (
             <button
@@ -136,7 +138,7 @@ export default function SavedSearches({ onLoadSearch, onClose, currentQuery }: S
       )}
 
       <div className="mb-6">
-        <h4 className="text-sm font-medium text-gray-900 mb-3">Quick Searches</h4>
+        <h3 className="text-sm font-medium text-gray-900 mb-3">Quick Searches</h3>
         <ul className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {predefinedSearches().map((search) => (
             <li key={search.name}>
@@ -154,7 +156,7 @@ export default function SavedSearches({ onLoadSearch, onClose, currentQuery }: S
       </div>
 
       <div>
-        <h4 className="text-sm font-medium text-gray-900 mb-3">Your Saved Searches</h4>
+        <h3 className="text-sm font-medium text-gray-900 mb-3">Your Saved Searches</h3>
         {searchesQuery.error ? (
           <InlineError
             error={searchesQuery.error}

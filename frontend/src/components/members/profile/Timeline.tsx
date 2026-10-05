@@ -21,7 +21,7 @@ export default function Timeline({ member }: { member: MemberDetails }) {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-medium text-gray-900">{activity.title}</h4>
+                  <h3 className="text-sm font-medium text-gray-900">{activity.title}</h3>
                   <span className="text-xs text-gray-500">{formatDate(activity.activityDate)}</span>
                 </div>
                 {activity.description && (

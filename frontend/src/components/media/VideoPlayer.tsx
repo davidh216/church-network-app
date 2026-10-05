@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect, useId, useRef, useCallback } from 'react';
+import { useState, useEffect, useId, useRef, useCallback, type RefObject } from 'react';
 import type { MediaItem } from '@/types/domain';
 import { embedUrl, mediaVideoId } from '@/lib/media/youtube';
+import { useYouTubePlayer } from '@/lib/media/useYouTubePlayer';
 import PlayerControls from './PlayerControls';
 import PlaylistPanel from './PlaylistPanel';
 import Dialog from '@/components/ui/Dialog';
@@ -22,6 +23,8 @@ interface VideoPlayerProps {
   onPlayNext?: () => void;
   onPlayPrevious?: () => void;
   onSelect?: (index: number) => void;
+  /** Focused on close when the button that opened the dialog is gone (the page heading). */
+  fallbackFocus?: RefObject<HTMLElement | null>;
 }
 
 export default function VideoPlayer({
@@ -32,6 +35,7 @@ export default function VideoPlayer({
   onPlayNext,
   onPlayPrevious,
   onSelect,
+  fallbackFocus,
 }: VideoPlayerProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
@@ -40,6 +44,8 @@ export default function VideoPlayer({
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const titleId = useId();
+  const helpId = useId();
+  const { listen, togglePlay } = useYouTubePlayer(iframeRef);
 
   // Escape is handled by the Dialog (onEscape below); these are the player's own shortcuts.
   const handleKeyDown = useCallback(
@@ -52,7 +58,7 @@ export default function VideoPlayer({
           break;
         case ' ':
           e.preventDefault();
-          togglePlayPause();
+          togglePlay();
           break;
         case 'ArrowRight':
           if (onPlayNext && currentIndex < playlist.length - 1) {
@@ -66,17 +72,8 @@ export default function VideoPlayer({
           break;
       }
     },
-    [onPlayNext, onPlayPrevious, currentIndex, playlist.length],
+    [onPlayNext, onPlayPrevious, currentIndex, playlist.length, togglePlay],
   );
-
-  const togglePlayPause = () => {
-    if (iframeRef.current) {
-      iframeRef.current.contentWindow?.postMessage(
-        '{"event":"command","func":"pauseVideo","args":""}',
-        '*',
-      );
-    }
-  };
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -133,7 +130,9 @@ export default function VideoPlayer({
       onClose={onClose}
       onEscape={() => (document.fullscreenElement ? exitFullscreen() : onClose())}
       closeOnBackdrop={!isFullscreen}
+      describedBy={helpId}
       panelRef={playerRef}
+      fallbackFocus={fallbackFocus}
       overlayClassName={`fixed inset-0 bg-black z-50 flex items-center justify-center video-player-modal ${
         isFullscreen ? 'p-0' : 'p-4'
       }`}
@@ -141,6 +140,10 @@ export default function VideoPlayer({
         isFullscreen ? '' : 'max-w-7xl max-h-[90vh] rounded-lg overflow-hidden'
       }`}
     >
+      <p id={helpId} className="sr-only">
+        Keyboard shortcuts: Space plays or pauses, F toggles fullscreen, the left and right arrow
+        keys play the previous or next video, and Escape closes the player.
+      </p>
       {/* Moving the mouse brings the fullscreen controls back (focus does too, see PlayerControls). */}
       <div className="flex w-full h-full" onMouseMove={handleMouseMove}>
         {/* Main Video Area */}
@@ -164,6 +167,7 @@ export default function VideoPlayer({
             <iframe
               ref={iframeRef}
               src={embed}
+              onLoad={listen}
               title={media.title}
               className="w-full h-full"
               allowFullScreen

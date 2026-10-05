@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import type { MemberDetails } from '@/types/domain';
-import { formatStage, initials } from '@/lib/members/display';
+import { initials, stageLabel } from '@/lib/members/display';
 import { calculateAge, profileDate, riskBadgeClass } from '@/lib/members/profile';
 import AvatarImage from '@/components/ui/AvatarImage';
 
@@ -59,7 +59,7 @@ export default function ProfileHeader({
             ))}
             {member.engagement && (
               <span className={`${badge} bg-purple-100 text-purple-800`}>
-                {formatStage(member.engagement.membershipStage)}
+                {stageLabel(member.engagement.membershipStage)}
               </span>
             )}
           </div>

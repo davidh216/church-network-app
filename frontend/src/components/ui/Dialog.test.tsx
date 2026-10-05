@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import Dialog from '@/components/ui/Dialog';
 
@@ -140,5 +140,63 @@ describe('Dialog', () => {
     rerender(ui(false));
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(outer).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends focus that reaches a guard (from a cross-origin iframe) back into the panel', () => {
+    render(<Harness />);
+    open();
+    const [before, after] = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-focus-guard]'),
+    );
+    const dialog = screen.getByRole('dialog');
+    expect(before!.nextElementSibling).toBe(dialog);
+    expect(after!.previousElementSibling).toBe(dialog);
+    // Tab out of the last control (the browser moves focus without a keydown we can see).
+    after!.focus();
+    expect(document.activeElement).toBe(screen.getByLabelText('First'));
+    // Shift+Tab out of the first control.
+    before!.focus();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Last' }));
+  });
+
+  it('focuses fallbackFocus on close when the opener has gone', () => {
+    function Removing() {
+      const [open, setOpen] = useState(false);
+      const [rowGone, setRowGone] = useState(false);
+      const heading = useRef<HTMLHeadingElement>(null);
+      return (
+        <div>
+          <h1 ref={heading} tabIndex={-1}>
+            Members
+          </h1>
+          {!rowGone && (
+            <button type="button" onClick={() => setOpen(true)}>
+              Edit row
+            </button>
+          )}
+          {open && (
+            <Dialog labelledBy="e" onClose={() => setOpen(false)} fallbackFocus={heading}>
+              <h2 id="e">Edit</h2>
+              <button
+                type="button"
+                onClick={() => {
+                  setRowGone(true);
+                  setOpen(false);
+                }}
+              >
+                Save
+              </button>
+            </Dialog>
+          )}
+        </div>
+      );
+    }
+    render(<Removing />);
+    const opener = screen.getByRole('button', { name: 'Edit row' });
+    opener.focus();
+    fireEvent.click(opener);
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(screen.queryByRole('button', { name: 'Edit row' })).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Members' }));
   });
 });

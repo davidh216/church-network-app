@@ -50,9 +50,9 @@ export default function MediaListView({ media, onPlay }: MediaListViewProps) {
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between">
                   <div className="flex-1 min-w-0 mr-4">
-                    <h3 className="text-lg font-medium text-gray-900 mb-1 truncate">
+                    <h2 className="text-lg font-medium text-gray-900 mb-1 truncate">
                       {item.title}
-                    </h3>
+                    </h2>
                     <div className="flex items-center space-x-3 text-sm text-gray-500 mb-2">
                       <span>By {item.uploadedBy?.name}</span>
                       <span>•</span>

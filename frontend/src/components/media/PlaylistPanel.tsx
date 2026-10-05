@@ -32,7 +32,13 @@ export default function PlaylistPanel({
             className="p-1 hover:bg-gray-700 rounded-sm"
             aria-label="Close playlist"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg
+              aria-hidden="true"
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -61,7 +67,12 @@ export default function PlaylistPanel({
               <div className="flex items-start space-x-3">
                 <div className="text-sm text-gray-400 mt-1 w-6">
                   {current ? (
-                    <svg className="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                    <svg
+                      aria-hidden="true"
+                      className="w-4 h-4 text-red-500"
+                      fill="currentColor"
+                      viewBox="0 0 20 20"
+                    >
                       <path d="M8 5v10l8-5-8-5z" />
                     </svg>
                   ) : (

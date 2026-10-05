@@ -55,7 +55,12 @@ export default function StatTiles({ analytics }: { analytics: MemberAnalytics })
               <div
                 className={`w-8 h-8 ${tile.colour} rounded-full flex items-center justify-center`}
               >
-                <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                <svg
+                  aria-hidden="true"
+                  className="w-4 h-4 text-white"
+                  fill="currentColor"
+                  viewBox="0 0 20 20"
+                >
                   {tile.evenOdd ? (
                     <path fillRule="evenodd" clipRule="evenodd" d={tile.icon} />
                   ) : (

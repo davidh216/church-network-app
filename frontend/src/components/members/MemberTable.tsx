@@ -34,6 +34,7 @@ export default function MemberTable({
   onEdit,
 }: MemberTableProps) {
   const allOnPage = members.length > 0 && members.every((m) => selected.has(m.id));
+  const someOnPage = !allOnPage && members.some((m) => selected.has(m.id));
   return (
     <div className="overflow-x-auto">
       <table className="min-w-full divide-y divide-gray-200">
@@ -45,6 +46,10 @@ export default function MemberTable({
                   type="checkbox"
                   aria-label="Select all members on this page"
                   checked={allOnPage}
+                  // Mixed when only some rows on this page are selected.
+                  ref={(el) => {
+                    if (el) el.indeterminate = someOnPage;
+                  }}
                   onChange={onToggleSelectAll}
                   className={checkboxClass}
                 />

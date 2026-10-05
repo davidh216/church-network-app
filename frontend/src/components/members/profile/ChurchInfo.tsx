@@ -7,7 +7,7 @@ export default function ChurchInfo({ member }: { member: MemberDetails }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
       <div className="space-y-4">
-        <h3 className="text-lg font-medium text-gray-900">Membership Information</h3>
+        <h2 className="text-lg font-medium text-gray-900">Membership Information</h2>
         <Field label="Membership Type" className="text-sm text-gray-900 capitalize">
           {member.membershipType || 'Not specified'}
         </Field>
@@ -22,7 +22,7 @@ export default function ChurchInfo({ member }: { member: MemberDetails }) {
       </div>
 
       <div className="space-y-4">
-        <h3 className="text-lg font-medium text-gray-900">Background</h3>
+        <h2 className="text-lg font-medium text-gray-900">Background</h2>
         <Field label="Previous Church">{member.previousChurch || 'Not specified'}</Field>
         <Field label="How Did You Hear About Us?">
           {member.howHeardAboutUs || 'Not specified'}
@@ -30,7 +30,7 @@ export default function ChurchInfo({ member }: { member: MemberDetails }) {
         <Field label="Last Attended">{formatDate(member.lastAttended)}</Field>
         {member.engagement && (
           <div className="mt-6">
-            <h3 className="text-lg font-medium text-gray-900">Engagement Analytics</h3>
+            <h2 className="text-lg font-medium text-gray-900">Engagement Analytics</h2>
             <div className="grid grid-cols-2 gap-4">
               <Field label="Overall Score">
                 {member.engagement.engagementScore.toFixed(1)}/100

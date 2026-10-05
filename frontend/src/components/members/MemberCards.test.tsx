@@ -1,5 +1,6 @@
 import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import { EngagementBadge } from '@/components/members/MemberBadges';
 import MemberCards from '@/components/members/MemberCards';
 import MemberRowActions from '@/components/members/MemberRowActions';
 import { render } from '@/test/render';
@@ -56,5 +57,20 @@ describe('MemberCards', () => {
     expect(screen.queryByRole('checkbox')).toBeNull();
     expect(screen.queryByText('Inactive')).toBeNull();
     expect(screen.queryByRole('link', { name: 'View' })).toBeNull();
+  });
+});
+
+describe('EngagementBadge', () => {
+  it('names the risk level in text; the coloured dot is decorative', async () => {
+    const { container } = await render(
+      <EngagementBadge
+        member={{
+          ...ada,
+          engagement: { engagementScore: 42, membershipStage: 'visitor', riskLevel: 'high' },
+        }}
+      />,
+    );
+    expect(screen.getByText('High Risk')).toHaveClass('sr-only');
+    expect(container.querySelector('.bg-red-400')).toHaveAttribute('aria-hidden', 'true');
   });
 });

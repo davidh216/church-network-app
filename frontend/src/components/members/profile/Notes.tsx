@@ -41,7 +41,7 @@ export default function Notes({ member }: { member: MemberDetails }) {
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="space-y-4">
-          <h3 className="text-lg font-medium text-gray-900">Skills & Interests</h3>
+          <h2 className="text-lg font-medium text-gray-900">Skills & Interests</h2>
           <TagList
             label="Volunteer Skills"
             items={parseJsonList(member.volunteerSkills)}
@@ -56,7 +56,7 @@ export default function Notes({ member }: { member: MemberDetails }) {
           />
         </div>
         <div className="space-y-4">
-          <h3 className="text-lg font-medium text-gray-900">Notes</h3>
+          <h2 className="text-lg font-medium text-gray-900">Notes</h2>
           <div className="bg-gray-50 p-4 rounded-lg">
             <p className="text-sm text-gray-900 whitespace-pre-wrap">
               {member.notes || 'No notes available'}
@@ -67,12 +67,12 @@ export default function Notes({ member }: { member: MemberDetails }) {
 
       {staffNotes.length > 0 && (
         <div className="border-t border-gray-200 pt-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Staff Notes</h3>
+          <h2 className="text-lg font-medium text-gray-900 mb-4">Staff Notes</h2>
           <div className="space-y-4">
             {staffNotes.map((note) => (
               <div key={note.id} className="border border-gray-200 rounded-lg p-4">
                 <div className="flex items-center justify-between mb-2">
-                  <h4 className="text-sm font-medium text-gray-900">{note.title || 'Note'}</h4>
+                  <h3 className="text-sm font-medium text-gray-900">{note.title || 'Note'}</h3>
                   <span className="text-xs text-gray-500">{formatDateTime(note.createdAt)}</span>
                 </div>
                 <p className="text-sm text-gray-600">{note.content}</p>
@@ -94,7 +94,7 @@ export default function Notes({ member }: { member: MemberDetails }) {
       )}
 
       <div className="border-t border-gray-200 pt-6">
-        <h3 className="text-lg font-medium text-gray-900 mb-4">Account Information</h3>
+        <h2 className="text-lg font-medium text-gray-900 mb-4">Account Information</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
           <Field label="Created" className="text-gray-900">
             {formatDate(member.createdAt)}

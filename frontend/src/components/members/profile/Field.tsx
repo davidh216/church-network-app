@@ -23,7 +23,7 @@ export function Field({
 export function SectionHeader({ title, count }: { title: string; count?: string }) {
   return (
     <div className="flex justify-between items-center">
-      <h3 className="text-lg font-medium text-gray-900">{title}</h3>
+      <h2 className="text-lg font-medium text-gray-900">{title}</h2>
       {count && <span className="text-sm text-gray-500">{count}</span>}
     </div>
   );

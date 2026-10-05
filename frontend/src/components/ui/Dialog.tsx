@@ -6,6 +6,8 @@ import { focusableWithin, trapTarget } from '@/lib/a11y/focus';
 interface DialogProps {
   /** id of the element that names the dialog (usually its heading). */
   labelledBy: string;
+  /** id of an element with more about the dialog (the player's keyboard shortcuts). */
+  describedBy?: string;
   /** Escape, backdrop click and the caller's own close controls call this. */
   onClose: () => void;
   /** Overrides what Escape does (the video player leaves fullscreen first). */
@@ -18,6 +20,11 @@ interface DialogProps {
   className?: string;
   /** Receives the dialog box element (the video player makes it fullscreen). */
   panelRef?: React.RefObject<HTMLDivElement | null>;
+  /**
+   * Gets focus on close when the element that opened the dialog is gone (a row that a save
+   * filtered out); usually the page heading, which then needs `tabIndex={-1}`.
+   */
+  fallbackFocus?: React.RefObject<HTMLElement | null>;
   children: ReactNode;
 }
 
@@ -37,19 +44,21 @@ const DEFAULT_PANEL =
  */
 export default function Dialog({
   labelledBy,
+  describedBy,
   onClose,
   onEscape,
   closeOnBackdrop = true,
   overlayClassName = DEFAULT_OVERLAY,
   className = DEFAULT_PANEL,
   panelRef,
+  fallbackFocus,
   children,
 }: DialogProps) {
   const ownRef = useRef<HTMLDivElement>(null);
   const ref = panelRef ?? ownRef;
   // The latest callbacks, so the open/close effect runs once per mount.
-  const handlers = useRef({ onClose, onEscape });
-  handlers.current = { onClose, onEscape };
+  const handlers = useRef({ onClose, onEscape, fallbackFocus });
+  handlers.current = { onClose, onEscape, fallbackFocus };
 
   useEffect(() => {
     const panel = ref.current;
@@ -85,6 +94,7 @@ export default function Dialog({
       if (index !== -1) openDialogs.splice(index, 1);
       if (openDialogs.length === 0) document.body.style.overflow = savedBodyOverflow;
       if (opener?.isConnected) opener.focus();
+      else handlers.current.fallbackFocus?.current?.focus();
     };
   }, [ref]);
 
@@ -92,19 +102,38 @@ export default function Dialog({
     if (closeOnBackdrop && e.target === e.currentTarget) handlers.current.onClose();
   };
 
+  // Focus guards: when focus is somewhere the keydown trap cannot see (a cross-origin iframe
+  // such as the YouTube player), Tab lands on a guard, which sends it back into the panel.
+  const wrapFocus = (toLast: boolean) => {
+    const panel = ref.current;
+    if (!panel) return;
+    const items = focusableWithin(panel);
+    ((toLast ? items[items.length - 1] : items[0]) ?? panel).focus();
+  };
+
   return (
     // The backdrop is only a mouse shortcut; keyboard users close with Escape or a button.
     <div className={overlayClassName} role="presentation" onClick={handleBackdrop}>
+      <FocusGuard onFocus={() => wrapFocus(true)} />
       <div
         ref={ref}
         role="dialog"
         aria-modal="true"
         aria-labelledby={labelledBy}
+        aria-describedby={describedBy}
         tabIndex={-1}
         className={`${className} focus:outline-hidden`}
       >
         {children}
       </div>
+      <FocusGuard onFocus={() => wrapFocus(false)} />
     </div>
   );
+}
+
+/** An invisible tab stop just outside the panel that hands focus back into it. */
+function FocusGuard({ onFocus }: { onFocus: () => void }) {
+  // A guard has to be a tab stop to catch focus; it never keeps it (onFocus moves it on).
+  // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
+  return <span data-focus-guard tabIndex={0} onFocus={onFocus} className="sr-only" />;
 }

@@ -1,7 +1,7 @@
 // File: frontend/src/components/members/MemberList.tsx
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { DEFAULT_USER_PAGE_SIZE, type SearchQuery, type UserSortField } from '@embrace/shared';
 import { exportUsers } from '@/lib/api/users';
 import { useIsStaff } from '@/lib/auth/AuthProvider';
@@ -55,6 +55,13 @@ export default function MemberList() {
   const [toast, setToast] = useState('');
   // An applied advanced query (staff): the list then shows POST /api/users/search results.
   const [advancedQuery, setAdvancedQuery] = useState<SearchQuery | null>(null);
+  // Focus targets: the panel toggles (when a panel closes) and the heading (when a dialog's
+  // opener is gone).
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const toggleRefs = {
+    advanced: useRef<HTMLButtonElement>(null),
+    saved: useRef<HTMLButtonElement>(null),
+  };
 
   // The search box updates at once; the query follows 300 ms after the last keystroke.
   const search = useDebouncedValue(filters.search.trim());
@@ -99,13 +106,19 @@ export default function MemberList() {
   const togglePanel = (next: Exclude<SearchPanel, null>) =>
     setPanel((prev) => (prev === next ? null : next));
 
+  // Closing or applying a panel returns focus to the toggle that opened it.
+  const closePanel = () => {
+    if (panel) toggleRefs[panel].current?.focus();
+    setPanel(null);
+  };
+
   // The applied query replaces the quick filters (the builder starts from them).
   const applyQuery = (query: SearchQuery) => {
     const { conditions, logic } = query;
     setAdvancedQuery({ conditions, logic });
     if (query.sort) setSort({ key: query.sort, order: query.order ?? 'asc' });
     setFilters(EMPTY_FILTERS);
-    setPanel(null);
+    closePanel();
   };
 
   const exportMembers = async () => {
@@ -123,11 +136,12 @@ export default function MemberList() {
     <div className="bg-white shadow-sm rounded-lg">
       <div className="px-6 py-4 border-b border-gray-200">
         <MemberListHeader
-          total={total}
+          total={usersQuery.data ? total : null}
           selection={selectedMembers.size > 0 ? selectionLabel(selectedMembers, pageIds) : null}
           viewMode={viewMode}
           onViewModeChange={setViewMode}
           onAdd={canManage ? () => setEditing({ member: null }) : undefined}
+          headingRef={headingRef}
         />
 
         <MemberFilters
@@ -149,6 +163,7 @@ export default function MemberList() {
             canManage && (
               <MemberListActions
                 panel={panel}
+                toggleRefs={toggleRefs}
                 onTogglePanel={togglePanel}
                 selectedCount={selectedMembers.size}
                 onExport={() => void exportMembers()}
@@ -182,52 +197,52 @@ export default function MemberList() {
           onApply={applyQuery}
           onClear={() => {
             setAdvancedQuery(null);
-            setPanel(null);
+            closePanel();
           }}
-          onClose={() => setPanel(null)}
+          onClose={closePanel}
         />
       )}
 
       {canManage && panel === 'saved' && (
-        <SavedSearches
-          onLoadSearch={applyQuery}
-          onClose={() => setPanel(null)}
-          currentQuery={currentQuery}
-        />
+        <SavedSearches onLoadSearch={applyQuery} onClose={closePanel} currentQuery={currentQuery} />
       )}
 
-      {viewMode === 'table' ? (
-        <MemberTable
-          members={members}
-          canManage={canManage}
-          sort={sort}
-          onSort={handleSort}
-          selected={selectedMembers}
-          onToggleSelect={toggleSelectMember}
-          onToggleSelectAll={toggleSelectAll}
-          onEdit={editMember}
-        />
-      ) : (
-        <MemberCards
-          members={members}
-          canManage={canManage}
-          selected={selectedMembers}
-          onToggleSelect={toggleSelectMember}
-          onEdit={editMember}
-        />
-      )}
+      {/* Rows render only once data exists, so the skeleton is the only loading state. */}
+      <div aria-busy={usersQuery.isFetching}>
+        {usersQuery.data &&
+          (viewMode === 'table' ? (
+            <MemberTable
+              members={members}
+              canManage={canManage}
+              sort={sort}
+              onSort={handleSort}
+              selected={selectedMembers}
+              onToggleSelect={toggleSelectMember}
+              onToggleSelectAll={toggleSelectAll}
+              onEdit={editMember}
+            />
+          ) : (
+            <MemberCards
+              members={members}
+              canManage={canManage}
+              selected={selectedMembers}
+              onToggleSelect={toggleSelectMember}
+              onEdit={editMember}
+            />
+          ))}
 
-      <MemberPagination
-        total={total}
-        page={page}
-        pageSize={pageSize}
-        onPageChange={setPage}
-        onPageSizeChange={setPageSize}
-      />
+        <MemberPagination
+          total={total}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
 
-      {members.length === 0 && usersQuery.isSuccess && (
-        <MemberEmptyState filtersActive={filtersActive} onClearFilters={clearAllFilters} />
-      )}
+        {members.length === 0 && usersQuery.isSuccess && (
+          <MemberEmptyState filtersActive={filtersActive} onClearFilters={clearAllFilters} />
+        )}
+      </div>
 
       <ErrorToast message={toast} onDismiss={clearToast} />
 
@@ -236,6 +251,7 @@ export default function MemberList() {
           isOpen={editing !== null}
           onClose={() => setEditing(null)}
           member={editing?.member ?? null}
+          fallbackFocus={headingRef}
         />
       )}
     </div>

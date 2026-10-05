@@ -3,6 +3,7 @@
 import { useState, type ComponentType } from 'react';
 import Link from 'next/link';
 import AddEditMemberModal from './AddEditMemberModal';
+import { isApiError } from '@/lib/api/client';
 import { useMemberDetails } from '@/lib/queries/memberDetails';
 import InlineError from '@/components/ui/InlineError';
 import Skeleton from '@/components/ui/Skeleton';
@@ -50,12 +51,14 @@ export default function MemberProfile({ memberId }: MemberProfileProps) {
   }
 
   if (error || !member) {
+    // Retrying cannot find a member that does not exist.
+    const retryable = error && !(isApiError(error) && error.status === 404);
     return (
       <div className={`${cardClass} space-y-4`}>
         <InlineError
           error={error}
           fallback="Member not found"
-          onRetry={error ? () => void refetch() : undefined}
+          onRetry={retryable ? () => void refetch() : undefined}
         />
         <Link href="/members" className={backLinkClass}>
           ← Back to members

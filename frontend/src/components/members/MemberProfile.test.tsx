@@ -62,8 +62,9 @@ describe('MemberProfile', () => {
     await render(<MemberProfile memberId="u1" />);
     expect(await screen.findByRole('heading', { level: 1, name: 'Ada Lovelace' })).toBeTruthy();
     expect(screen.getByText('medium risk')).toBeTruthy();
-    expect(screen.getByText('core member')).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Basic Information' })).toBeTruthy();
+    expect(screen.getByText('Core Member')).toBeTruthy();
+    // Tab sections sit directly under the member's h1.
+    expect(screen.getByRole('heading', { level: 2, name: 'Basic Information' })).toBeTruthy();
     expect(screen.getByRole('link', { name: '← Back to members' }).getAttribute('href')).toBe(
       '/members',
     );
@@ -119,6 +120,11 @@ describe('MemberProfile', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: /Contact & Address/ }));
     expect(screen.getByText('ada@example.com')).toBeTruthy();
+    // Opt-in state is in the text, not only in the dot colour.
+    expect(screen.getByText('Email Communications')).toHaveTextContent(
+      'Email Communications: Opted in',
+    );
+    expect(screen.getByText('SMS/Text Messages')).toHaveTextContent('SMS/Text Messages: Opted out');
   });
 
   it('follows the ARIA tabs pattern: one tab stop, arrow keys, Home and End', async () => {
@@ -177,6 +183,14 @@ describe('MemberProfile', () => {
     detailsApi.getMemberDetails.mockRejectedValue(new ApiError(500, 'INTERNAL', 'Boom'));
     await render(<MemberProfile memberId="u1" />);
     expect(await screen.findByRole('button', { name: /Retry/ })).toBeTruthy();
+    expect(screen.getByRole('link', { name: '← Back to members' })).toBeTruthy();
+  });
+
+  it('offers no Retry when the member does not exist', async () => {
+    detailsApi.getMemberDetails.mockRejectedValue(new ApiError(404, 'Member not found'));
+    await render(<MemberProfile memberId="missing" />);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Member not found');
+    expect(screen.queryByRole('button', { name: /Retry/ })).toBeNull();
     expect(screen.getByRole('link', { name: '← Back to members' })).toBeTruthy();
   });
 });

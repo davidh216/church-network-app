@@ -18,7 +18,8 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  /* Geist, loaded by next/font in the root layout. */
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
 }
 
 /* Visible focus for keyboard users on every control that does not draw its own focus ring
@@ -27,6 +28,18 @@ body {
   :where(a[href], button, input, select, textarea, summary, [tabindex]):focus-visible {
     outline: 2px solid #2563eb;
     outline-offset: 2px;
+  }
+}
+
+/* People who ask the OS for less motion get no animations, transitions or smooth scrolling. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 

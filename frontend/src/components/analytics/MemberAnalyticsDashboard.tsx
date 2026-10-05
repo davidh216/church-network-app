@@ -1,7 +1,7 @@
 'use client';
 
 import { useAnalytics, useRefreshAllEngagement } from '@/lib/queries/analytics';
-import { riskColour, riskLabel, stageColour, stageLabel } from '@/lib/analytics/display';
+import { riskClass, riskLabel, stageClass, stageLabel } from '@/lib/members/display';
 import InlineError from '@/components/ui/InlineError';
 import Skeleton from '@/components/ui/Skeleton';
 import DistributionList from './DistributionList';
@@ -51,6 +51,7 @@ export default function MemberAnalyticsDashboard() {
               className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-hidden focus:ring-2 focus:ring-blue-500 disabled:opacity-50 flex items-center space-x-2"
             >
               <svg
+                aria-hidden="true"
                 className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`}
                 fill="none"
                 stroke="currentColor"
@@ -85,13 +86,13 @@ export default function MemberAnalyticsDashboard() {
             <DistributionList
               title="Membership Stages"
               counts={analytics.membershipStageDistribution}
-              colourFor={stageColour}
+              colourFor={stageClass}
               labelFor={stageLabel}
             />
             <DistributionList
               title="Risk Levels"
               counts={analytics.riskLevelDistribution}
-              colourFor={riskColour}
+              colourFor={riskClass}
               labelFor={riskLabel}
             />
           </div>

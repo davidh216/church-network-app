@@ -33,7 +33,7 @@ export default function SaveSearchForm({ summary, saving, onSave, onCancel }: Sa
         if (values.name.trim()) onSave(values);
       }}
     >
-      <h4 className="text-sm font-medium text-gray-900">Save Current Search</h4>
+      <h3 className="text-sm font-medium text-gray-900">Save Current Search</h3>
       <p className="text-xs text-gray-600">{summary}</p>
       <input
         type="text"

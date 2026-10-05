@@ -43,7 +43,7 @@ export default function MemberCards({
           <div className="flex items-start space-x-4">
             <MemberAvatar member={member} size="md" />
             <div className="flex-1 min-w-0">
-              <h3 className="text-lg font-medium text-gray-900 truncate">{member.name}</h3>
+              <h2 className="text-lg font-medium text-gray-900 truncate">{member.name}</h2>
               {member.email && <p className="text-sm text-gray-500 truncate">{member.email}</p>}
               {member.phone && <p className="text-sm text-gray-500">{member.phone}</p>}
 

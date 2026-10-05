@@ -123,4 +123,59 @@ describe('VideoPlayer', () => {
       Object.defineProperty(document, 'fullscreenElement', { value: null, configurable: true });
     }
   });
+
+  it('lists the keyboard shortcuts in a visually hidden description of the dialog', async () => {
+    await render(<VideoPlayer media={video('https://youtu.be/dQw4w9WgXcQ')} onClose={vi.fn()} />);
+    expect(screen.getByRole('dialog')).toHaveAccessibleDescription(
+      /^Keyboard shortcuts: Space plays or pauses, F toggles fullscreen/,
+    );
+  });
+
+  it('subscribes to the player state on load and toggles play and pause on Space', async () => {
+    await render(
+      <VideoPlayer
+        media={video('https://youtu.be/dQw4w9WgXcQ', 'dQw4w9WgXcQ')}
+        onClose={vi.fn()}
+      />,
+    );
+    const iframe = screen.getByTitle('Sunday sermon') as HTMLIFrameElement;
+    const player = iframe.contentWindow!;
+    const postMessage = vi.spyOn(player, 'postMessage').mockImplementation(() => undefined);
+    const sent = () =>
+      postMessage.mock.calls.map(([message, origin]) => [JSON.parse(message as string), origin]);
+
+    fireEvent.load(iframe);
+    expect(sent()[0]).toEqual([
+      { event: 'listening', id: 1, channel: 'widget' },
+      'https://www.youtube.com',
+    ]);
+
+    // The player reports that it is playing: Space pauses.
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: '{"event":"onStateChange","info":1}',
+        origin: 'https://www.youtube.com',
+        source: player,
+      }),
+    );
+    fireEvent.keyDown(document, { key: ' ' });
+    expect(sent()[1]).toEqual([
+      { event: 'command', func: 'pauseVideo', args: [] },
+      'https://www.youtube.com',
+    ]);
+    // Space again plays.
+    fireEvent.keyDown(document, { key: ' ' });
+    expect(sent()[2]![0]).toMatchObject({ func: 'playVideo' });
+
+    // Messages from any other origin are ignored.
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: '{"event":"onStateChange","info":2}',
+        origin: 'https://evil.example',
+        source: player,
+      }),
+    );
+    fireEvent.keyDown(document, { key: ' ' });
+    expect(sent()[3]![0]).toMatchObject({ func: 'pauseVideo' });
+  });
 });

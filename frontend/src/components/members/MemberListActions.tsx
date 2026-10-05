@@ -1,8 +1,19 @@
+import type { RefObject } from 'react';
+
 export type SearchPanel = 'advanced' | 'saved' | null;
+type OpenPanel = Exclude<SearchPanel, null>;
+
+/** Stable ids of the two search panels, for the toggles' aria-controls. */
+export const PANEL_IDS: Record<OpenPanel, string> = {
+  advanced: 'advanced-search-panel',
+  saved: 'saved-searches-panel',
+};
 
 interface MemberListActionsProps {
   panel: SearchPanel;
-  onTogglePanel: (panel: Exclude<SearchPanel, null>) => void;
+  /** The toggle buttons; focus returns to the one that opened a panel when it closes. */
+  toggleRefs: Record<OpenPanel, RefObject<HTMLButtonElement | null>>;
+  onTogglePanel: (panel: OpenPanel) => void;
   selectedCount: number;
   onExport: () => void;
 }
@@ -14,6 +25,7 @@ const open = 'bg-blue-600 text-white';
 /** Staff buttons beside the member search: advanced search, saved searches and export. */
 export default function MemberListActions({
   panel,
+  toggleRefs,
   onTogglePanel,
   selectedCount,
   onExport,
@@ -22,7 +34,9 @@ export default function MemberListActions({
     <>
       <button
         type="button"
+        ref={toggleRefs.advanced}
         aria-expanded={panel === 'advanced'}
+        aria-controls={PANEL_IDS.advanced}
         onClick={() => onTogglePanel('advanced')}
         className={`${buttonClass} ${panel === 'advanced' ? open : idle}`}
       >
@@ -30,7 +44,9 @@ export default function MemberListActions({
       </button>
       <button
         type="button"
+        ref={toggleRefs.saved}
         aria-expanded={panel === 'saved'}
+        aria-controls={PANEL_IDS.saved}
         onClick={() => onTogglePanel('saved')}
         className={`${buttonClass} ${panel === 'saved' ? open : idle}`}
       >

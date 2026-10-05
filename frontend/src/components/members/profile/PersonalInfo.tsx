@@ -7,7 +7,7 @@ export default function PersonalInfo({ member }: { member: MemberDetails }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
       <div className="space-y-4">
-        <h3 className="text-lg font-medium text-gray-900">Basic Information</h3>
+        <h2 className="text-lg font-medium text-gray-900">Basic Information</h2>
         <div className="grid grid-cols-2 gap-4">
           <Field label="First Name">{member.firstName || 'Not set'}</Field>
           <Field label="Last Name">{member.lastName || 'Not set'}</Field>
@@ -25,11 +25,11 @@ export default function PersonalInfo({ member }: { member: MemberDetails }) {
       </div>
 
       <div className="space-y-4">
-        <h3 className="text-lg font-medium text-gray-900">Emergency Contact</h3>
+        <h2 className="text-lg font-medium text-gray-900">Emergency Contact</h2>
         <Field label="Emergency Contact Name">{member.emergencyContact || 'Not set'}</Field>
         <Field label="Emergency Phone">{member.emergencyPhone || 'Not set'}</Field>
         <div className="mt-6">
-          <h3 className="text-lg font-medium text-gray-900">Bio</h3>
+          <h2 className="text-lg font-medium text-gray-900">Bio</h2>
           <p className="text-sm text-gray-900 whitespace-pre-wrap">
             {member.bio || 'No bio available'}
           </p>

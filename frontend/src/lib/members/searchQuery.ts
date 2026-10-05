@@ -7,6 +7,7 @@ import {
   type SearchOperator,
   type SearchQuery,
 } from '@embrace/shared';
+import { stageLabel } from './display';
 import { dateRangeError, type MemberFilters } from './filters';
 
 /**
@@ -72,18 +73,10 @@ export function operatorsFor(field: SearchField): readonly SearchOperator[] {
 }
 
 /** Choices for the enum-like fields, as [value, label] pairs. */
-/** `core_member` -> `Core Member`. */
-export function optionLabel(value: string): string {
-  return value
-    .split('_')
-    .map((word) => (word ? word[0]!.toUpperCase() + word.slice(1) : word))
-    .join(' ');
-}
-
 export function optionsFor(kind: FieldKind): [string, string][] {
-  if (kind === 'role') return ROLE_OPTIONS.map((r) => [r, optionLabel(r)]);
-  if (kind === 'stage') return STAGE_OPTIONS.map((s) => [s, optionLabel(s)]);
-  if (kind === 'risk') return RISK_OPTIONS.map((r) => [r, optionLabel(r)]);
+  if (kind === 'role') return ROLE_OPTIONS.map((r) => [r, stageLabel(r)]);
+  if (kind === 'stage') return STAGE_OPTIONS.map((s) => [s, stageLabel(s)]);
+  if (kind === 'risk') return RISK_OPTIONS.map((r) => [r, stageLabel(r)]);
   if (kind === 'active')
     return [
       ['true', 'Active'],
@@ -249,7 +242,7 @@ function valueText(condition: SearchCondition): string {
   if (!('value' in condition)) return '';
   const kind = fieldKind(condition.field);
   const one = (v: unknown) => {
-    if (kind === 'stage' || kind === 'risk' || kind === 'role') return optionLabel(String(v));
+    if (kind === 'stage' || kind === 'risk' || kind === 'role') return stageLabel(String(v));
     if (kind === 'active') return v ? 'Active' : 'Inactive';
     return String(v);
   };

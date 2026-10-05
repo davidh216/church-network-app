@@ -54,7 +54,11 @@ beforeEach(() => {
 describe('SavedSearches', () => {
   it('applies a saved search and records the use', async () => {
     const { onLoadSearch } = await setup();
-    fireEvent.click(await screen.findByRole('button', { name: 'Apply New members' }));
+    const apply = await screen.findByRole('button', { name: 'Apply New members' });
+    // The visible name is the button text; the date (and description) describe it.
+    expect(apply).toHaveTextContent('Apply New members');
+    expect(apply).toHaveAccessibleDescription(/^Saved/);
+    fireEvent.click(apply);
     expect(onLoadSearch).toHaveBeenCalledWith(stageQuery);
     await waitFor(() => expect(savedApi.useSavedSearch).toHaveBeenCalledWith('s1'));
   });
@@ -65,6 +69,9 @@ describe('SavedSearches', () => {
       name: 'Old format (invalid, cannot be applied)',
     });
     expect(row).toBeDisabled();
+    expect(row).toHaveAccessibleDescription(
+      /This search no longer matches the search rules and cannot be applied\.$/,
+    );
     expect(screen.getByText('Invalid')).toBeInTheDocument();
     fireEvent.click(row);
     expect(onLoadSearch).not.toHaveBeenCalled();

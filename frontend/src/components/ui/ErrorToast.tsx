@@ -29,7 +29,7 @@ export default function ErrorToast({ message, onDismiss }: ErrorToastProps) {
       <button
         type="button"
         onClick={onDismiss}
-        className="text-white/80 hover:text-white"
+        className="text-white hover:underline"
         aria-label="Dismiss"
       >
         ×

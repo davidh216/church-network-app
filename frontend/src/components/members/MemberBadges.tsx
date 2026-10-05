@@ -1,10 +1,11 @@
 import type { Member } from '@/types/domain';
 import {
   engagementClass,
-  formatStage,
   initials,
+  riskLabel,
   riskDotClass,
   stageClass,
+  stageLabel,
 } from '@/lib/members/display';
 import AvatarImage from '@/components/ui/AvatarImage';
 
@@ -75,10 +76,10 @@ export function StatusBadge({
 export function StageBadge({ member }: { member: Member }) {
   const stage = member.engagement?.membershipStage;
   if (!stage) return <span className="text-sm text-gray-500">Unknown</span>;
-  return <span className={`${pill} px-2 py-1 ${stageClass(stage)}`}>{formatStage(stage)}</span>;
+  return <span className={`${pill} px-2 py-1 ${stageClass(stage)}`}>{stageLabel(stage)}</span>;
 }
 
-/** The engagement score with a risk-level dot, or "-". */
+/** The engagement score with a risk-level dot and its text (for screen readers), or "-". */
 export function EngagementBadge({ member }: { member: Member }) {
   const engagement = member.engagement;
   if (!engagement) return <span className="text-sm text-gray-500">-</span>;
@@ -89,10 +90,12 @@ export function EngagementBadge({ member }: { member: Member }) {
       >
         {engagement.engagementScore}%
       </div>
-      <div
+      <span
+        aria-hidden="true"
         className={`w-2 h-2 rounded-full ${riskDotClass(engagement.riskLevel)}`}
-        title={`${engagement.riskLevel} risk`}
-      ></div>
+        title={riskLabel(engagement.riskLevel)}
+      />
+      <span className="sr-only">{riskLabel(engagement.riskLevel)}</span>
     </div>
   );
 }

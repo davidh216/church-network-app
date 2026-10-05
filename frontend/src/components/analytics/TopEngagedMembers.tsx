@@ -1,5 +1,6 @@
 import type { MemberAnalytics } from '@/types/domain';
-import { engagementScoreClass, stageColour, stageLabel } from '@/lib/analytics/display';
+import { engagementScoreClass } from '@/lib/analytics/display';
+import { initials, stageClass, stageLabel } from '@/lib/members/display';
 import AvatarImage from '@/components/ui/AvatarImage';
 
 const SHOWN = 8;
@@ -35,17 +36,14 @@ export default function TopEngagedMembers({
                     />
                   ) : (
                     <span className="text-sm font-medium text-gray-600">
-                      {member.user.name
-                        .split(' ')
-                        .map((n) => n[0])
-                        .join('')}
+                      {initials(member.user.name)}
                     </span>
                   )}
                 </div>
                 <div>
                   <p className="text-sm font-medium text-gray-900">{member.user.name}</p>
                   <span
-                    className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${stageColour(member.membershipStage)}`}
+                    className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${stageClass(member.membershipStage)}`}
                   >
                     {stageLabel(member.membershipStage)}
                   </span>

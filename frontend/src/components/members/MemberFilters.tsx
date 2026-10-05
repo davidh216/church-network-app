@@ -1,6 +1,6 @@
-import type { ReactNode } from 'react';
+import { useRef, type ReactNode } from 'react';
 import { MAX_QUERY_TEXT, type SearchQuery } from '@embrace/shared';
-import { formatStage } from '@/lib/members/display';
+import { stageLabel } from '@/lib/members/display';
 import type { MemberFilters as Filters, MemberSort } from '@/lib/members/filters';
 import AdvancedQueryChip from './search/AdvancedQueryChip';
 
@@ -81,6 +81,28 @@ export default function MemberFilters({
   actions,
   advanced,
 }: MemberFiltersProps) {
+  // Clearing a chip (or the advanced query) moves focus to the search box, which survives.
+  const searchRef = useRef<HTMLInputElement | null>(null);
+  const focusOnMount = useRef(false);
+  const searchInputRef = (el: HTMLInputElement | null) => {
+    searchRef.current = el;
+    if (el && focusOnMount.current) {
+      focusOnMount.current = false;
+      el.focus();
+    }
+  };
+  const clearAdvanced = advanced && {
+    ...advanced,
+    onClear: () => {
+      focusOnMount.current = true;
+      advanced.onClear();
+    },
+  };
+  const clearAndFocus = (clear: () => void) => () => {
+    clear();
+    searchRef.current?.focus();
+  };
+
   const chips: { label: string; clear: () => void }[] = [];
   if (filters.search)
     chips.push({ label: `Search: ${filters.search}`, clear: () => onFilterChange('search', '') });
@@ -88,7 +110,7 @@ export default function MemberFilters({
     chips.push({ label: `Role: ${filters.role}`, clear: () => onFilterChange('role', 'all') });
   if (filters.stage !== 'all') {
     chips.push({
-      label: `Stage: ${formatStage(filters.stage)}`,
+      label: `Stage: ${stageLabel(filters.stage)}`,
       clear: () => onFilterChange('stage', 'all'),
     });
   }
@@ -98,11 +120,12 @@ export default function MemberFilters({
     <div className="mt-4 space-y-4">
       <div className="flex flex-col lg:flex-row gap-4">
         <div className="flex-1">
-          {advanced ? (
-            <AdvancedQueryChip {...advanced} />
+          {clearAdvanced ? (
+            <AdvancedQueryChip {...clearAdvanced} />
           ) : (
             <div className="relative">
               <input
+                ref={searchInputRef}
                 type="text"
                 placeholder={
                   canManage ? 'Search by name, email, phone, or bio...' : 'Search by name...'
@@ -114,6 +137,7 @@ export default function MemberFilters({
                 className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-hidden focus:ring-2 focus:ring-blue-500"
               />
               <svg
+                aria-hidden="true"
                 className="absolute left-3 top-2.5 h-4 w-4 text-gray-400"
                 fill="none"
                 stroke="currentColor"
@@ -182,7 +206,7 @@ export default function MemberFilters({
         <div className="flex flex-wrap gap-2">
           <span className="text-sm text-gray-500">Active filters:</span>
           {chips.map((chip) => (
-            <FilterChip key={chip.label} label={chip.label} onClear={chip.clear} />
+            <FilterChip key={chip.label} label={chip.label} onClear={clearAndFocus(chip.clear)} />
           ))}
         </div>
       )}

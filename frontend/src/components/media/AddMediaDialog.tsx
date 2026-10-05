@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useState, type FormEvent } from 'react';
+import { useId, useState, type FormEvent, type RefObject } from 'react';
 import { createMediaInput } from '@embrace/shared';
 import {
   apiErrorsFor,
@@ -18,6 +18,8 @@ interface AddMediaDialogProps {
   onClose: () => void;
   /** Called after the video is created (the media queries are already invalidated). */
   onSaved: () => void;
+  /** Focused on close when the button that opened the dialog is gone (the page heading). */
+  fallbackFocus?: RefObject<HTMLElement | null>;
 }
 
 const inputClass =
@@ -26,7 +28,7 @@ const labelClass = 'block text-sm font-medium text-gray-700 mb-1';
 const FIELDS = ['title', 'url', 'description', 'tags'] as const;
 
 /** Staff form for adding a YouTube video to the library. */
-export default function AddMediaDialog({ onClose, onSaved }: AddMediaDialogProps) {
+export default function AddMediaDialog({ onClose, onSaved, fallbackFocus }: AddMediaDialogProps) {
   const [form, setForm] = useState({ title: '', description: '', url: '', tags: [] as string[] });
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
@@ -65,7 +67,7 @@ export default function AddMediaDialog({ onClose, onSaved }: AddMediaDialogProps
   };
 
   return (
-    <Dialog labelledBy={titleId} onClose={onClose}>
+    <Dialog labelledBy={titleId} onClose={onClose} fallbackFocus={fallbackFocus}>
       <div>
         <h2 id={titleId} className="text-lg font-medium text-gray-900 mb-4">
           Add YouTube Video

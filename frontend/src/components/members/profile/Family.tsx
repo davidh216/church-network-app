@@ -11,7 +11,7 @@ export default function Family({ member }: { member: MemberDetails }) {
       <SectionHeader title="Family Information" count={`${family.length} family members`} />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="space-y-4">
-          <h4 className="text-md font-medium text-gray-900">Family Status</h4>
+          <h3 className="text-base font-medium text-gray-900">Family Status</h3>
           <Field label="Family Role">
             {member.isHeadOfFamily ? 'Head of Family' : 'Family Member'}
           </Field>
@@ -19,7 +19,7 @@ export default function Family({ member }: { member: MemberDetails }) {
         </div>
 
         <div className="space-y-4">
-          <h4 className="text-md font-medium text-gray-900">Family Members</h4>
+          <h3 className="text-base font-medium text-gray-900">Family Members</h3>
           {family.length > 0 ? (
             <div className="space-y-3">
               {family.map((relative) => (

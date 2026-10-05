@@ -1,6 +1,6 @@
 import type { MemberDetails } from '@/types/domain';
 import { formatDateTime, interactionIcon, priorityClass } from '@/lib/members/profile';
-import { formatStage } from '@/lib/members/display';
+import { stageLabel } from '@/lib/members/display';
 import { EmptyTab, SectionHeader, pillClass } from './Field';
 
 /** The "Interactions" tab: emails, texts, calls and visits logged for the member. */
@@ -17,9 +17,9 @@ export default function Interactions({ member }: { member: MemberDetails }) {
                 <div className="flex items-center space-x-3">
                   <div className="text-2xl">{interactionIcon(interaction.interactionType)}</div>
                   <div>
-                    <h4 className="text-sm font-medium text-gray-900">
-                      {interaction.subject || formatStage(interaction.interactionType)}
-                    </h4>
+                    <h3 className="text-sm font-medium text-gray-900">
+                      {interaction.subject || stageLabel(interaction.interactionType)}
+                    </h3>
                     <p className="text-xs text-gray-500">
                       {interaction.channel} • {formatDateTime(interaction.createdAt)}
                     </p>

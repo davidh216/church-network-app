@@ -443,4 +443,88 @@ describe('MemberList', () => {
     expect(await screen.findByText('Advanced query active')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Saved Searches' })).not.toBeInTheDocument();
   });
+
+  it('is titled by an h1 and keeps focus on the panel toggles when panels close or apply', async () => {
+    usersApi.listUsers.mockResolvedValue(page(staffRows));
+    usersApi.searchUsers.mockResolvedValue(page([staffRows[1]!]));
+    savedApi.listSavedSearches.mockResolvedValue([]);
+    await renderAs(['admin']);
+    expect(screen.getByRole('heading', { level: 1, name: 'Church Members' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1 }).tagName).toBe('H1');
+
+    const advanced = screen.getByRole('button', { name: 'Advanced Search' });
+    expect(advanced).toHaveAttribute('aria-controls', 'advanced-search-panel');
+    fireEvent.click(advanced);
+    expect(screen.getByRole('region', { name: 'Advanced Search' })).toHaveAttribute(
+      'id',
+      'advanced-search-panel',
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Close advanced search' }));
+    expect(document.activeElement).toBe(advanced);
+
+    const saved = screen.getByRole('button', { name: 'Saved Searches' });
+    expect(saved).toHaveAttribute('aria-controls', 'saved-searches-panel');
+    fireEvent.click(saved);
+    fireEvent.click(screen.getByRole('button', { name: 'Close saved searches' }));
+    expect(document.activeElement).toBe(saved);
+
+    // Applying a query closes the builder and returns focus to its toggle.
+    fireEvent.click(advanced);
+    fireEvent.change(screen.getByLabelText('Condition 1 value'), { target: { value: 'ann' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply Search' }));
+    expect(document.activeElement).toBe(advanced);
+
+    // Clearing the advanced query puts focus in the search box that replaces it.
+    fireEvent.click(await screen.findByRole('button', { name: 'Clear advanced query' }));
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Search members' })),
+    );
+  });
+
+  it('focuses the search box after a filter chip is cleared', async () => {
+    usersApi.listUsers.mockResolvedValue(page(staffRows));
+    await renderAs(['admin']);
+    fireEvent.change(screen.getByLabelText('Role'), { target: { value: 'leader' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Clear Role: leader' }));
+    expect(screen.queryByRole('button', { name: 'Clear Role: leader' })).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Search members' }));
+  });
+
+  it('marks select-all mixed when only some rows on the page are selected', async () => {
+    usersApi.listUsers.mockResolvedValue(page(staffRows));
+    await renderAs(['admin']);
+    const selectAll = screen.getByLabelText<HTMLInputElement>('Select all members on this page');
+    expect(selectAll.indeterminate).toBe(false);
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select Ann Example' }));
+    expect(selectAll.indeterminate).toBe(true);
+    expect(selectAll).not.toBeChecked();
+    fireEvent.click(selectAll);
+    expect(selectAll.indeterminate).toBe(false);
+    expect(selectAll).toBeChecked();
+  });
+
+  it('shows only the skeleton while loading, and marks the results busy while refetching', async () => {
+    let resolve: (value: ReturnType<typeof page>) => void = () => undefined;
+    usersApi.listUsers.mockReturnValueOnce(new Promise((r) => (resolve = r)));
+    await renderAs(['member']);
+    expect(screen.getByRole('status', { name: 'Loading members' })).toBeInTheDocument();
+    expect(screen.queryByRole('table')).toBeNull();
+    expect(screen.queryByText('(0 total)')).toBeNull();
+    await act(async () => resolve(page(directory)));
+    const table = await screen.findByRole('table');
+    expect(table.parentElement!.parentElement).toHaveAttribute('aria-busy', 'false');
+
+    let resolveNext: (value: ReturnType<typeof page>) => void = () => undefined;
+    usersApi.listUsers.mockReturnValueOnce(new Promise((r) => (resolveNext = r)));
+    fireEvent.click(screen.getByRole('button', { name: 'Member' }));
+    await waitFor(() =>
+      expect(table.parentElement!.parentElement).toHaveAttribute('aria-busy', 'true'),
+    );
+    // The previous rows stay while the next page loads.
+    expect(screen.getByText('Carol Example')).toBeInTheDocument();
+    await act(async () => resolveNext(page(directory)));
+    await waitFor(() =>
+      expect(table.parentElement!.parentElement).toHaveAttribute('aria-busy', 'false'),
+    );
+  });
 });

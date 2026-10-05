@@ -8,6 +8,7 @@ import {
   newDraft,
   type DraftCondition,
 } from '@/lib/members/searchQuery';
+import { PANEL_IDS } from './MemberListActions';
 import ConditionRow from './search/ConditionRow';
 
 interface AdvancedSearchBuilderProps {
@@ -52,13 +53,14 @@ export default function AdvancedSearchBuilder({
 
   return (
     <section
+      id={PANEL_IDS.advanced}
       aria-labelledby="advanced-search-heading"
       className="bg-white border border-gray-200 rounded-lg shadow-lg p-6 m-4"
     >
       <div className="flex items-center justify-between mb-4">
-        <h3 id="advanced-search-heading" className="text-lg font-medium text-gray-900">
+        <h2 id="advanced-search-heading" className="text-lg font-medium text-gray-900">
           Advanced Search
-        </h3>
+        </h2>
         <button
           type="button"
           onClick={onClose}

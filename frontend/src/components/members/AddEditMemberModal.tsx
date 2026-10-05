@@ -1,7 +1,7 @@
 // File: frontend/src/components/members/AddEditMemberModal.tsx
 'use client';
 
-import { useState, useEffect, useId } from 'react';
+import { useState, useEffect, useId, type RefObject } from 'react';
 import { createUserInput, MIN_PASSWORD_LENGTH, updateUserInput } from '@embrace/shared';
 import {
   apiErrorsFor,
@@ -26,6 +26,8 @@ interface AddEditMemberModalProps {
   /** Called after a successful save; the member queries are already invalidated. */
   onSave?: () => void;
   member?: Member | null;
+  /** Focused on close when the button that opened the dialog is gone (the page heading). */
+  fallbackFocus?: RefObject<HTMLElement | null>;
 }
 
 export default function AddEditMemberModal({
@@ -33,6 +35,7 @@ export default function AddEditMemberModal({
   onClose,
   onSave,
   member,
+  fallbackFocus,
 }: AddEditMemberModalProps) {
   const [formData, setFormData] = useState({
     name: '',
@@ -135,7 +138,7 @@ export default function AddEditMemberModal({
   if (!isOpen) return null;
 
   return (
-    <Dialog labelledBy={titleId} onClose={onClose}>
+    <Dialog labelledBy={titleId} onClose={onClose} fallbackFocus={fallbackFocus}>
       <div>
         <h2 id={titleId} className="text-lg font-medium text-gray-900 mb-4">
           {isEditing ? 'Edit Member' : 'Add New Member'}

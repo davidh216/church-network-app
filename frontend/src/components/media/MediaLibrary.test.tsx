@@ -1,6 +1,7 @@
 import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import MediaLibrary from '@/components/media/MediaLibrary';
+import MediaPage from '@/components/media/MediaPage';
 import { ApiError } from '@/lib/api/client';
 import { AuthProvider } from '@/lib/auth/AuthProvider';
 import { makeUser } from '@/test/fixtures';
@@ -149,5 +150,30 @@ describe('MediaLibrary', () => {
     expect(
       screen.getByRole('link', { name: 'Open Sermon 1 on YouTube (opens in a new tab)' }),
     ).toBeInTheDocument();
+  });
+
+  it('has one page heading (h1) and no duplicate library heading', async () => {
+    authApi.me.mockResolvedValue(makeUser(['member']));
+    await render(
+      <AuthProvider>
+        <MediaPage />
+      </AuthProvider>,
+    );
+    expect(screen.getAllByRole('heading', { name: 'Embrace Media Library' })).toHaveLength(1);
+    expect(screen.getByRole('heading', { name: 'Embrace Media Library' }).tagName).toBe('H1');
+  });
+
+  it('shows only the skeleton until the first page arrives', async () => {
+    let resolve: (value: ReturnType<typeof mediaPage>) => void = () => undefined;
+    mediaApi.listMedia.mockReturnValueOnce(new Promise((r) => (resolve = r)));
+    await renderAs(['member']);
+    expect(screen.getByRole('status', { name: 'Loading videos' })).toBeInTheDocument();
+    expect(screen.queryByText('(0 videos)')).toBeNull();
+    await act(async () => resolve(mediaPage([video(1)])));
+    expect(await screen.findByText('(1 videos)')).toBeInTheDocument();
+    expect(screen.getByText('Sermon 1').closest('[aria-busy]')).toHaveAttribute(
+      'aria-busy',
+      'false',
+    );
   });
 });

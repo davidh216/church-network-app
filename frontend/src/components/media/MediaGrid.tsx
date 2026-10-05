@@ -53,9 +53,9 @@ export default function MediaGrid({ media, onPlay }: MediaGridProps) {
             </div>
 
             <div className="p-4">
-              <h3 className="font-medium text-gray-900 mb-2 line-clamp-2 leading-tight">
+              <h2 className="font-medium text-gray-900 mb-2 line-clamp-2 leading-tight">
                 {item.title}
-              </h3>
+              </h2>
               {item.description && (
                 <p className="text-sm text-gray-600 mb-3 line-clamp-2">{item.description}</p>
               )}

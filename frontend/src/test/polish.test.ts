@@ -44,4 +44,24 @@ describe('frontend polish guards', () => {
     expect(css).not.toMatch(/prefers-color-scheme:\s*dark/);
     expect(css).toMatch(/color-scheme:\s*light/);
   });
+
+  it('uses the Geist font next/font loads, and honours reduced motion', () => {
+    const css = readFileSync(join(SRC, 'app', 'globals.css'), 'utf8');
+    expect(css).not.toMatch(/Arial/);
+    expect(css).toMatch(/font-family:\s*var\(--font-geist-sans\), system-ui, sans-serif;/);
+    expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)/);
+  });
+
+  it('hides every inline SVG icon from assistive technology (they are all decorative)', () => {
+    const unhidden = files.flatMap(({ path, text }) =>
+      [...text.matchAll(/<svg\b[^>]*>/g)]
+        .filter(([tag]) => !tag.includes('aria-hidden="true"'))
+        .map(() => path.slice(SRC.length + 1)),
+    );
+    expect(unhidden).toEqual([]);
+  });
+
+  it('uses only Tailwind type sizes that exist (text-md is not one)', () => {
+    expect(offenders(/(?<=[\s"'`])text-md(?=[\s"'`])/)).toEqual([]);
+  });
 });

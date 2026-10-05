@@ -16,7 +16,7 @@ export default function Milestones({ member }: { member: MemberDetails }) {
                 <div className="text-2xl">{milestoneIcon(milestone.milestoneType)}</div>
                 <div className="flex-1">
                   <div className="flex items-center justify-between">
-                    <h4 className="text-sm font-medium text-gray-900">{milestone.title}</h4>
+                    <h3 className="text-sm font-medium text-gray-900">{milestone.title}</h3>
                     <span className="text-xs text-gray-500">
                       {formatDate(milestone.achievedDate)}
                     </span>
