@@ -98,3 +98,40 @@ Engagement tiles and profile show three components; stage and risk labels from s
 
 ## 5. Estimates
 D1 M, D2 L, D3 M, D4 M, D5 L, D6 L, D7 L, D8 M: about 10 to 12 days of agent time plus 2 planner days; roughly three weeks at the current cadence.
+
+## 6. Backend review outcome and amendments (2026-10-05)
+D1 to D6 were implemented on `modernize/phase-3` and verified by the planner (root checks, drift check, Playwright, and the full migration chain replayed on a restored Phase 2 database with an identical resulting schema). A five-lens adversarial review (migrations and data integrity, security and authorization, contract and regressions, engagement rules, spec compliance) with one skeptical verifier per finding confirmed 33 findings, none a blocker after verification, and refuted 11. The rulings below amend sections 1 and 2 and were applied by the fix batches.
+
+### 6.1 Amendments to the contracts
+- **Family relationship meaning (1.2).** `relationshipType` is the primary user's relation to the related user. Legacy rows used the opposite meaning, so the D3 migration inverts every legacy type before it collapses and orders the pairs.
+- **Audit trail (1.1 to 1.4).** Every row a Phase 3 migration deletes, repoints or maps to a fallback value is copied first into schema `phase3_archive`, which Prisma does not manage. Collapsed attendance rows merge their notes. An unknown legacy service type is kept as a note on the attendance row. The operator can drop the archive schema after checking it.
+- **JSON columns (1.3).** Legacy metadata that does not parse, or is nested 64 levels or deeper, is kept as a JSON string of the original text. Such saved searches are archived and deleted. The API rejects U+0000 in text inputs and metadata nested deeper than 32 levels.
+- **Orphaned note authors (D3).** Notes are repointed to the oldest admin. If there is no admin, the migration stops with a message telling the operator to create one.
+- **Communication score (1.5).** Asks are `email_sent`, `sms_sent` and interactions that require a response. Responses are `email_opened`, `sms_replied`, and asks marked as answered. The score is `min(100, round(100 * responses / asks))`. It is 100 when there are responses but no asks, and 50 when there are neither.
+- **Account age (1.5).** Services held before the account was created never count against it. This applies to the 12-week attendance denominator, the 8-week risk rate and the 26-week inactive check. Attendance at services dated after today is never counted.
+- **Ratified readings of 1.5.**
+  - Windows are whole UTC days ending today. "Last N weeks" means the 7N days up to and including today. "Weeks 9 to 26" means days 56 to 181 before today.
+  - Attendance at any service type counts for the presence checks, while rates use the scoring set.
+  - The community score counts active memberships of active groups.
+  - With no scoring services in the last 8 weeks, the medium-risk rate rule does not apply.
+  - Components are whole numbers, and `engagementScore` is computed from them.
+  - The job refreshes every account, inactive ones included, and keeps the status of the last 20 jobs in memory.
+  - A member deleted during a run counts as skipped.
+  - The API waits for a running job on shutdown.
+  - `atRiskMembers` counts high-risk active accounts.
+- **Timeline and member details (D1, D5).**
+  - Timeline items carry `dateOnly`, and calendar dates render in UTC.
+  - An unknown member gets 404.
+  - Paging is capped at page 100, and the client disables Next there.
+  - `lastAttended` in member details is computed from attendance.
+- **Refresh job in the client (D6, D7).** The analytics refresh button polls the job status and refreshes the data only once the job has finished.
+- **Accepted additions beyond the text.**
+  - Timeline responses carry `page` and `pageSize`.
+  - Service dates are `YYYY-MM-DD` strings.
+  - The attendance sheet also lists inactive accounts that already have a row.
+  - Members may edit their own skills and interests.
+  - The media tag filter matches a whole tag, ignoring case.
+
+### 6.2 Refuted or deferred
+- **Ownerless saved-search deletion stays.** Deleting saved searches whose owner no longer exists follows the column's Cascade rule. Those rows are now archived first.
+- **Stale stored scores are documented, not recomputed.** Stored scores keep their pre-upgrade values until the first refresh after deploy. This is the documented design, so the README tells the operator to run the refresh job once after upgrading.

@@ -176,10 +176,10 @@ describe('MediaLibrary', () => {
     );
     await renderAs(['member']);
     expect(await screen.findByText('By Grace Hopper')).toBeInTheDocument();
-    expect(screen.getAllByText(/^By /)).toHaveLength(1);
+    expect(screen.getAllByText(/^By\b/)).toHaveLength(1);
     fireEvent.click(screen.getByRole('button', { name: 'List View' }));
     expect(screen.getByText('By Grace Hopper')).toBeInTheDocument();
-    expect(screen.getAllByText(/^By /)).toHaveLength(1);
+    expect(screen.getAllByText(/^By\b/)).toHaveLength(1);
     expect(screen.getAllByText('•')).toHaveLength(1);
   });
 

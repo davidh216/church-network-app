@@ -125,6 +125,23 @@ A comprehensive church management platform built with modern web technologies, d
 ### **Containers**
 `docker compose up --build` starts `db`, `api` (runs `prisma migrate deploy`, the idempotent seed, then the compiled server) and `web` (standalone Next.js build). Ports are published on 127.0.0.1 only. The api service reads `backend/.env` for `JWT_SECRET` and the `SEED_ADMIN_*` values, and runs with `COOKIE_SECURE=false` because the stack is plain http; a real deployment sits behind TLS, leaves `COOKIE_SECURE` unset, and runs behind a reverse proxy that sets `X-Forwarded-For` (see `TRUST_PROXY` in `backend/.env.example`).
 
+### **Upgrading an existing database**
+`npm run -w backend db:migrate` (or the api container on start) applies new migrations in order. The Phase 3 migrations convert data in place. Any row they delete, repoint or map to a fallback value is copied first into the `phase3_archive` schema, which the app never reads. Check it and drop it once you are satisfied:
+
+```sql
+SELECT * FROM phase3_archive.value_changes;
+DROP SCHEMA phase3_archive CASCADE;
+```
+
+Stored engagement scores keep their old values until the next refresh. Run the refresh job once after upgrading, and then on a schedule (for example nightly from cron):
+
+```bash
+cd backend && node dist/jobs/refresh-engagement.js                                  # from a build
+docker compose run --rm --entrypoint node api dist/jobs/refresh-engagement.js       # with compose
+```
+
+Staff can also start it from the Analytics page.
+
 ### **Accounts and Roles**
 - Self-registration creates an **inactive** account. An admin or leader activates it (edit the member and tick Active) before the person can sign in.
 - The first admin comes from the seed (`SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD`). Passwords must be at least 12 characters and not a common password. Signed-in users change theirs with `POST /api/auth/change-password`; admins reset others with `POST /api/users/:id/reset-password`.
