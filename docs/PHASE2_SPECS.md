@@ -77,7 +77,10 @@ Same as `PHASE1_SPECS.md` section 0, plus:
 | P2-4 | Shared package packaging | Compiled CommonJS `dist` (recommended); Next `transpilePackages` on TS source | Compiled: one build path for backend, Docker and CI |
 | P2-5 | Accessibility gate | axe `serious`/`critical` = 0 on six routes (recommended); add Lighthouse CI | axe first; Lighthouse later if wanted |
 
-## 6. Stream S outcome (2026-10-05)
+## 6. Outcome (2026-10-05)
+Stream F (F1 to F7) delivered and reviewed with Stream S as one Phase 2 diff: 4 reviewers, 39 confirmed findings, none blocking, all fixed. Amendments from that review: the shared package also ships an ESM build (`exports.import`, `sideEffects: false`); shared schemas carry human messages used by both the API and the forms; `MAX_SEARCH_CONDITIONS` and `MAX_QUERY_TEXT` are exported constants; the engagement quick filter is routed through `POST /api/users/search`; saving quick filters that include a text search notes that the text is saved as a name match; the Playwright suite reuses a fixed member and saved search and seeds one video. The clause "the Phase 1 review nits" in F7 was unresolvable and is withdrawn.
+
+### Stream S outcome
 S1 to S4 delivered and reviewed (3 reviewers, 25 confirmed findings, none blocking, all fixed). Contract clarifications above come from that review. Until Stream F2 lands, the Phase 1 frontend only shows the first page (25) of members and 24 media items; the branch is not deployable between the streams.
 
 ## 7. Estimates
