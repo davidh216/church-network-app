@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import { beforeAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH, PASSWORD_MATCHES_EMAIL } from '@embrace/shared';
@@ -29,5 +30,15 @@ describe('API validation comes from @embrace/shared', () => {
     const res = await register('sharedaccount', 'sharedaccount@example.org');
     expect(res.status).toBe(400);
     expect(res.body.details.password).toEqual([PASSWORD_MATCHES_EMAIL]);
+  });
+});
+
+// zod is a root dependency (one hoisted copy) and a peer of @embrace/shared, so the schemas the
+// API validates with and the zod the API imports are the same instance.
+describe('zod instance', () => {
+  it('backend and @embrace/shared resolve the same zod', () => {
+    const fromBackend = createRequire(__filename);
+    const fromShared = createRequire(fromBackend.resolve('@embrace/shared/package.json'));
+    expect(fromShared.resolve('zod')).toBe(fromBackend.resolve('zod'));
   });
 });
