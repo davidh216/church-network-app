@@ -3,6 +3,7 @@ import type { z } from 'zod';
 import { youtubeVideoId, type createMediaInput, type listMediaQuery } from '@embrace/shared';
 import { prisma } from '../../lib/prisma';
 import { HttpError } from '../../lib/http-error';
+import { escapeLike } from '../../lib/like';
 
 const withUploader = {
   uploadedBy: { select: { id: true, name: true } },
@@ -14,17 +15,20 @@ function withVideoId<T extends { url: string }>(media: T): T & { videoId: string
   return { ...media, videoId: youtubeVideoId(media.url) };
 }
 
-// Approved public media, newest first, one page at a time. Text search and the tag filter ignore case.
+// Approved public media, newest first, one page at a time. Text search and the tag filter ignore
+// case and match literally.
 export async function listMedia(query: z.output<typeof listMediaQuery>) {
   const where: Prisma.MediaWhereInput = { isPublic: true, isApproved: true };
   if (query.type) where.type = query.type;
   if (query.search) {
+    const search = escapeLike(query.search);
     where.OR = [
-      { title: { contains: query.search, mode: 'insensitive' } },
-      { description: { contains: query.search, mode: 'insensitive' } },
+      { title: { contains: search, mode: 'insensitive' } },
+      { description: { contains: search, mode: 'insensitive' } },
     ];
   }
-  if (query.tag && query.tag !== 'all') where.tags = { contains: query.tag, mode: 'insensitive' };
+  if (query.tag && query.tag !== 'all')
+    where.tags = { contains: escapeLike(query.tag), mode: 'insensitive' };
 
   const { page, pageSize } = query;
   const [rows, total] = await prisma.$transaction([

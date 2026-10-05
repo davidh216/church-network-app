@@ -2,9 +2,11 @@ import type { Prisma } from '@prisma/client';
 import type { z } from 'zod';
 import type { listUsersQuery, SearchCondition, searchQuery, UserSortField } from '@embrace/shared';
 import { DEFAULT_USER_PAGE_SIZE } from '@embrace/shared';
+import { escapeLike } from '../../lib/like';
 
 // Translates the validated member list query and the advanced search into Prisma arguments.
-// Text matching is case-insensitive; calendar dates are UTC days.
+// Text matching is case-insensitive and literal (LIKE wildcards in the input are escaped);
+// calendar dates are UTC days.
 
 type ListQuery = z.output<typeof listUsersQuery>;
 type SearchQuery = z.output<typeof searchQuery>;
@@ -44,11 +46,16 @@ export function conditionWhere(condition: SearchCondition): Prisma.UserWhereInpu
           ? { OR: [{ [field]: null }, { [field]: '' }] }
           : { [field]: '' };
       }
-      return { [field]: { [condition.operator]: condition.value, mode: insensitive } };
+      // contains, startsWith and insensitive equals all become ILIKE patterns.
+      return {
+        [field]: { [condition.operator]: escapeLike(condition.value), mode: insensitive },
+      };
     }
     case 'roles':
       return {
-        roles: { some: { role: { name: { equals: condition.value, mode: insensitive } } } },
+        roles: {
+          some: { role: { name: { equals: escapeLike(condition.value), mode: insensitive } } },
+        },
       };
     case 'engagement.engagementScore': {
       const engagementScore =
@@ -82,7 +89,7 @@ export function listWhere(query: ListQuery, staff: boolean): Prisma.UserWhereInp
   const and: Prisma.UserWhereInput[] = [];
   if (!staff) and.push({ isActive: true });
   if (query.q) {
-    const contains = { contains: query.q, mode: insensitive };
+    const contains = { contains: escapeLike(query.q), mode: insensitive };
     and.push(
       staff
         ? {
@@ -91,8 +98,10 @@ export function listWhere(query: ListQuery, staff: boolean): Prisma.UserWhereInp
         : { name: contains },
     );
   }
-  if (query.role)
-    and.push({ roles: { some: { role: { name: { equals: query.role, mode: insensitive } } } } });
+  if (query.role) {
+    const name = { equals: escapeLike(query.role), mode: insensitive };
+    and.push({ roles: { some: { role: { name } } } });
+  }
   if (query.status) and.push({ isActive: query.status === 'active' });
   if (query.stage) and.push({ engagement: { is: { membershipStage: query.stage } } });
   if (query.risk) and.push({ engagement: { is: { riskLevel: query.risk } } });
