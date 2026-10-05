@@ -14,7 +14,7 @@
   "scripts": {
     "build:shared": "npm run -w @embrace/shared build",
     "predev": "npm run build:shared",
-    "dev": "concurrently --kill-others-on-fail --names api,web --prefix-colors blue,magenta \"npm run -w backend dev\" \"npm run -w frontend dev\"",
+    "dev": "concurrently --kill-others-on-fail --names shared,api,web --prefix-colors yellow,blue,magenta \"npm run -w @embrace/shared build -- --watch --preserveWatchOutput\" \"npm run -w backend dev\" \"npm run -w frontend dev\"",
     "build": "npm run build:shared && npm run -w backend build && npm run -w frontend build",
     "prelint": "npm run build:shared",
     "lint": "npm run lint --workspaces",
