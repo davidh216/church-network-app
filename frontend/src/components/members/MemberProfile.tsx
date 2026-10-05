@@ -8,6 +8,7 @@ import { useMemberDetails } from '@/lib/queries/memberDetails';
 import InlineError from '@/components/ui/InlineError';
 import Skeleton from '@/components/ui/Skeleton';
 import type { MemberDetails } from '@/types/domain';
+import Attendance from './profile/Attendance';
 import ChurchInfo from './profile/ChurchInfo';
 import ContactInfo from './profile/ContactInfo';
 import Family from './profile/Family';
@@ -28,6 +29,7 @@ const TAB_PANELS: Record<ProfileTabId, ComponentType<{ member: MemberDetails }>>
   church: ChurchInfo,
   contact: ContactInfo,
   timeline: Timeline,
+  attendance: Attendance,
   family: Family,
   interactions: Interactions,
   milestones: Milestones,

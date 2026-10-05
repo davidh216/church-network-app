@@ -1,4 +1,9 @@
-import type { ListTimelineParams, TimelineItem } from '@embrace/shared';
+import type {
+  ListTimelineParams,
+  MemberAttendanceParams,
+  MemberAttendanceSummary,
+  TimelineItem,
+} from '@embrace/shared';
 import type { ApiEnvelope, MemberDetails } from '@/types/domain';
 import { apiFetch } from './client';
 import { queryString, type Paged } from './query';
@@ -29,4 +34,37 @@ export async function getMemberTimeline(
     { signal },
   );
   return { items, total, page, pageSize };
+}
+
+/** The `?months&types` query of the attendance summaries (types as a comma-separated list). */
+function attendanceQuery({ months, types }: MemberAttendanceParams): string {
+  return queryString({ months, types: types?.join(',') });
+}
+
+/**
+ * Staff only: the services of the scoring types a member attended in the last `months` months
+ * (12 by default), and how many such services were held.
+ */
+export async function getMemberAttendance(
+  id: string,
+  params: MemberAttendanceParams = {},
+  signal?: AbortSignal,
+): Promise<MemberAttendanceSummary> {
+  const data = await apiFetch<ApiEnvelope<{ attendance: MemberAttendanceSummary }>>(
+    `/member-details/${encodeURIComponent(id)}/attendance${attendanceQuery(params)}`,
+    { signal },
+  );
+  return data.attendance;
+}
+
+/** Any signed-in user: their own attendance summary. */
+export async function getOwnAttendance(
+  params: MemberAttendanceParams = {},
+  signal?: AbortSignal,
+): Promise<MemberAttendanceSummary> {
+  const data = await apiFetch<ApiEnvelope<{ attendance: MemberAttendanceSummary }>>(
+    `/member-details/me/attendance${attendanceQuery(params)}`,
+    { signal },
+  );
+  return data.attendance;
 }

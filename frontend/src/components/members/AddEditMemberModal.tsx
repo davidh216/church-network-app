@@ -1,8 +1,12 @@
-// File: frontend/src/components/members/AddEditMemberModal.tsx
 'use client';
 
 import { useState, useEffect, useId, type RefObject } from 'react';
-import { createUserInput, MIN_PASSWORD_LENGTH, updateUserInput } from '@embrace/shared';
+import {
+  createUserInput,
+  MAX_PROFILE_LIST_ITEMS,
+  MIN_PASSWORD_LENGTH,
+  updateUserInput,
+} from '@embrace/shared';
 import {
   apiErrorsFor,
   fieldA11y,
@@ -11,14 +15,15 @@ import {
   type FieldErrors,
 } from '@/lib/forms/validate';
 import Dialog from '@/components/ui/Dialog';
+import ChipInput from '@/components/ui/ChipInput';
 import FieldError from '@/components/ui/FieldError';
 import InlineError from '@/components/ui/InlineError';
 import TextField from '@/components/ui/TextField';
 import { useRoles } from '@/lib/queries/roles';
 import { useCreateUser, useUpdateUser } from '@/lib/queries/users';
+import { changedLists, MEMBER_FORM_FIELDS, profileLists } from '@/lib/members/memberForm';
 import type { Member } from '@/types/domain';
-
-const FIELDS = ['name', 'email', 'password', 'phone', 'bio', 'isActive', 'roleIds'] as const;
+import RoleCheckboxes from './RoleCheckboxes';
 
 interface AddEditMemberModalProps {
   isOpen: boolean;
@@ -48,6 +53,7 @@ export default function AddEditMemberModal({
   // null until the user picks roles: a new member then defaults to the member role and an
   // edited member keeps their current roles.
   const [pickedRoles, setPickedRoles] = useState<string[] | null>(null);
+  const [lists, setLists] = useState(() => profileLists(null));
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const rolesQuery = useRoles({ enabled: isOpen });
@@ -74,6 +80,7 @@ export default function AddEditMemberModal({
         isActive: member ? member.isActive : true,
         password: '',
       });
+      setLists(profileLists(member));
       setPickedRoles(null);
       setError('');
       setFieldErrors({});
@@ -93,6 +100,7 @@ export default function AddEditMemberModal({
         name: formData.name,
         phone: formData.phone,
         bio: formData.bio,
+        ...changedLists(member, lists),
         ...(formData.isActive !== member.isActive ? { isActive: formData.isActive } : {}),
         ...(rolesChanged ? { roleIds: selectedRoles } : {}),
       });
@@ -100,7 +108,11 @@ export default function AddEditMemberModal({
       return () => updateUser.mutateAsync({ id: member.id, input: checked.data });
     }
     // Create a new member (staff only). Self-registration uses /api/auth/register instead.
-    const checked = validateForm(createUserInput, { ...formData, roleIds: selectedRoles });
+    const checked = validateForm(createUserInput, {
+      ...formData,
+      ...lists,
+      roleIds: selectedRoles,
+    });
     if (!checked.ok) return checked.errors;
     return () => createUser.mutateAsync(checked.data);
   };
@@ -121,7 +133,7 @@ export default function AddEditMemberModal({
       onSave?.();
       onClose();
     } catch (err: unknown) {
-      const failed = apiErrorsFor(err, FIELDS, 'Failed to save the member');
+      const failed = apiErrorsFor(err, MEMBER_FORM_FIELDS, 'Failed to save the member');
       setFieldErrors(failed.fieldErrors);
       setError(failed.message);
     }
@@ -223,28 +235,29 @@ export default function AddEditMemberModal({
             <FieldError fieldId="member-bio" message={fieldErrors.bio} />
           </div>
 
-          <fieldset>
-            <legend className="block text-sm font-medium text-gray-700 mb-2">Roles</legend>
-            <div className="space-y-2 max-h-32 overflow-y-auto">
-              {roles.map((role) => (
-                <label key={role.id} className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={selectedRoles.includes(role.id)}
-                    onChange={() => handleRoleChange(role.id)}
-                    className="rounded-sm border-gray-300 text-blue-600 focus:ring-blue-500"
-                  />
-                  <span className="ml-2 text-sm text-gray-700 capitalize">
-                    {role.name}
-                    {role.description && (
-                      <span className="text-gray-500"> - {role.description}</span>
-                    )}
-                  </span>
-                </label>
-              ))}
-            </div>
-            <FieldError fieldId="member-roles" message={fieldErrors.roleIds} />
-          </fieldset>
+          <ChipInput
+            id="member-skills"
+            label="Volunteer Skills"
+            values={lists.volunteerSkills}
+            onChange={(volunteerSkills) => setLists((prev) => ({ ...prev, volunteerSkills }))}
+            error={fieldErrors.volunteerSkills}
+            maxItems={MAX_PROFILE_LIST_ITEMS}
+          />
+          <ChipInput
+            id="member-interests"
+            label="Interests"
+            values={lists.interests}
+            onChange={(interests) => setLists((prev) => ({ ...prev, interests }))}
+            error={fieldErrors.interests}
+            maxItems={MAX_PROFILE_LIST_ITEMS}
+          />
+
+          <RoleCheckboxes
+            roles={roles}
+            selected={selectedRoles}
+            onToggle={handleRoleChange}
+            error={fieldErrors.roleIds}
+          />
 
           <div className="flex items-center">
             <input

@@ -82,6 +82,8 @@ describe('AddEditMemberModal', () => {
       password: 'a long temporary password',
       phone: null,
       bio: null,
+      volunteerSkills: [],
+      interests: [],
       isActive: true,
       roleIds: ['crolemember0000000000001', 'croleleader0000000000001'],
     });
@@ -149,6 +151,37 @@ describe('AddEditMemberModal', () => {
       bio: null,
       isActive: false,
     });
+  });
+
+  it('edits skills and interests as chips and sends only the lists that changed', async () => {
+    await open({ ...existing, volunteerSkills: ['Music'], interests: ['Hiking'] });
+    const skills = screen.getByRole('textbox', { name: 'Volunteer Skills' });
+    fireEvent.change(skills, { target: { value: 'Sound desk' } });
+    fireEvent.keyDown(skills, { key: 'Enter' });
+    expect(screen.getByRole('button', { name: 'Remove Hiking' })).toBeInTheDocument();
+    await submit('Update Member');
+    expect(usersApi.updateUser).toHaveBeenCalledWith(existing.id, {
+      name: 'Ann Example',
+      phone: '555-0100',
+      bio: null,
+      volunteerSkills: ['Music', 'Sound desk'],
+    });
+  });
+
+  it('shows an API error about a list inline on its chip field', async () => {
+    usersApi.updateUser.mockRejectedValue(
+      new ApiError(400, 'Validation failed', 'VALIDATION', {
+        interests: ['Interests cannot be blank'],
+      }),
+    );
+    await open(existing);
+    const interests = screen.getByRole('textbox', { name: 'Interests' });
+    fireEvent.change(interests, { target: { value: 'Art' } });
+    fireEvent.keyDown(interests, { key: 'Enter' });
+    await submit('Update Member');
+    expect(interests).toHaveAttribute('aria-invalid', 'true');
+    expect(interests).toHaveAccessibleDescription(/Interests cannot be blank/);
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it('shows the API error and stays open when saving fails', async () => {

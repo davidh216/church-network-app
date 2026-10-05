@@ -3,10 +3,14 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { MAX_TIMELINE_PAGE } from '@embrace/shared';
 import MemberProfile from '@/components/members/MemberProfile';
 import { ApiError } from '@/lib/api/client';
-import { render } from '@/test/render';
+import { render, settle } from '@/test/render';
 import type { MemberDetails } from '@/types/domain';
 
-const detailsApi = vi.hoisted(() => ({ getMemberDetails: vi.fn(), getMemberTimeline: vi.fn() }));
+const detailsApi = vi.hoisted(() => ({
+  getMemberDetails: vi.fn(),
+  getMemberTimeline: vi.fn(),
+  getMemberAttendance: vi.fn(),
+}));
 vi.mock('@/lib/api/memberDetails', () => detailsApi);
 
 const rolesApi = vi.hoisted(() => ({ listRoles: vi.fn() }));
@@ -60,7 +64,7 @@ describe('MemberProfile', () => {
     detailsApi.getMemberDetails.mockResolvedValue(details);
     await render(<MemberProfile memberId="u1" />);
     expect(await screen.findByRole('heading', { level: 1, name: 'Ada Lovelace' })).toBeTruthy();
-    expect(screen.getByText('medium risk')).toBeTruthy();
+    expect(screen.getByText('Medium Risk')).toBeTruthy();
     expect(screen.getByText('Core Member')).toBeTruthy();
     // Tab sections sit directly under the member's h1.
     expect(screen.getByRole('heading', { level: 2, name: 'Basic Information' })).toBeTruthy();
@@ -120,7 +124,11 @@ describe('MemberProfile', () => {
     expect(screen.getByText('u1')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('tab', { name: /Church Info/ }));
-    expect(screen.getByText('72.0/100')).toBeTruthy();
+    expect(screen.getByText('72/100')).toBeTruthy();
+    expect(screen.getByText('Medium Risk', { selector: 'p' })).toBeTruthy();
+    const components = screen.getByRole('region', { name: 'Score components' });
+    expect(components).toHaveTextContent('Attendance (60% of the score)0/100');
+    expect(components).toHaveTextContent('Communication (20% of the score)0/100');
 
     fireEvent.click(screen.getByRole('tab', { name: /Contact & Address/ }));
     expect(screen.getByText('ada@example.com')).toBeTruthy();
@@ -129,6 +137,75 @@ describe('MemberProfile', () => {
       'Email Communications: Opted in',
     );
     expect(screen.getByText('SMS/Text Messages')).toHaveTextContent('SMS/Text Messages: Opted out');
+  });
+
+  it('shows the attendance tab and refetches for another window and service types', async () => {
+    detailsApi.getMemberDetails.mockResolvedValue(details);
+    detailsApi.getMemberAttendance.mockResolvedValue({
+      months: 12,
+      from: '2025-10-06',
+      to: '2026-10-05',
+      types: ['sunday_service'],
+      serviceCount: 3,
+      attendedCount: 2,
+      attended: [
+        { id: 's2', date: '2026-10-04', type: 'sunday_service', title: 'Harvest' },
+        { id: 's1', date: '2026-09-27', type: 'sunday_service', title: null },
+      ],
+    });
+    await render(<MemberProfile memberId="u1" />);
+    await screen.findByRole('heading', { level: 1 });
+    fireEvent.click(screen.getByRole('tab', { name: /Attendance/ }));
+
+    expect(await screen.findByText(/attended\s+of/)).toHaveTextContent(
+      /Ada Lovelace attended 2 of 3 Sunday Service services between .* \(67%\)\./,
+    );
+    const list = screen.getByRole('list', { name: 'Services attended' });
+    expect(list).toHaveTextContent('Harvest');
+    expect(list).toHaveTextContent(
+      new Date('2026-10-04T00:00:00Z').toLocaleDateString(undefined, {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        timeZone: 'UTC',
+      }),
+    );
+    expect(detailsApi.getMemberAttendance).toHaveBeenCalledWith(
+      'u1',
+      { months: 12, types: ['sunday_service'] },
+      expect.anything(),
+    );
+    // The only counted type cannot be unchecked.
+    expect(screen.getByRole('checkbox', { name: 'Sunday Service' })).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText('Period'), { target: { value: '3' } });
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Bible Study' }));
+    await settle();
+    expect(detailsApi.getMemberAttendance).toHaveBeenLastCalledWith(
+      'u1',
+      { months: 3, types: ['sunday_service', 'bible_study'] },
+      expect.anything(),
+    );
+  });
+
+  it('says so when no service was attended, and offers Retry on an error', async () => {
+    detailsApi.getMemberDetails.mockResolvedValue(details);
+    detailsApi.getMemberAttendance.mockRejectedValueOnce(new ApiError(500, 'Boom'));
+    detailsApi.getMemberAttendance.mockResolvedValue({
+      months: 12,
+      from: '2025-10-06',
+      to: '2026-10-05',
+      types: ['sunday_service'],
+      serviceCount: 0,
+      attendedCount: 0,
+      attended: [],
+    });
+    await render(<MemberProfile memberId="u1" />);
+    await screen.findByRole('heading', { level: 1 });
+    fireEvent.click(screen.getByRole('tab', { name: /Attendance/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Retry' }));
+    expect(await screen.findByText('No services attended in this period')).toBeTruthy();
+    expect(screen.getByText(/attended\s+of/)).not.toHaveTextContent('%');
   });
 
   it('shows the computed timeline from its own endpoint and pages through it', async () => {
@@ -174,7 +251,7 @@ describe('MemberProfile', () => {
     expect(await screen.findByRole('heading', { level: 3, name: 'Baptised' })).toBeTruthy();
     expect(screen.getByText('Easter service')).toBeTruthy();
     expect(screen.getByText('Milestone')).toBeTruthy();
-    expect(screen.getByText('Attendance')).toBeTruthy();
+    expect(screen.getByText('Attendance', { selector: 'span.rounded-full' })).toBeTruthy();
     expect(screen.getByText('21 activities')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Next' }));

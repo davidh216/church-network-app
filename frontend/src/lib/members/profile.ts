@@ -119,10 +119,3 @@ const IMPACT_CLASSES: Partial<Record<Impact, string>> = {
 
 export const impactClass = (impact: string): string =>
   IMPACT_CLASSES[impact as Impact] ?? 'bg-gray-100 text-gray-800';
-
-/** Risk badge colours: high red, medium yellow, otherwise green. */
-export function riskBadgeClass(risk: string): string {
-  if (risk === 'high') return 'bg-red-100 text-red-800';
-  if (risk === 'medium') return 'bg-yellow-100 text-yellow-800';
-  return 'bg-green-100 text-green-800';
-}

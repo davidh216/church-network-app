@@ -1,9 +1,11 @@
 'use client';
 
 import type { UserSummary } from '@/lib/api/users';
+import { useIsStaff } from '@/lib/auth/AuthProvider';
 import { useUserSummary } from '@/lib/queries/users';
 import InlineError from '@/components/ui/InlineError';
 import Skeleton from '@/components/ui/Skeleton';
+import ServicesThisMonthTile from './ServicesThisMonthTile';
 
 interface Tile {
   label: string;
@@ -26,6 +28,7 @@ export function summaryTiles(summary: UserSummary): Tile[] {
 
 export default function SummaryTiles() {
   const { data: summary, error, refetch } = useUserSummary();
+  const staff = useIsStaff();
 
   if (error) {
     return (
@@ -43,13 +46,14 @@ export default function SummaryTiles() {
   }
 
   return (
-    <dl className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+    <dl className={`grid grid-cols-2 gap-4 ${staff ? 'lg:grid-cols-5' : 'lg:grid-cols-4'}`}>
       {summaryTiles(summary).map((tile) => (
         <div key={tile.label} className="bg-white shadow-sm rounded-lg p-5">
           <dt className="text-sm font-medium text-gray-500">{tile.label}</dt>
           <dd className="mt-1 text-3xl font-semibold text-gray-900">{tile.value}</dd>
         </div>
       ))}
+      {staff && <ServicesThisMonthTile />}
     </dl>
   );
 }

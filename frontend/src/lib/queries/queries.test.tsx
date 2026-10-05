@@ -7,8 +7,9 @@ import { makeTestQueryClient, queryWrapper } from '@/test/render';
 import { useAnalytics, useRefreshAllEngagement } from './analytics';
 import { queryKeys } from './keys';
 import { useCreateMedia, useMedia } from './media';
-import { useMemberDetails } from './memberDetails';
+import { useMemberAttendance, useMemberDetails, useOwnAttendance } from './memberDetails';
 import { useRoles } from './roles';
+import { useServices } from './services';
 import {
   useCreateSavedSearch,
   useDeleteSavedSearch,
@@ -36,8 +37,14 @@ const analyticsApi = vi.hoisted(() => ({
 vi.mock('@/lib/api/analytics', () => analyticsApi);
 const rolesApi = vi.hoisted(() => ({ listRoles: vi.fn() }));
 vi.mock('@/lib/api/roles', () => rolesApi);
-const detailsApi = vi.hoisted(() => ({ getMemberDetails: vi.fn() }));
+const detailsApi = vi.hoisted(() => ({
+  getMemberDetails: vi.fn(),
+  getMemberAttendance: vi.fn(),
+  getOwnAttendance: vi.fn(),
+}));
 vi.mock('@/lib/api/memberDetails', () => detailsApi);
+const servicesApi = vi.hoisted(() => ({ listServices: vi.fn() }));
+vi.mock('@/lib/api/services', () => servicesApi);
 const savedApi = vi.hoisted(() => ({
   listSavedSearches: vi.fn(),
   createSavedSearch: vi.fn(),
@@ -100,6 +107,24 @@ const queryCases: QueryCase[] = [
     api: detailsApi.getMemberDetails,
     useHook: () => useMemberDetails('u1'),
     args: ['u1'],
+  },
+  {
+    name: 'useMemberAttendance',
+    api: detailsApi.getMemberAttendance,
+    useHook: () => useMemberAttendance('u1', { months: 6, types: ['sunday_service'] }),
+    args: ['u1', { months: 6, types: ['sunday_service'] }, expect.any(AbortSignal)],
+  },
+  {
+    name: 'useOwnAttendance',
+    api: detailsApi.getOwnAttendance,
+    useHook: () => useOwnAttendance(),
+    args: [{}, expect.any(AbortSignal)],
+  },
+  {
+    name: 'useServices',
+    api: servicesApi.listServices,
+    useHook: () => useServices({ from: '2026-10-01', to: '2026-10-31', pageSize: 1 }),
+    args: [{ from: '2026-10-01', to: '2026-10-31', pageSize: 1 }, expect.any(AbortSignal)],
   },
   {
     name: 'useMedia',
@@ -219,6 +244,25 @@ describe('list hooks keep the previous page while the next loads', () => {
     expect(result.current.data).toEqual({ media: ['a'] });
     expect(result.current.isPlaceholderData).toBe(true);
   });
+});
+
+it('useServices does not fetch while disabled', async () => {
+  const { result } = renderHook(() => useServices({}, { enabled: false }), {
+    wrapper: queryWrapper(),
+  });
+  expect(result.current.fetchStatus).toBe('idle');
+  expect(servicesApi.listServices).not.toHaveBeenCalled();
+});
+
+it('attendance summaries sit under the member-details prefix, so a member save refetches them', async () => {
+  detailsApi.getMemberAttendance.mockResolvedValue({ attended: [] });
+  const client = makeTestQueryClient();
+  const { result } = renderHook(() => useMemberAttendance('u1', { months: 12 }), {
+    wrapper: queryWrapper(client),
+  });
+  await waitFor(() => expect(result.current.isSuccess).toBe(true));
+  await client.invalidateQueries({ queryKey: queryKeys.memberDetails.detail('u1') });
+  await waitFor(() => expect(detailsApi.getMemberAttendance).toHaveBeenCalledTimes(2));
 });
 
 it('useRoles does not fetch while disabled', async () => {

@@ -1,7 +1,7 @@
 'use client';
 
 import { useId, useState, type FormEvent, type RefObject } from 'react';
-import { createMediaInput } from '@embrace/shared';
+import { createMediaInput, MAX_MEDIA_TAGS } from '@embrace/shared';
 import {
   apiErrorsFor,
   fieldA11y,
@@ -9,8 +9,9 @@ import {
   validateForm,
   type FieldErrors,
 } from '@/lib/forms/validate';
-import { MEDIA_TAGS } from '@/lib/media/format';
+import { MEDIA_TAGS, tagLabel } from '@/lib/media/format';
 import { useCreateMedia } from '@/lib/queries/media';
+import ChipInput from '@/components/ui/ChipInput';
 import Dialog from '@/components/ui/Dialog';
 import FieldError from '@/components/ui/FieldError';
 
@@ -38,12 +39,6 @@ export default function AddMediaDialog({ onClose, onSaved, fallbackFocus }: AddM
 
   const update = (key: 'title' | 'description' | 'url', value: string) =>
     setForm((prev) => ({ ...prev, [key]: value }));
-
-  const toggleTag = (tag: string) =>
-    setForm((prev) => ({
-      ...prev,
-      tags: prev.tags.includes(tag) ? prev.tags.filter((t) => t !== tag) : [...prev.tags, tag],
-    }));
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -136,25 +131,17 @@ export default function AddMediaDialog({ onClose, onSaved, fallbackFocus }: AddM
             <FieldError fieldId="media-description" message={fieldErrors.description} />
           </div>
 
-          <fieldset>
-            <legend className="block text-sm font-medium text-gray-700 mb-2">Categories</legend>
-            <div className="grid grid-cols-2 gap-2">
-              {MEDIA_TAGS.map((tag) => (
-                <label key={tag} className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={form.tags.includes(tag)}
-                    onChange={() => toggleTag(tag)}
-                    className="rounded-sm border-gray-300 text-blue-600 focus:ring-blue-500"
-                  />
-                  <span className="ml-2 text-sm text-gray-700 capitalize">
-                    {tag.replace('-', ' ')}
-                  </span>
-                </label>
-              ))}
-            </div>
-            <FieldError fieldId="media-tags" message={fieldErrors.tags} />
-          </fieldset>
+          <ChipInput
+            id="media-tags"
+            label="Tags"
+            values={form.tags}
+            onChange={(tags) => setForm((prev) => ({ ...prev, tags }))}
+            error={fieldErrors.tags}
+            maxItems={MAX_MEDIA_TAGS}
+            suggestions={MEDIA_TAGS}
+            formatChip={tagLabel}
+            placeholder="worship, sermon, youth..."
+          />
 
           <div className="flex justify-end space-x-3 pt-4">
             <button

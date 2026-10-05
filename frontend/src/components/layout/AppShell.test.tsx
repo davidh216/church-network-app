@@ -1,4 +1,5 @@
 import { act } from 'react';
+import { waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Dashboard from '@/components/dashboard/Dashboard';
 import { summaryTiles } from '@/components/dashboard/SummaryTiles';
@@ -28,6 +29,9 @@ vi.mock('@/lib/api/auth', () => authApi);
 
 const usersApi = vi.hoisted(() => ({ getUserSummary: vi.fn() }));
 vi.mock('@/lib/api/users', () => usersApi);
+
+const servicesApi = vi.hoisted(() => ({ listServices: vi.fn() }));
+vi.mock('@/lib/api/services', () => servicesApi);
 
 const staffSummary = { total: 12, active: 10, pendingApproval: 2, newThisMonth: 3 };
 
@@ -60,6 +64,7 @@ beforeEach(() => {
   nav.pathname = '/';
   nav.search = '';
   usersApi.getUserSummary.mockResolvedValue({ total: 7 });
+  servicesApi.listServices.mockResolvedValue({ services: [], total: 4, page: 1, pageSize: 1 });
 });
 
 describe('app shell', () => {
@@ -160,14 +165,39 @@ describe('dashboard', () => {
   it('shows the staff counts from /api/users/summary', async () => {
     usersApi.getUserSummary.mockResolvedValue(staffSummary);
     const container = await renderDashboard(['leader']);
-    const tiles = Array.from(container.querySelectorAll('dl > div')).map((d) => d.textContent);
-    expect(tiles).toEqual(['Total members12', 'Active10', 'Pending approval2', 'New this month3']);
+    const tiles = () =>
+      Array.from(container.querySelectorAll('dl > div')).map((d) => d.textContent);
+    await waitFor(() =>
+      expect(tiles()).toEqual([
+        'Total members12',
+        'Active10',
+        'Pending approval2',
+        'New this month3',
+        'Services this month4',
+      ]),
+    );
+    // The current calendar month, one row: only `total` is read.
+    const [params] = servicesApi.listServices.mock.calls[0]!;
+    expect(params).toMatchObject({ pageSize: 1 });
+    expect(params.from).toMatch(/^\d{4}-\d{2}-01$/);
+    expect(params.to.slice(0, 7)).toBe(params.from.slice(0, 7));
+  });
+
+  it('says the services count is unavailable when it fails, keeping the other counts', async () => {
+    usersApi.getUserSummary.mockResolvedValue(staffSummary);
+    servicesApi.listServices.mockRejectedValue(new ApiError(500, 'Boom'));
+    const container = await renderDashboard(['admin']);
+    const tiles = () =>
+      Array.from(container.querySelectorAll('dl > div')).map((d) => d.textContent);
+    await waitFor(() => expect(tiles().at(-1)).toBe('Services this monthUnavailable'));
+    expect(tiles()[0]).toBe('Total members12');
   });
 
   it('shows a member a single Members tile', async () => {
     const container = await renderDashboard(['member']);
     const tiles = Array.from(container.querySelectorAll('dl > div')).map((d) => d.textContent);
     expect(tiles).toEqual(['Members7']);
+    expect(servicesApi.listServices).not.toHaveBeenCalled();
   });
 
   it('reports a failed summary with a retry', async () => {

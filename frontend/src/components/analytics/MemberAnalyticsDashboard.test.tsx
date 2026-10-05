@@ -52,6 +52,30 @@ describe('MemberAnalyticsDashboard', () => {
     expect(screen.getByText('35')).toBeTruthy();
   });
 
+  it('shows the average of each engagement component with its help text', async () => {
+    analyticsApi.getAnalytics.mockResolvedValue({
+      ...analytics,
+      averageScores: {
+        engagementScore: 61,
+        attendanceScore: 70,
+        communityScore: 45,
+        communicationScore: 52,
+      },
+    });
+    await render(<MemberAnalyticsDashboard />);
+    const section = await screen.findByRole('region', { name: /Average engagement components/ });
+    expect(within(section).getByText('Attendance').closest('div')?.textContent).toContain('70/100');
+    expect(within(section).getByText('Community').closest('div')?.textContent).toContain('45/100');
+    expect(within(section).getByText(/Responses over asks/)).toBeTruthy();
+  });
+
+  it('leaves the component tiles out when the API sends no averages', async () => {
+    analyticsApi.getAnalytics.mockResolvedValue(analytics);
+    await render(<MemberAnalyticsDashboard />);
+    await screen.findByRole('heading', { name: 'Member Analytics Dashboard' });
+    expect(screen.queryByRole('region', { name: /Average engagement components/ })).toBeNull();
+  });
+
   it('shows an inline error with Retry when analytics fail', async () => {
     analyticsApi.getAnalytics.mockRejectedValue(new ApiError(500, 'INTERNAL', 'Boom'));
     await render(<MemberAnalyticsDashboard />);

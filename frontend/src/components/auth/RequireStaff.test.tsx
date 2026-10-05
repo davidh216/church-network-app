@@ -18,7 +18,11 @@ const authApi = vi.hoisted(() => ({
 }));
 vi.mock('@/lib/api/auth', () => authApi);
 
-const detailsApi = vi.hoisted(() => ({ getMemberDetails: vi.fn() }));
+const detailsApi = vi.hoisted(() => ({
+  getMemberDetails: vi.fn(),
+  getOwnAttendance: vi.fn(),
+  getMemberAttendance: vi.fn(),
+}));
 vi.mock('@/lib/api/memberDetails', () => detailsApi);
 
 const analyticsApi = vi.hoisted(() => ({ getAnalytics: vi.fn(), refreshAllEngagement: vi.fn() }));
@@ -38,6 +42,15 @@ beforeEach(() => {
   detailsApi.getMemberDetails.mockResolvedValue({
     ...makeUser(['member'], { id: OTHER, name: 'Bob Other' }),
     engagement: null,
+  });
+  detailsApi.getOwnAttendance.mockResolvedValue({
+    months: 12,
+    from: '2025-10-06',
+    to: '2026-10-05',
+    types: ['sunday_service'],
+    serviceCount: 4,
+    attendedCount: 1,
+    attended: [{ id: 's1', date: '2026-10-04', type: 'sunday_service', title: null }],
   });
   analyticsApi.getAnalytics.mockRejectedValue(new Error('not needed'));
 });
@@ -107,6 +120,10 @@ describe('/members/[id]', () => {
     expect(container.textContent).toContain('555-0100');
     expect(detailsApi.getMemberDetails).not.toHaveBeenCalled();
     expect(router.replace).not.toHaveBeenCalled();
+    // Their own attendance comes from /me/attendance, never the staff endpoint.
+    await waitFor(() => expect(container.textContent).toContain('You attended 1 of 4'));
+    expect(detailsApi.getOwnAttendance).toHaveBeenCalled();
+    expect(detailsApi.getMemberAttendance).not.toHaveBeenCalled();
   });
 
   it("sends a member opening someone else's profile to the dashboard", async () => {

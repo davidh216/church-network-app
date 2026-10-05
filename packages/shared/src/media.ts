@@ -53,6 +53,9 @@ export const youtubeUrl = z
   })
   .transform((url) => canonicalYouTubeUrl(youtubeVideoId(url)!));
 
+// The most tags one video may carry.
+export const MAX_MEDIA_TAGS = 20;
+
 // POST /api/media (staff)
 export const createMediaInput = z.object({
   title: requiredText('Title', 200, 'Please enter a title'),
@@ -61,7 +64,7 @@ export const createMediaInput = z.object({
   url: youtubeUrl,
   tags: z
     .array(requiredText('Each tag', 50, 'Tags cannot be blank'))
-    .max(20, 'Add at most 20 tags')
+    .max(MAX_MEDIA_TAGS, `Add at most ${MAX_MEDIA_TAGS} tags`)
     .default([]),
 });
 

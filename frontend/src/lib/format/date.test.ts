@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  localIsoDay,
+  monthRange,
   formatCalendarDate,
   formatLocalDate,
   formatLocalDateTime,
@@ -57,5 +59,19 @@ describe('calendar dates', () => {
       else process.env.TZ = originalTz;
     }
     expect(formatCalendarDate(undefined)).toBeNull();
+  });
+});
+
+describe('month ranges', () => {
+  it('formats a local day as YYYY-MM-DD', () => {
+    expect(localIsoDay(new Date(2026, 0, 5, 23, 30))).toBe('2026-01-05');
+  });
+
+  it('spans the whole current month, including leap days and December', () => {
+    expect(monthRange(new Date(2028, 1, 14))).toEqual({ from: '2028-02-01', to: '2028-02-29' });
+    expect(monthRange(new Date(2026, 11, 31, 22))).toEqual({
+      from: '2026-12-01',
+      to: '2026-12-31',
+    });
   });
 });

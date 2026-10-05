@@ -3,6 +3,7 @@ const PROFILE_TABS = [
   { id: 'church', label: 'Church Info', icon: '⛪' },
   { id: 'contact', label: 'Contact & Address', icon: '📧' },
   { id: 'timeline', label: 'Timeline', icon: '📅' },
+  { id: 'attendance', label: 'Attendance', icon: '✅' },
   { id: 'family', label: 'Family', icon: '👨‍👩‍👧‍👦' },
   { id: 'interactions', label: 'Interactions', icon: '💬' },
   { id: 'milestones', label: 'Milestones', icon: '🏆' },

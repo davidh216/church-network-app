@@ -31,14 +31,19 @@ describe('AddMediaDialog', () => {
     await render(<AddMediaDialog onClose={() => undefined} onSaved={onSaved} />);
     type('Video Title *', '  New sermon ');
     type('YouTube URL *', 'https://youtu.be/abcdefghijk?t=30');
-    fireEvent.click(screen.getByRole('checkbox', { name: /sermon/i }));
+    const tags = screen.getByRole('combobox', { name: 'Tags' });
+    fireEvent.change(tags, { target: { value: 'sermon' } });
+    fireEvent.keyDown(tags, { key: 'Enter' });
+    fireEvent.change(tags, { target: { value: ' Easter 2026 ' } });
+    fireEvent.keyDown(tags, { key: ',' });
+    expect(screen.getByRole('button', { name: 'Remove Sermon' })).toBeTruthy();
     await submit();
     expect(mediaApi.createMedia).toHaveBeenCalledWith({
       title: 'New sermon',
       description: '',
       type: 'YOUTUBE_VIDEO',
       url: 'https://www.youtube.com/watch?v=abcdefghijk',
-      tags: ['sermon'],
+      tags: ['sermon', 'Easter 2026'],
     });
     expect(onSaved).toHaveBeenCalledTimes(1);
   });

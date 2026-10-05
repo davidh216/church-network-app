@@ -5,6 +5,7 @@ import { riskClass, riskLabel, stageClass, stageLabel } from '@/lib/members/disp
 import InlineError from '@/components/ui/InlineError';
 import Skeleton from '@/components/ui/Skeleton';
 import DistributionList from './DistributionList';
+import EngagementComponents from './EngagementComponents';
 import RefreshEngagementControl from './RefreshEngagementControl';
 import StatTiles from './StatTiles';
 import TopEngagedMembers from './TopEngagedMembers';
@@ -46,6 +47,15 @@ export default function MemberAnalyticsDashboard() {
         </div>
 
         <StatTiles analytics={analytics} />
+
+        {analytics.averageScores && (
+          <div className="mb-8">
+            <EngagementComponents
+              scores={analytics.averageScores}
+              title="Average engagement components (active members)"
+            />
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2">

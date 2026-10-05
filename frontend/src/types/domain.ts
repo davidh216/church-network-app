@@ -87,6 +87,9 @@ export interface Member {
   updatedAt?: string;
   membershipDate?: string | null;
   lastLoginAt?: string | null;
+  /** Staff projections only. */
+  volunteerSkills?: string[];
+  interests?: string[];
   roles: UserRole[];
   engagement?: Engagement | null;
 }

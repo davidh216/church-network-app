@@ -11,7 +11,6 @@ import {
   milestoneIcon,
   priorityClass,
   profileDate,
-  riskBadgeClass,
 } from './profile';
 
 describe('member profile helpers', () => {
@@ -75,8 +74,5 @@ describe('member profile helpers', () => {
     expect(priorityClass('low')).toContain('gray');
     expect(impactClass('high')).toContain('purple');
     expect(impactClass('low')).toContain('gray');
-    expect(riskBadgeClass('high')).toContain('red');
-    expect(riskBadgeClass('medium')).toContain('yellow');
-    expect(riskBadgeClass('low')).toContain('green');
   });
 });

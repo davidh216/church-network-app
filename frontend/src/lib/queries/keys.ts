@@ -1,7 +1,9 @@
 import type {
   ListMediaParams,
+  ListServicesParams,
   ListTimelineParams,
   ListUsersParams,
+  MemberAttendanceParams,
   SearchQuery,
 } from '@embrace/shared';
 
@@ -23,6 +25,15 @@ export const queryKeys = {
     detail: (id: string) => ['member-details', id] as const,
     timeline: (id: string, params: ListTimelineParams) =>
       ['member-details', id, 'timeline', params] as const,
+    attendance: (id: string, params: MemberAttendanceParams) =>
+      ['member-details', id, 'attendance', params] as const,
+    /** The signed-in user's own summary (member ids are cuids, never "me"). */
+    ownAttendance: (params: MemberAttendanceParams) =>
+      ['member-details', 'me', 'attendance', params] as const,
+  },
+  services: {
+    all: ['services'] as const,
+    list: (params: ListServicesParams) => ['services', 'list', params] as const,
   },
   media: {
     all: ['media'] as const,

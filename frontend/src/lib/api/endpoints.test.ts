@@ -6,6 +6,7 @@ import * as media from './media';
 import * as memberDetails from './memberDetails';
 import * as roles from './roles';
 import * as savedSearches from './savedSearches';
+import * as services from './services';
 import * as users from './users';
 
 const fetchMock = vi.fn<typeof fetch>();
@@ -272,6 +273,38 @@ describe('roles, media, analytics, member details', () => {
       pageSize: 5,
     });
     expect(call().url).toBe('/api/member-details/u1/timeline?page=2&pageSize=5');
+  });
+
+  it('getMemberAttendance and getOwnAttendance', async () => {
+    const attendance = { months: 6, serviceCount: 2, attendedCount: 1, attended: [] };
+    respond({ success: true, attendance });
+    await expect(
+      memberDetails.getMemberAttendance('u1', {
+        months: 6,
+        types: ['sunday_service', 'bible_study'],
+      }),
+    ).resolves.toEqual(attendance);
+    expect(call(0).url).toBe(
+      '/api/member-details/u1/attendance?months=6&types=sunday_service%2Cbible_study',
+    );
+
+    respond({ success: true, attendance });
+    await expect(memberDetails.getOwnAttendance()).resolves.toEqual(attendance);
+    expect(call(1)).toEqual({
+      url: '/api/member-details/me/attendance',
+      method: 'GET',
+      body: undefined,
+    });
+  });
+});
+
+describe('services endpoints', () => {
+  it('listServices passes the range and paging and returns the page', async () => {
+    respond({ success: true, services: [{ id: 's1' }], total: 9, page: 1, pageSize: 1 });
+    await expect(
+      services.listServices({ from: '2026-10-01', to: '2026-10-31', pageSize: 1 }),
+    ).resolves.toEqual({ services: [{ id: 's1' }], total: 9, page: 1, pageSize: 1 });
+    expect(call().url).toBe('/api/services?from=2026-10-01&to=2026-10-31&pageSize=1');
   });
 });
 
