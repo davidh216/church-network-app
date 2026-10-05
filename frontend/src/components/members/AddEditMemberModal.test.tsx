@@ -1,5 +1,6 @@
 import { fireEvent, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { PASSWORD_MATCHES_EMAIL } from '@embrace/shared';
 import AddEditMemberModal from '@/components/members/AddEditMemberModal';
 import { ApiError } from '@/lib/api/client';
 import { render, settle } from '@/test/render';
@@ -12,9 +13,9 @@ const usersApi = vi.hoisted(() => ({ createUser: vi.fn(), updateUser: vi.fn() })
 vi.mock('@/lib/api/users', () => usersApi);
 
 const roles: Role[] = [
-  { id: 'role-admin', name: 'admin' },
-  { id: 'role-leader', name: 'leader' },
-  { id: 'role-member', name: 'member' },
+  { id: 'croleadmin00000000000001', name: 'admin' },
+  { id: 'croleleader0000000000001', name: 'leader' },
+  { id: 'crolemember0000000000001', name: 'member' },
 ];
 
 const existing: Member = {
@@ -65,7 +66,7 @@ describe('AddEditMemberModal', () => {
   it('create sends roleIds (defaulting to the member role) and isActive', async () => {
     await open();
     expect(screen.getByRole('heading', { name: 'Add New Member' })).toBeInTheDocument();
-    expect(screen.getByRole('checkbox', { name: /member/ })).toBeChecked();
+    expect(await screen.findByRole('checkbox', { name: /^member/ })).toBeChecked();
     expect(screen.getByLabelText('Password *')).toHaveAttribute('minLength', '12');
 
     type('Full Name *', 'New Person');
@@ -82,7 +83,7 @@ describe('AddEditMemberModal', () => {
       phone: null,
       bio: null,
       isActive: true,
-      roleIds: ['role-member', 'role-leader'],
+      roleIds: ['crolemember0000000000001', 'croleleader0000000000001'],
     });
     expect(onSave).toHaveBeenCalledTimes(1);
     expect(onClose).toHaveBeenCalledTimes(1);
@@ -96,7 +97,7 @@ describe('AddEditMemberModal', () => {
     fireEvent.click(screen.getByLabelText('Active Member'));
     await submit('Add Member');
     expect(usersApi.createUser).toHaveBeenCalledWith(
-      expect.objectContaining({ isActive: false, roleIds: ['role-member'] }),
+      expect.objectContaining({ isActive: false, roleIds: ['crolemember0000000000001'] }),
     );
   });
 
@@ -119,19 +120,19 @@ describe('AddEditMemberModal', () => {
 
   it('update sends roleIds when the roles changed', async () => {
     await open(existing);
-    fireEvent.click(screen.getByRole('checkbox', { name: /leader/ }));
+    fireEvent.click(await screen.findByRole('checkbox', { name: /leader/ }));
     await submit('Update Member');
     expect(usersApi.updateUser).toHaveBeenCalledWith(existing.id, {
       name: 'Ann Example',
       phone: '555-0100',
       bio: null,
-      roleIds: ['role-member', 'role-leader'],
+      roleIds: ['crolemember0000000000001', 'croleleader0000000000001'],
     });
   });
 
   it('update does not send roleIds when a role is toggled off and on again', async () => {
     await open(existing);
-    const memberBox = screen.getByRole('checkbox', { name: /member/ });
+    const memberBox = await screen.findByRole('checkbox', { name: /member/ });
     fireEvent.click(memberBox);
     fireEvent.click(memberBox);
     await submit('Update Member');
@@ -156,6 +157,63 @@ describe('AddEditMemberModal', () => {
     await submit('Update Member');
     expect(screen.getByText('Insufficient permissions')).toBeInTheDocument();
     expect(onSave).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('shows the shared password policy message inline and does not call the API', async () => {
+    await open();
+    type('Full Name *', 'New Person');
+    type('Email *', 'new@example.com');
+    type('Password *', 'too short');
+    await submit('Add Member');
+    expect(usersApi.createUser).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('Password *')).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByLabelText('Password *')).toHaveAccessibleDescription(
+      'Password must be at least 12 characters',
+    );
+  });
+
+  it('rejects a password that matches the email name with the API message', async () => {
+    await open();
+    type('Full Name *', 'New Person');
+    type('Email *', 'averylongname@example.com');
+    type('Password *', 'averylongname');
+    await submit('Add Member');
+    expect(usersApi.createUser).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('Password *')).toHaveAccessibleDescription(PASSWORD_MATCHES_EMAIL);
+  });
+
+  it('flags a malformed email inline', async () => {
+    await open();
+    type('Full Name *', 'New Person');
+    type('Email *', 'not-an-email');
+    type('Password *', 'a long temporary password');
+    await submit('Add Member');
+    expect(usersApi.createUser).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('Email *')).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByLabelText('Full Name *')).not.toHaveAttribute('aria-invalid');
+  });
+
+  it('sends trimmed values from the schema output', async () => {
+    await open();
+    type('Full Name *', '  Spaced Person  ');
+    type('Email *', 'spaced@example.com');
+    type('Password *', 'a long temporary password');
+    type('Phone', '   ');
+    await submit('Add Member');
+    expect(usersApi.createUser).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'Spaced Person', phone: null }),
+    );
+  });
+
+  it('shows API field errors inline next to the field', async () => {
+    usersApi.updateUser.mockRejectedValue(
+      new ApiError(400, 'Invalid request', 'VALIDATION', { phone: ['Phone is not valid'] }),
+    );
+    await open(existing);
+    await submit('Update Member');
+    expect(screen.getByLabelText('Phone')).toHaveAccessibleDescription('Phone is not valid');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
   });
 });

@@ -74,14 +74,70 @@ describe('auth endpoints', () => {
 });
 
 describe('users endpoints', () => {
-  it('listUsers, getUser', async () => {
-    respond({ success: true, users: [{ id: 'u1' }] });
-    await expect(users.listUsers()).resolves.toEqual([{ id: 'u1' }]);
+  it('listUsers returns the page and total, sending only the set params', async () => {
+    const pageBody = { users: [{ id: 'u1' }], total: 26, page: 2, pageSize: 25 };
+    respond({ success: true, ...pageBody });
+    await expect(users.listUsers()).resolves.toEqual(pageBody);
     expect(call(0).url).toBe('/api/users');
 
+    respond({ success: true, ...pageBody });
+    await users.listUsers({
+      q: ' ann ',
+      role: '',
+      status: 'active',
+      stage: undefined,
+      joinedTo: '2026-01-31',
+      sort: 'name',
+      order: 'desc',
+      page: 2,
+      pageSize: 25,
+    });
+    expect(call(1).url).toBe(
+      '/api/users?q=ann&status=active&joinedTo=2026-01-31&sort=name&order=desc&page=2&pageSize=25',
+    );
+  });
+
+  it('searchUsers posts the query and returns the page and total', async () => {
+    const pageBody = { users: [{ id: 'u1' }], total: 1, page: 1, pageSize: 25 };
+    respond({ success: true, ...pageBody });
+    const query = {
+      conditions: [
+        {
+          field: 'engagement.membershipStage' as const,
+          operator: 'equals' as const,
+          value: 'new_member' as const,
+        },
+        { field: 'engagement.engagementScore' as const, operator: 'gte' as const, value: 50 },
+      ],
+      logic: 'AND' as const,
+      page: 1,
+      pageSize: 25,
+    };
+    await expect(users.searchUsers(query)).resolves.toEqual(pageBody);
+    expect(call(0)).toEqual({ url: '/api/users/search', method: 'POST', body: query });
+  });
+
+  it('getUser', async () => {
     respond({ success: true, user: { id: 'u1' } });
     await expect(users.getUser('u1')).resolves.toEqual({ id: 'u1' });
-    expect(call(1).url).toBe('/api/users/u1');
+    expect(call(0).url).toBe('/api/users/u1');
+  });
+
+  it('getUserSummary returns the staff counts, or only total for a member', async () => {
+    respond({ success: true, total: 9, active: 7, pendingApproval: 1, newThisMonth: 2 });
+    await expect(users.getUserSummary()).resolves.toEqual({
+      total: 9,
+      active: 7,
+      pendingApproval: 1,
+      newThisMonth: 2,
+    });
+    expect(call(0)).toMatchObject({ url: '/api/users/summary', method: 'GET' });
+
+    respond({ success: true, total: 7 });
+    const member = await users.getUserSummary();
+    expect(member.total).toBe(7);
+    expect(member.active).toBeUndefined();
+    expect(member).not.toHaveProperty('success');
   });
 
   it('createUser posts the payload including roleIds and isActive', async () => {
@@ -190,7 +246,14 @@ describe('saved searches endpoints', () => {
     expect(call(0).url).toBe('/api/users/saved-searches');
 
     respond({ success: true, search: { id: 's2' } }, { status: 201 });
-    const input = { name: 'N', query: { conditions: [] }, isPublic: false };
+    const input = {
+      name: 'N',
+      query: {
+        conditions: [{ field: 'name' as const, operator: 'contains' as const, value: 'ann' }],
+        logic: 'AND' as const,
+      },
+      isPublic: false,
+    };
     await expect(savedSearches.createSavedSearch(input)).resolves.toEqual({ id: 's2' });
     expect(call(1)).toEqual({ url: '/api/users/saved-searches', method: 'POST', body: input });
 

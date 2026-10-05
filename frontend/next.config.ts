@@ -6,6 +6,11 @@ const nextConfig: NextConfig = {
   // the workspace root because dependencies are hoisted to the root node_modules.
   output: 'standalone',
   outputFileTracingRoot: path.join(__dirname, '..'),
+  // YouTube thumbnails go through next/image; only YouTube's image host is allowed. Avatars stay
+  // plain <img> because their hosts are user-supplied (decision P2-3).
+  images: {
+    remotePatterns: [{ protocol: 'https', hostname: 'i.ytimg.com', pathname: '/vi/**' }],
+  },
   // The browser always calls the relative /api; the Next.js server proxies it to
   // the backend so the session cookie stays first-party (contract 1.1).
   // Rewrites are resolved at build time: API_URL must be set when `next build` runs.

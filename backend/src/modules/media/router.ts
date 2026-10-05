@@ -1,16 +1,17 @@
 import express from 'express';
+import { createMediaInput, listMediaQuery } from '@embrace/shared';
 import { requireRole, STAFF } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
-import { createMediaBody, idParams, listMediaQuery } from './schemas';
+import { idParams } from '../../lib/schemas';
 import * as media from './service';
 
 const router = express.Router();
 
 router.get('/', validate({ query: listMediaQuery }), async (req, res) => {
-  res.json({ success: true, media: await media.listMedia(req.query) });
+  res.json({ success: true, ...(await media.listMedia(req.query)) });
 });
 
-router.post('/', requireRole(...STAFF), validate({ body: createMediaBody }), async (req, res) => {
+router.post('/', requireRole(...STAFF), validate({ body: createMediaInput }), async (req, res) => {
   res.status(201).json({ success: true, media: await media.createMedia(req.user!.id, req.body) });
 });
 

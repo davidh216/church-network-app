@@ -1,20 +1,26 @@
-import type { ApiEnvelope, CreateMediaInput, MediaItem } from '../../types/domain';
+import type { ListMediaParams } from '@embrace/shared';
+import type { ApiEnvelope, CreateMediaInput, MediaItem } from '@/types/domain';
 import { apiFetch } from './client';
+import { queryString, type Paged } from './query';
 
-export interface MediaFilters {
-  search?: string;
-  tag?: string;
+export interface MediaPage extends Paged {
+  media: MediaItem[];
 }
 
-export async function listMedia(filters: MediaFilters = {}): Promise<MediaItem[]> {
-  const params = new URLSearchParams();
-  if (filters.search) params.set('search', filters.search);
-  if (filters.tag && filters.tag !== 'all') params.set('tag', filters.tag);
-  const query = params.toString();
-  const data = await apiFetch<ApiEnvelope<{ media: MediaItem[] }>>(
-    `/media${query ? `?${query}` : ''}`,
+/**
+ * GET /api/media: one page (24 by default) of the library; tag "all" means no tag filter.
+ * `signal` aborts a request that a newer one has superseded.
+ */
+export async function listMedia(
+  params: ListMediaParams = {},
+  signal?: AbortSignal,
+): Promise<MediaPage> {
+  const { tag, ...rest } = params;
+  const { media, total, page, pageSize } = await apiFetch<ApiEnvelope<MediaPage>>(
+    `/media${queryString({ ...rest, tag: tag === 'all' ? undefined : tag })}`,
+    { signal },
   );
-  return data.media;
+  return { media, total, page, pageSize };
 }
 
 /** Staff only. */

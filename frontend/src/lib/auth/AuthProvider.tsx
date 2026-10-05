@@ -19,7 +19,7 @@ import { isPublicPath } from './paths';
  * `anonymous`: the API said there is no (valid) session. `error`: the API could not be asked
  * (network error, 5xx), so whether there is a session is unknown; `refresh()` asks again.
  */
-export type AuthStatus = 'loading' | 'authenticated' | 'anonymous' | 'error';
+type AuthStatus = 'loading' | 'authenticated' | 'anonymous' | 'error';
 
 export interface AuthContextValue {
   user: User | null;

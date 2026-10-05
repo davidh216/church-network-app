@@ -1,15 +1,22 @@
 'use client';
 
 import { useState } from 'react';
+import { MIN_PASSWORD_LENGTH, registerInput } from '@embrace/shared';
+import FieldError from '@/components/ui/FieldError';
 import { register } from '@/lib/api/auth';
-import { getErrorMessage } from '@/lib/errors';
+import {
+  apiErrorsFor,
+  fieldA11y,
+  FORM_ERROR_KEY,
+  validateForm,
+  type FieldErrors,
+} from '@/lib/forms/validate';
 
 interface RegisterFormProps {
   onSwitchToLogin: () => void;
 }
 
-// Matches the API's password policy (Phase 1 item 1.6: 12 to 128 characters).
-const MIN_PASSWORD_LENGTH = 12;
+const FIELDS = ['name', 'email', 'password'] as const;
 
 export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
   const [name, setName] = useState('');
@@ -17,31 +24,29 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [submittedMessage, setSubmittedMessage] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError('');
-
-    if (!name.trim()) {
-      setError('Name is required');
+    // The API's own schema: same rules (password policy included) and the same messages.
+    const checked = validateForm(registerInput, { name, email, password });
+    if (!checked.ok) {
+      setFieldErrors(checked.errors);
+      setError(checked.errors[FORM_ERROR_KEY] ?? '');
       return;
     }
-    if (!email.trim()) {
-      setError('Email is required');
-      return;
-    }
-    if (password.length < MIN_PASSWORD_LENGTH) {
-      setError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters long`);
-      return;
-    }
+    setFieldErrors({});
 
     setLoading(true);
     try {
-      const response = await register({ email, password, name });
+      const response = await register(checked.data);
       setSubmittedMessage(response.message);
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'Registration failed. Please try again.'));
+      const failed = apiErrorsFor(err, FIELDS, 'Registration failed. Please try again.');
+      setFieldErrors(failed.fieldErrors);
+      setError(failed.message);
     } finally {
       setLoading(false);
     }
@@ -68,28 +73,30 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
       {error && (
         <div
           role="alert"
-          className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded"
+          className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-sm"
         >
           {error}
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} noValidate className="space-y-4">
         <div>
           <label htmlFor="register-name" className="sr-only">
             Full name
           </label>
           <input
             id="register-name"
+            {...fieldA11y('register-name', fieldErrors.name)}
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
             autoComplete="name"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-hidden focus:ring-2 focus:ring-green-500 focus:border-transparent"
             placeholder="Full Name"
             disabled={loading}
           />
+          <FieldError fieldId="register-name" message={fieldErrors.name} />
         </div>
 
         <div>
@@ -98,15 +105,17 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
           </label>
           <input
             id="register-email"
+            {...fieldA11y('register-email', fieldErrors.email)}
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
             autoComplete="email"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-hidden focus:ring-2 focus:ring-green-500 focus:border-transparent"
             placeholder="Email"
             disabled={loading}
           />
+          <FieldError fieldId="register-email" message={fieldErrors.email} />
         </div>
 
         <div>
@@ -115,16 +124,18 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
           </label>
           <input
             id="register-password"
+            {...fieldA11y('register-password', fieldErrors.password)}
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
             minLength={MIN_PASSWORD_LENGTH}
             autoComplete="new-password"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-hidden focus:ring-2 focus:ring-green-500 focus:border-transparent"
             placeholder={`Password (minimum ${MIN_PASSWORD_LENGTH} characters)`}
             disabled={loading}
           />
+          <FieldError fieldId="register-password" message={fieldErrors.password} />
         </div>
 
         <p className="text-xs text-gray-500">

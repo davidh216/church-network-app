@@ -1,12 +1,12 @@
 import type { SavedSearch } from '@prisma/client';
 import type { z } from 'zod';
+import { searchQuery, type createSavedSearchInput } from '@embrace/shared';
 import { prisma } from '../../lib/prisma';
 import { HttpError } from '../../lib/http-error';
 import { isAdmin } from '../../middleware/auth';
 import type { AuthenticatedUser } from '../../types/auth';
-import type { createSavedSearchBody } from './schemas';
 
-function parseQuery(raw: string): unknown {
+function parseJson(raw: string): unknown {
   try {
     return JSON.parse(raw) as unknown;
   } catch {
@@ -14,12 +14,21 @@ function parseQuery(raw: string): unknown {
   }
 }
 
+// Stored queries are validated again on load: one that no longer matches `searchQuery` (written
+// before validation existed, or by an older schema) comes back as stored with `invalid: true`, and
+// the UI must not apply it.
+function loadQuery(raw: string) {
+  const stored = parseJson(raw);
+  const parsed = searchQuery.safeParse(stored);
+  return parsed.success ? { query: parsed.data, invalid: false } : { query: stored, invalid: true };
+}
+
 function format(s: SavedSearch) {
   return {
     id: s.id,
     name: s.name,
     description: s.description,
-    query: parseQuery(s.query),
+    ...loadQuery(s.query),
     isPublic: s.isPublic,
     createdAt: s.createdAt,
     usageCount: s.usageCount,
@@ -38,7 +47,7 @@ export async function listSavedSearches(userId: string) {
 
 export async function createSavedSearch(
   userId: string,
-  body: z.output<typeof createSavedSearchBody>,
+  body: z.output<typeof createSavedSearchInput>,
 ) {
   const saved = await prisma.savedSearch.create({
     data: {

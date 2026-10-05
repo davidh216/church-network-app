@@ -1,4 +1,4 @@
-import type { ApiErrorBody } from '../../types/domain';
+import type { ApiErrorBody } from '@/types/domain';
 
 /** Window event fired when any API call returns 401; the AuthProvider listens for it. */
 export const UNAUTHENTICATED_EVENT = 'embrace:unauthenticated';
@@ -21,7 +21,7 @@ export function isApiError(err: unknown): err is ApiError {
   return err instanceof ApiError;
 }
 
-export type ApiFetchInit = RequestInit & { json?: unknown };
+type ApiFetchInit = RequestInit & { json?: unknown };
 
 /**
  * The message to show for a failed response: the first field error from a

@@ -119,6 +119,24 @@ const ROUTES: Route[] = [
     status: 200,
   },
   {
+    route: 'GET /api/users/summary',
+    access: 'auth',
+    as: 'member',
+    url: () => '/api/users/summary',
+    status: 200,
+  },
+  {
+    route: 'POST /api/users/search',
+    access: 'staff',
+    as: 'leader',
+    url: () => '/api/users/search',
+    body: () => ({
+      conditions: [{ field: 'email', operator: 'contains', value: 'routes' }],
+      logic: 'AND',
+    }),
+    status: 200,
+  },
+  {
     route: 'POST /api/users',
     access: 'staff',
     as: 'leader',
@@ -166,7 +184,10 @@ const ROUTES: Route[] = [
     access: 'auth',
     as: 'member',
     url: () => '/api/users/saved-searches',
-    body: () => ({ name: 'New search', query: { conditions: [] } }),
+    body: () => ({
+      name: 'New search',
+      query: { conditions: [{ field: 'name', operator: 'isEmpty' }], logic: 'OR' },
+    }),
     status: 201,
   },
   {
@@ -192,7 +213,11 @@ const ROUTES: Route[] = [
     access: 'staff',
     as: 'leader',
     url: () => '/api/media',
-    body: () => ({ title: 'New video', type: 'YOUTUBE_VIDEO', url: 'https://youtu.be/xyz789' }),
+    body: () => ({
+      title: 'New video',
+      type: 'YOUTUBE_VIDEO',
+      url: 'https://youtu.be/xyz789abc12',
+    }),
     status: 201,
   },
   {

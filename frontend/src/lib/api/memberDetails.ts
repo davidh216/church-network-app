@@ -1,4 +1,4 @@
-import type { ApiEnvelope, MemberDetails } from '../../types/domain';
+import type { ApiEnvelope, MemberDetails } from '@/types/domain';
 import { apiFetch } from './client';
 
 /** Staff only: the full CRM profile of a member. */

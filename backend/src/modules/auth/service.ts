@@ -1,12 +1,12 @@
 import bcrypt from 'bcryptjs';
 import { Prisma } from '@prisma/client';
 import type { z } from 'zod';
+import type { changePasswordInput, loginInput, registerInput } from '@embrace/shared';
 import { prisma } from '../../lib/prisma';
 import { fieldError, HttpError } from '../../lib/http-error';
 import { assertPasswordNotEmail } from '../../lib/password-policy';
 import { signToken } from '../../middleware/auth';
 import { selfSelect } from '../users/selects';
-import type { changePasswordBody, loginBody, registerBody } from './schemas';
 
 // Compared against when the email is unknown, so a login takes as long whether or not the
 // account exists.
@@ -15,7 +15,7 @@ const DUMMY_HASH = bcrypt.hashSync('timing-equaliser-not-a-real-password', 10);
 // Self-registration creates an INACTIVE account with the member role. An admin or leader activates it.
 // An email that is already registered gets the same outcome as a new one and nothing is created,
 // so the response does not reveal which emails have accounts.
-export async function register(body: z.output<typeof registerBody>): Promise<void> {
+export async function register(body: z.output<typeof registerInput>): Promise<void> {
   const email = body.email.toLowerCase();
   // Hash first so both paths cost the same bcrypt work.
   const hashed = await bcrypt.hash(body.password, 10);
@@ -32,6 +32,8 @@ export async function register(body: z.output<typeof registerBody>): Promise<voi
         phone: body.phone ?? null,
         isActive: false,
         roles: memberRole ? { create: [{ roleId: memberRole.id }] } : undefined,
+        // Every account has an engagement row (defaults: score 0, visitor, low risk).
+        engagement: { create: {} },
       },
     });
   } catch (err) {
@@ -42,7 +44,7 @@ export async function register(body: z.output<typeof registerBody>): Promise<voi
 }
 
 // Returns the signed-in user's self projection and a session token.
-export async function login(body: z.output<typeof loginBody>) {
+export async function login(body: z.output<typeof loginInput>) {
   // The password hash is omitted globally; select it back in for the comparison only.
   const user = await prisma.user.findUnique({
     where: { email: body.email.toLowerCase() },
@@ -67,7 +69,7 @@ export async function login(body: z.output<typeof loginBody>) {
 // sessions stay valid until they expire.
 export async function changePassword(
   userId: string,
-  body: z.output<typeof changePasswordBody>,
+  body: z.output<typeof changePasswordInput>,
 ): Promise<void> {
   const user = await prisma.user.findUniqueOrThrow({
     where: { id: userId },

@@ -55,6 +55,7 @@ async function main() {
           password: await bcrypt.hash(password, 10),
           isActive: true,
           roles: { create: [{ roleId: admin.id }] },
+          engagement: { create: {} },
         },
       });
       console.log(`Created admin ${email}`);

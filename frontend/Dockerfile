@@ -6,9 +6,13 @@ FROM node:22-alpine AS build
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY package.json package-lock.json tsconfig.base.json ./
+COPY packages/shared/package.json packages/shared/
 COPY backend/package.json backend/
 COPY frontend/package.json frontend/
-RUN npm ci -w frontend
+RUN npm ci -w frontend -w @embrace/shared
+# The shared schemas package is compiled before the app that imports it.
+COPY packages/shared packages/shared
+RUN npm run -w @embrace/shared build
 COPY frontend frontend
 # Next.js resolves rewrites() at build time, so the backend origin is baked into the build.
 ARG API_URL=http://localhost:5000

@@ -1,5 +1,18 @@
-// Shared domain types for the frontend. Mirrors the backend API responses.
-// Phase 2 moves these into a shared package with zod schemas used by both sides.
+// Domain types for the frontend. Request bodies are the inferred input types of the
+// @embrace/shared schemas the API validates with; response shapes stay local because the
+// shared package only describes inputs.
+
+import type { SearchQuery } from '@embrace/shared';
+
+export type {
+  CreateMediaInput,
+  CreateSavedSearchInput,
+  CreateUserInput,
+  LoginInput,
+  RegisterInput,
+  SearchQuery,
+  UpdateUserInput,
+} from '@embrace/shared';
 
 export interface Role {
   id: string;
@@ -8,7 +21,7 @@ export interface Role {
   permissions?: string;
 }
 
-export interface UserRole {
+interface UserRole {
   role: Role;
 }
 
@@ -66,6 +79,8 @@ export interface MediaItem {
   description?: string | null;
   type: string;
   url: string;
+  /** The YouTube video id, or null when the stored URL cannot be embedded. */
+  videoId?: string | null;
   thumbnailUrl?: string | null;
   /** JSON-encoded string array. */
   tags: string;
@@ -76,27 +91,22 @@ export interface MediaItem {
   };
 }
 
-export interface SearchCondition {
-  id: string;
-  field: string;
-  operator: string;
-  value: string;
-  logic: 'AND' | 'OR';
-}
-
-/** Opaque saved-search query payload. The evaluator is not implemented yet (Phase 2). */
-export type SearchQuery = Record<string, unknown>;
-
-export interface SavedSearch {
+/**
+ * A saved search (GET /api/users/saved-searches). The API validates the stored query again on
+ * load: a stale one comes back as stored with `invalid: true` and must not be applied.
+ */
+interface SavedSearchBase {
   id: string;
   name: string;
   description: string | null;
-  query: SearchQuery;
   createdAt: string;
   isPublic: boolean;
   usageCount?: number;
   lastUsed?: string | null;
 }
+
+export type SavedSearch = SavedSearchBase &
+  ({ invalid: false; query: SearchQuery } | { invalid: true; query: unknown });
 
 /** A member as returned by /api/member-details/:id (staff only). */
 export interface MemberDetails {
@@ -262,43 +272,6 @@ export interface ApiErrorBody {
 export interface RegisterResult {
   pendingApproval: boolean;
   message: string;
-}
-
-/** Body of POST /api/users (staff only). */
-export interface CreateUserInput {
-  email: string;
-  password: string;
-  name: string;
-  phone?: string | null;
-  bio?: string | null;
-  isActive?: boolean;
-  roleIds?: string[];
-}
-
-/** Body of PUT /api/users/:id. Omitted fields are left unchanged. */
-export interface UpdateUserInput {
-  name?: string;
-  phone?: string | null;
-  bio?: string | null;
-  isActive?: boolean;
-  roleIds?: string[];
-}
-
-/** Body of POST /api/media (staff only). Only YouTube videos are supported. */
-export interface CreateMediaInput {
-  title: string;
-  description?: string;
-  type: 'YOUTUBE_VIDEO';
-  url: string;
-  tags: string[];
-}
-
-/** Body of POST /api/users/saved-searches. */
-export interface CreateSavedSearchInput {
-  name: string;
-  description?: string;
-  query: SearchQuery;
-  isPublic?: boolean;
 }
 
 export function hasRole(user: Pick<User, 'roles'> | null | undefined, ...names: string[]): boolean {

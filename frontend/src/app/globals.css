@@ -1,6 +1,9 @@
 @import 'tailwindcss';
 
 :root {
+  /* The app is light-only: every component uses light colour classes, so the page stays light
+     whatever the OS colour scheme (a dark body behind light cards was inconsistent). */
+  color-scheme: light;
   --background: #ffffff;
   --foreground: #171717;
 }
@@ -12,39 +15,32 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  /* Geist, loaded by next/font in the root layout. */
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
 }
 
-/* Custom utilities for line clamping */
-.line-clamp-1 {
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 1;
+/* Visible focus for keyboard users on every control that does not draw its own focus ring
+   (zero specificity, so a component's focus:* utilities still win). */
+@layer base {
+  :where(a[href], button, input, select, textarea, summary, [tabindex]):focus-visible {
+    outline: 2px solid #2563eb;
+    outline-offset: 2px;
+  }
 }
 
-.line-clamp-2 {
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.line-clamp-3 {
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
+/* People who ask the OS for less motion get no animations, transitions or smooth scrolling. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* Enhanced video player styles */

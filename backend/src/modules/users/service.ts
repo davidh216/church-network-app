@@ -1,22 +1,92 @@
 import bcrypt from 'bcryptjs';
+import type { Prisma } from '@prisma/client';
 import type { z } from 'zod';
+import type {
+  createUserInput,
+  listUsersQuery,
+  searchQuery,
+  updateUserInput,
+} from '@embrace/shared';
 import { prisma } from '../../lib/prisma';
 import { HttpError } from '../../lib/http-error';
 import { assertPasswordNotEmail } from '../../lib/password-policy';
 import { isAdmin, STAFF } from '../../middleware/auth';
 import type { AuthenticatedUser } from '../../types/auth';
+import { listWhere, orderBy, paging, searchWhere } from './search';
 import { directorySelect, staffSelect } from './selects';
-import type { createUserBody, updateUserBody } from './schemas';
 
 const STAFF_ROLE_NAMES: readonly string[] = STAFF;
 
+// One page of users matching `where`, with the total count of matches.
+async function findPage<S extends Prisma.UserSelect>(
+  where: Prisma.UserWhereInput,
+  select: S,
+  sortBy: Prisma.UserOrderByWithRelationInput[],
+  page: number | undefined,
+  pageSize: number | undefined,
+) {
+  const p = paging(page, pageSize);
+  const [users, total] = await prisma.$transaction([
+    prisma.user.findMany({ where, select, orderBy: sortBy, skip: p.skip, take: p.take }),
+    prisma.user.count({ where }),
+  ]);
+  return { users, total, page: p.page, pageSize: p.pageSize };
+}
+
 // Staff see every account with contact and engagement fields; members see the active directory.
-export function listUsers(staff: boolean) {
-  return prisma.user.findMany({
-    where: staff ? undefined : { isActive: true },
-    select: staff ? staffSelect : directorySelect,
-    orderBy: { name: 'asc' },
-  });
+// The router has already refused the staff-only filters for members; listWhere ignores them too.
+export function listUsers(staff: boolean, query: z.output<typeof listUsersQuery>) {
+  return findPage(
+    listWhere(query, staff),
+    staff ? staffSelect : directorySelect,
+    orderBy(query.sort, query.order),
+    query.page,
+    query.pageSize,
+  );
+}
+
+// The advanced member search (staff only).
+export function searchUsers(query: z.output<typeof searchQuery>) {
+  return findPage(
+    searchWhere(query),
+    staffSelect,
+    orderBy(query.sort, query.order),
+    query.page,
+    query.pageSize,
+  );
+}
+
+// Dashboard counts. Members get only `total`, the size of the directory they can see (active
+// accounts), so nothing about inactive accounts is revealed. Staff get the total of all accounts,
+// the active ones, accounts awaiting approval (inactive and never signed in: a registration, or a
+// staff-created inactive account) and accounts created since the start of the current UTC month.
+type MemberSummary = { total: number };
+type StaffSummary = {
+  total: number;
+  active: number;
+  pendingApproval: number;
+  newThisMonth: number;
+};
+
+export function startOfUtcMonth(now: Date): Date {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+}
+
+export async function summary(staff: false, now?: Date): Promise<MemberSummary>;
+export async function summary(staff: true, now?: Date): Promise<StaffSummary>;
+export async function summary(staff: boolean, now?: Date): Promise<MemberSummary | StaffSummary>;
+export async function summary(
+  staff: boolean,
+  now: Date = new Date(),
+): Promise<MemberSummary | StaffSummary> {
+  if (!staff) return { total: await prisma.user.count({ where: { isActive: true } }) };
+  const [total, active, pendingApproval, newThisMonth] = await prisma.$transaction([
+    prisma.user.count(),
+    prisma.user.count({ where: { isActive: true } }),
+    prisma.user.count({ where: { isActive: false, lastLoginAt: null } }),
+    prisma.user.count({ where: { createdAt: { gte: startOfUtcMonth(now) } } }),
+  ]);
+  return { total, active, pendingApproval, newThisMonth };
 }
 
 // Column order of the export. The CSV header always lists every column, even when no rows match.
@@ -107,7 +177,7 @@ async function resolveRoleIds(
 // Staff create members directly (active by default, roles assigned).
 export async function createUser(
   requester: AuthenticatedUser,
-  body: z.output<typeof createUserBody>,
+  body: z.output<typeof createUserInput>,
 ) {
   const email = body.email.toLowerCase();
   if (await prisma.user.findUnique({ where: { email }, select: { id: true } })) {
@@ -123,6 +193,8 @@ export async function createUser(
       bio: body.bio ?? null,
       isActive: body.isActive ?? true,
       roles: { create: roleIds.map((roleId) => ({ roleId })) },
+      // Every account has an engagement row (defaults: score 0, visitor, low risk).
+      engagement: { create: {} },
     },
     select: staffSelect,
   });
@@ -149,7 +221,7 @@ function adminRoleId(user: AuthenticatedUser): string | undefined {
 export async function updateUser(
   requester: AuthenticatedUser,
   id: string,
-  body: z.output<typeof updateUserBody>,
+  body: z.output<typeof updateUserInput>,
 ) {
   const admin = isAdmin(requester);
   const self = requester.id === id;

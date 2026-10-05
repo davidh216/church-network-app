@@ -1,17 +1,33 @@
 // File: frontend/src/components/members/AddEditMemberModal.tsx
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { listRoles } from '../../lib/api/roles';
-import { createUser, updateUser } from '../../lib/api/users';
-import { getErrorMessage } from '../../lib/errors';
-import type { Member, Role } from '../../types/domain';
+import { useState, useEffect, useId, type RefObject } from 'react';
+import { createUserInput, MIN_PASSWORD_LENGTH, updateUserInput } from '@embrace/shared';
+import {
+  apiErrorsFor,
+  fieldA11y,
+  FORM_ERROR_KEY,
+  validateForm,
+  type FieldErrors,
+} from '@/lib/forms/validate';
+import Dialog from '@/components/ui/Dialog';
+import FieldError from '@/components/ui/FieldError';
+import InlineError from '@/components/ui/InlineError';
+import TextField from '@/components/ui/TextField';
+import { useRoles } from '@/lib/queries/roles';
+import { useCreateUser, useUpdateUser } from '@/lib/queries/users';
+import type { Member } from '@/types/domain';
+
+const FIELDS = ['name', 'email', 'password', 'phone', 'bio', 'isActive', 'roleIds'] as const;
 
 interface AddEditMemberModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: () => void;
+  /** Called after a successful save; the member queries are already invalidated. */
+  onSave?: () => void;
   member?: Member | null;
+  /** Focused on close when the button that opened the dialog is gone (the page heading). */
+  fallbackFocus?: RefObject<HTMLElement | null>;
 }
 
 export default function AddEditMemberModal({
@@ -19,6 +35,7 @@ export default function AddEditMemberModal({
   onClose,
   onSave,
   member,
+  fallbackFocus,
 }: AddEditMemberModalProps) {
   const [formData, setFormData] = useState({
     name: '',
@@ -28,264 +45,238 @@ export default function AddEditMemberModal({
     isActive: true,
     password: '',
   });
-  const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
-  const [roles, setRoles] = useState<Role[]>([]);
-  const [loading, setLoading] = useState(false);
+  // null until the user picks roles: a new member then defaults to the member role and an
+  // edited member keeps their current roles.
+  const [pickedRoles, setPickedRoles] = useState<string[] | null>(null);
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const rolesQuery = useRoles({ enabled: isOpen });
+  const roles = rolesQuery.data ?? [];
+  const createUser = useCreateUser();
+  const updateUser = useUpdateUser();
+  const loading = createUser.isPending || updateUser.isPending;
+  const titleId = useId();
 
   const isEditing = !!member;
+  const defaultRoles = member
+    ? member.roles.map((ur) => ur.role.id)
+    : roles.filter((r) => r.name === 'member').map((r) => r.id);
+  const selectedRoles = pickedRoles ?? defaultRoles;
 
-  const fetchRoles = useCallback(async () => {
-    try {
-      const fetchedRoles = await listRoles();
-      setRoles(fetchedRoles);
-      // A new member defaults to the member role unless roles were already picked.
-      if (!member) {
-        const memberRole = fetchedRoles.find((r) => r.name === 'member');
-        if (memberRole) {
-          setSelectedRoles((prev) => (prev.length ? prev : [memberRole.id]));
-        }
-      }
-    } catch (err) {
-      setError(getErrorMessage(err, 'Failed to load roles'));
-    }
-  }, [member]);
-
+  // Reset the form whenever it opens or switches member (no data is fetched here).
   useEffect(() => {
     if (isOpen) {
-      fetchRoles();
-      if (member) {
-        setFormData({
-          name: member.name,
-          email: member.email ?? '',
-          phone: member.phone || '',
-          bio: member.bio || '',
-          isActive: member.isActive,
-          password: '',
-        });
-        setSelectedRoles(member.roles.map((ur) => ur.role.id));
-      } else {
-        setFormData({
-          name: '',
-          email: '',
-          phone: '',
-          bio: '',
-          isActive: true,
-          password: '',
-        });
-        setSelectedRoles([]);
-      }
+      setFormData({
+        name: member?.name ?? '',
+        email: member?.email ?? '',
+        phone: member?.phone || '',
+        bio: member?.bio || '',
+        isActive: member ? member.isActive : true,
+        password: '',
+      });
+      setPickedRoles(null);
       setError('');
+      setFieldErrors({});
     }
-  }, [isOpen, member, fetchRoles]);
+  }, [isOpen, member]);
+
+  // Validates with the API's own schema (same rules and messages): the field errors, or the save
+  // call with the schema's output (trimmed, blanks as null).
+  const prepareSave = (): FieldErrors | (() => Promise<unknown>) => {
+    if (isEditing && member) {
+      // Only send role/status changes when they changed, because those fields need admin
+      // (roles) or staff (status) permissions.
+      const originalRoleIds = member.roles.map((ur) => ur.role.id).sort();
+      const rolesChanged =
+        JSON.stringify(originalRoleIds) !== JSON.stringify([...selectedRoles].sort());
+      const checked = validateForm(updateUserInput, {
+        name: formData.name,
+        phone: formData.phone,
+        bio: formData.bio,
+        ...(formData.isActive !== member.isActive ? { isActive: formData.isActive } : {}),
+        ...(rolesChanged ? { roleIds: selectedRoles } : {}),
+      });
+      if (!checked.ok) return checked.errors;
+      return () => updateUser.mutateAsync({ id: member.id, input: checked.data });
+    }
+    // Create a new member (staff only). Self-registration uses /api/auth/register instead.
+    const checked = validateForm(createUserInput, { ...formData, roleIds: selectedRoles });
+    if (!checked.ok) return checked.errors;
+    return () => createUser.mutateAsync(checked.data);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    const save = prepareSave();
+    if (typeof save !== 'function') {
+      setFieldErrors(save);
+      setError(save[FORM_ERROR_KEY] ?? '');
+      return;
+    }
+    setFieldErrors({});
     setError('');
 
     try {
-      if (isEditing && member) {
-        // Update existing member. Only send role/status changes when they changed,
-        // because those fields need admin (roles) or staff (status) permissions.
-        const originalRoleIds = member.roles.map((ur) => ur.role.id).sort();
-        const nextRoleIds = [...selectedRoles].sort();
-        const rolesChanged = JSON.stringify(originalRoleIds) !== JSON.stringify(nextRoleIds);
-        await updateUser(member.id, {
-          name: formData.name,
-          phone: formData.phone || null,
-          bio: formData.bio || null,
-          ...(formData.isActive !== member.isActive ? { isActive: formData.isActive } : {}),
-          ...(rolesChanged ? { roleIds: selectedRoles } : {}),
-        });
-      } else {
-        // Create new member (staff only). Self-registration uses /api/auth/register instead.
-        await createUser({
-          name: formData.name,
-          email: formData.email,
-          password: formData.password,
-          phone: formData.phone || null,
-          bio: formData.bio || null,
-          isActive: formData.isActive,
-          roleIds: selectedRoles,
-        });
-      }
-
-      onSave();
+      await save();
+      onSave?.();
       onClose();
     } catch (err: unknown) {
-      setError(getErrorMessage(err));
-    } finally {
-      setLoading(false);
+      const failed = apiErrorsFor(err, FIELDS, 'Failed to save the member');
+      setFieldErrors(failed.fieldErrors);
+      setError(failed.message);
     }
   };
 
   const handleRoleChange = (roleId: string) => {
-    setSelectedRoles((prev) =>
-      prev.includes(roleId) ? prev.filter((id) => id !== roleId) : [...prev, roleId],
+    setPickedRoles(
+      selectedRoles.includes(roleId)
+        ? selectedRoles.filter((id) => id !== roleId)
+        : [...selectedRoles, roleId],
     );
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-gray-600/50 overflow-y-auto h-full w-full z-50">
-      <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-        <div className="mt-3">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">
-            {isEditing ? 'Edit Member' : 'Add New Member'}
-          </h3>
+    <Dialog labelledBy={titleId} onClose={onClose} fallbackFocus={fallbackFocus}>
+      <div>
+        <h2 id={titleId} className="text-lg font-medium text-gray-900 mb-4">
+          {isEditing ? 'Edit Member' : 'Add New Member'}
+        </h2>
 
-          {error && (
-            <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
-              {error}
-            </div>
+        {error && (
+          <div
+            role="alert"
+            className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-sm"
+          >
+            {error}
+          </div>
+        )}
+        {rolesQuery.error && (
+          <InlineError
+            error={rolesQuery.error}
+            fallback="Failed to load roles"
+            onRetry={() => void rolesQuery.refetch()}
+            className="mb-4"
+          />
+        )}
+
+        <form onSubmit={handleSubmit} noValidate className="space-y-4">
+          <TextField
+            id="member-name"
+            label="Full Name *"
+            value={formData.name}
+            onChange={(name) => setFormData((prev) => ({ ...prev, name }))}
+            error={fieldErrors.name}
+            required
+            placeholder="John Doe"
+          />
+          <TextField
+            id="member-email"
+            label="Email *"
+            type="email"
+            value={formData.email}
+            onChange={(email) => setFormData((prev) => ({ ...prev, email }))}
+            error={fieldErrors.email}
+            required
+            disabled={isEditing} // Can't change email when editing
+            className={isEditing ? 'bg-gray-100' : ''}
+            placeholder="john@example.com"
+          />
+          {!isEditing && (
+            <TextField
+              id="member-password"
+              label="Password *"
+              type="password"
+              value={formData.password}
+              onChange={(password) => setFormData((prev) => ({ ...prev, password }))}
+              error={fieldErrors.password}
+              required
+              minLength={MIN_PASSWORD_LENGTH}
+              autoComplete="new-password"
+              placeholder={`Temporary password (at least ${MIN_PASSWORD_LENGTH} characters)`}
+            />
           )}
+          <TextField
+            id="member-phone"
+            label="Phone"
+            type="tel"
+            value={formData.phone}
+            onChange={(phone) => setFormData((prev) => ({ ...prev, phone }))}
+            error={fieldErrors.phone}
+            placeholder="(555) 123-4567"
+          />
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label htmlFor="member-name" className="block text-sm font-medium text-gray-700 mb-1">
-                Full Name *
-              </label>
-              <input
-                id="member-name"
-                type="text"
-                value={formData.name}
-                onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="John Doe"
-              />
-            </div>
+          <div>
+            <label htmlFor="member-bio" className="block text-sm font-medium text-gray-700 mb-1">
+              Bio
+            </label>
+            <textarea
+              id="member-bio"
+              {...fieldA11y('member-bio', fieldErrors.bio)}
+              value={formData.bio}
+              onChange={(e) => setFormData((prev) => ({ ...prev, bio: e.target.value }))}
+              rows={3}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+              placeholder="Tell us about this member..."
+            />
+            <FieldError fieldId="member-bio" message={fieldErrors.bio} />
+          </div>
 
-            <div>
-              <label
-                htmlFor="member-email"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Email *
-              </label>
-              <input
-                id="member-email"
-                type="email"
-                value={formData.email}
-                onChange={(e) => setFormData((prev) => ({ ...prev, email: e.target.value }))}
-                required
-                disabled={isEditing} // Can't change email when editing
-                className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                  isEditing ? 'bg-gray-100' : ''
-                }`}
-                placeholder="john@example.com"
-              />
-            </div>
-
-            {!isEditing && (
-              <div>
-                <label
-                  htmlFor="member-password"
-                  className="block text-sm font-medium text-gray-700 mb-1"
-                >
-                  Password *
+          <fieldset>
+            <legend className="block text-sm font-medium text-gray-700 mb-2">Roles</legend>
+            <div className="space-y-2 max-h-32 overflow-y-auto">
+              {roles.map((role) => (
+                <label key={role.id} className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={selectedRoles.includes(role.id)}
+                    onChange={() => handleRoleChange(role.id)}
+                    className="rounded-sm border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="ml-2 text-sm text-gray-700 capitalize">
+                    {role.name}
+                    {role.description && (
+                      <span className="text-gray-500"> - {role.description}</span>
+                    )}
+                  </span>
                 </label>
-                <input
-                  id="member-password"
-                  type="password"
-                  value={formData.password}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, password: e.target.value }))}
-                  required
-                  minLength={12}
-                  maxLength={128}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Temporary password (at least 12 characters)"
-                />
-              </div>
-            )}
-
-            <div>
-              <label
-                htmlFor="member-phone"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Phone
-              </label>
-              <input
-                id="member-phone"
-                type="tel"
-                value={formData.phone}
-                onChange={(e) => setFormData((prev) => ({ ...prev, phone: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="(555) 123-4567"
-              />
+              ))}
             </div>
+            <FieldError fieldId="member-roles" message={fieldErrors.roleIds} />
+          </fieldset>
 
-            <div>
-              <label htmlFor="member-bio" className="block text-sm font-medium text-gray-700 mb-1">
-                Bio
-              </label>
-              <textarea
-                id="member-bio"
-                value={formData.bio}
-                onChange={(e) => setFormData((prev) => ({ ...prev, bio: e.target.value }))}
-                rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Tell us about this member..."
-              />
-            </div>
+          <div className="flex items-center">
+            <input
+              id="member-active"
+              type="checkbox"
+              checked={formData.isActive}
+              onChange={(e) => setFormData((prev) => ({ ...prev, isActive: e.target.checked }))}
+              className="rounded-sm border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            <label htmlFor="member-active" className="ml-2 text-sm text-gray-700">
+              Active Member
+            </label>
+          </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Roles</label>
-              <div className="space-y-2 max-h-32 overflow-y-auto">
-                {roles.map((role) => (
-                  <label key={role.id} className="flex items-center">
-                    <input
-                      type="checkbox"
-                      checked={selectedRoles.includes(role.id)}
-                      onChange={() => handleRoleChange(role.id)}
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                    />
-                    <span className="ml-2 text-sm text-gray-700 capitalize">
-                      {role.name}
-                      {role.description && (
-                        <span className="text-gray-500"> - {role.description}</span>
-                      )}
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex items-center">
-              <input
-                id="member-active"
-                type="checkbox"
-                checked={formData.isActive}
-                onChange={(e) => setFormData((prev) => ({ ...prev, isActive: e.target.checked }))}
-                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-              />
-              <label htmlFor="member-active" className="ml-2 text-sm text-gray-700">
-                Active Member
-              </label>
-            </div>
-
-            <div className="flex justify-end space-x-3 pt-4">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-500"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={loading}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-              >
-                {loading ? 'Saving...' : isEditing ? 'Update Member' : 'Add Member'}
-              </button>
-            </div>
-          </form>
-        </div>
+          <div className="flex justify-end space-x-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md focus:outline-hidden focus:ring-2 focus:ring-gray-500"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md focus:outline-hidden focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+            >
+              {loading ? 'Saving...' : isEditing ? 'Update Member' : 'Add Member'}
+            </button>
+          </div>
+        </form>
       </div>
-    </div>
+    </Dialog>
   );
 }

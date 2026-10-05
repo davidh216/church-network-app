@@ -4,6 +4,7 @@
   "license": "MIT",
   "description": "Embrace Church Network: Express API (backend) and Next.js app (frontend)",
   "workspaces": [
+    "packages/*",
     "backend",
     "frontend"
   ],
@@ -11,14 +12,22 @@
     "node": ">=22.12"
   },
   "scripts": {
-    "dev": "concurrently --kill-others-on-fail --names api,web --prefix-colors blue,magenta \"npm run -w backend dev\" \"npm run -w frontend dev\"",
-    "build": "npm run build --workspaces",
+    "build:shared": "npm run -w @embrace/shared build",
+    "predev": "npm run build:shared",
+    "dev": "concurrently --kill-others-on-fail --names shared,api,web --prefix-colors yellow,blue,magenta \"npm run -w @embrace/shared build -- --watch --preserveWatchOutput\" \"npm run -w backend dev\" \"npm run -w frontend dev\"",
+    "build": "npm run build:shared && npm run -w backend build && npm run -w frontend build",
+    "prelint": "npm run build:shared",
     "lint": "npm run lint --workspaces",
+    "pretypecheck": "npm run build:shared",
     "typecheck": "npm run typecheck --workspaces",
+    "pretest": "npm run build:shared",
     "test": "npm run test --workspaces",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "prepare": "husky || true"
+  },
+  "dependencies": {
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "concurrently": "^10.0.5",

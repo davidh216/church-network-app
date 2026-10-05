@@ -1,0 +1,171 @@
+import { z } from 'zod';
+import { membershipStage, riskLevel } from './enums.js';
+import {
+  MAX_PAGE,
+  MAX_PAGE_SIZE,
+  MAX_QUERY_TEXT,
+  optionalQueryText,
+  requiredText,
+  type WithNumericPaging,
+} from './primitives.js';
+
+// The advanced member search (POST /api/users/search) and the shape stored by saved searches.
+// Each condition names a field, an operator allowed for that field and a value of the right type.
+
+export const TEXT_SEARCH_FIELDS = ['name', 'email', 'phone', 'bio'] as const;
+export const DATE_SEARCH_FIELDS = ['createdAt', 'lastLoginAt'] as const;
+
+// One query combines at most this many conditions.
+export const MAX_SEARCH_CONDITIONS = 10;
+
+const textField = z.enum(TEXT_SEARCH_FIELDS);
+const dateField = z.enum(DATE_SEARCH_FIELDS);
+const text = requiredText('The value', MAX_QUERY_TEXT, 'Enter a value');
+const score = z.number({ error: 'Enter a number' }).finite('Enter a number');
+// A calendar date (2026-01-31) or a full ISO timestamp with an offset.
+const isoDate = z.union([z.iso.date(), z.iso.datetime({ offset: true })], {
+  error: 'Must be an ISO date (YYYY-MM-DD) or timestamp',
+});
+
+// `between` takes [low, high] with low <= high: scores compare as numbers, dates as instants.
+export const BETWEEN_ORDER_MESSAGE = 'The first value must not exceed the second';
+const scoreRange = z
+  .tuple([score, score])
+  .refine(([low, high]) => low <= high, { error: BETWEEN_ORDER_MESSAGE });
+const dateRange = z
+  .tuple([isoDate, isoDate])
+  .refine(([low, high]) => new Date(low).getTime() <= new Date(high).getTime(), {
+    error: BETWEEN_ORDER_MESSAGE,
+  });
+
+const textCondition = z.discriminatedUnion('operator', [
+  z.object({ field: textField, operator: z.literal('contains'), value: text }),
+  z.object({ field: textField, operator: z.literal('equals'), value: text }),
+  z.object({ field: textField, operator: z.literal('startsWith'), value: text }),
+  // isEmpty matches a missing or blank value and takes no value.
+  z.object({ field: textField, operator: z.literal('isEmpty') }),
+]);
+
+const rolesCondition = z.object({
+  field: z.literal('roles'),
+  operator: z.literal('includes'),
+  value: requiredText('The role', 100, 'Choose a role'),
+});
+
+const scoreField = z.literal('engagement.engagementScore');
+const scoreCondition = z.discriminatedUnion('operator', [
+  z.object({ field: scoreField, operator: z.enum(['gt', 'gte', 'lt', 'lte']), value: score }),
+  z.object({ field: scoreField, operator: z.literal('between'), value: scoreRange }),
+]);
+
+const enumCondition = <F extends string, E extends z.ZodEnum>(field: F, values: E) => {
+  const fieldSchema = z.literal(field);
+  return z.discriminatedUnion('operator', [
+    z.object({ field: fieldSchema, operator: z.literal('equals'), value: values }),
+    z.object({
+      field: fieldSchema,
+      operator: z.literal('in'),
+      value: z.array(values).min(1, 'Choose at least one value'),
+    }),
+  ]);
+};
+const stageCondition = enumCondition('engagement.membershipStage', membershipStage);
+const riskCondition = enumCondition('engagement.riskLevel', riskLevel);
+
+const dateCondition = z.discriminatedUnion('operator', [
+  z.object({ field: dateField, operator: z.enum(['before', 'after']), value: isoDate }),
+  z.object({ field: dateField, operator: z.literal('between'), value: dateRange }),
+]);
+
+const activeCondition = z.object({
+  field: z.literal('isActive'),
+  operator: z.literal('equals'),
+  value: z.boolean({ error: 'Choose active or inactive' }),
+});
+
+export const searchCondition = z.discriminatedUnion('field', [
+  textCondition,
+  rolesCondition,
+  scoreCondition,
+  stageCondition,
+  riskCondition,
+  dateCondition,
+  activeCondition,
+]);
+
+// Every field the search accepts and the operators allowed on it.
+export const SEARCH_FIELD_OPERATORS = {
+  name: ['contains', 'equals', 'startsWith', 'isEmpty'],
+  email: ['contains', 'equals', 'startsWith', 'isEmpty'],
+  phone: ['contains', 'equals', 'startsWith', 'isEmpty'],
+  bio: ['contains', 'equals', 'startsWith', 'isEmpty'],
+  roles: ['includes'],
+  'engagement.engagementScore': ['gt', 'gte', 'lt', 'lte', 'between'],
+  'engagement.membershipStage': ['equals', 'in'],
+  'engagement.riskLevel': ['equals', 'in'],
+  createdAt: ['before', 'after', 'between'],
+  lastLoginAt: ['before', 'after', 'between'],
+  isActive: ['equals'],
+} as const satisfies Record<SearchCondition['field'], readonly SearchCondition['operator'][]>;
+
+// Sort keys for the member list and the search.
+export const userSortField = z.enum([
+  'name',
+  'email',
+  'createdAt',
+  'lastLoginAt',
+  'engagementScore',
+  'membershipStage',
+]);
+export const sortOrder = z.enum(['asc', 'desc']);
+export const DEFAULT_USER_PAGE_SIZE = 25;
+
+export const searchQuery = z.object({
+  conditions: z
+    .array(searchCondition)
+    .min(1, 'Add at least one condition')
+    .max(MAX_SEARCH_CONDITIONS, `Use at most ${MAX_SEARCH_CONDITIONS} conditions`),
+  logic: z.enum(['AND', 'OR'], { error: 'Choose AND or OR' }),
+  sort: userSortField.optional(),
+  order: sortOrder.optional(),
+  page: z.number().int().min(1).max(MAX_PAGE).optional(),
+  pageSize: z.number().int().min(1).max(MAX_PAGE_SIZE).optional(),
+});
+
+// Query string of GET /api/users (all values arrive as strings). Members may only use q, sort=name,
+// order, page and pageSize; the API answers 403 for the staff-only filters and sorts.
+export const listUsersQuery = z.object({
+  // A blank q or role is ignored rather than rejected.
+  q: optionalQueryText('Search', MAX_QUERY_TEXT),
+  role: optionalQueryText('Role', 100),
+  status: z.enum(['active', 'inactive']).optional(),
+  stage: membershipStage.optional(),
+  risk: riskLevel.optional(),
+  // Inclusive calendar dates (UTC) of the account's creation.
+  joinedFrom: z.iso.date().optional(),
+  joinedTo: z.iso.date().optional(),
+  sort: userSortField.optional(),
+  order: sortOrder.optional(),
+  page: z.coerce.number().int().min(1).max(MAX_PAGE).default(1),
+  pageSize: z.coerce.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_USER_PAGE_SIZE),
+});
+
+// The list filters only staff may use.
+export const STAFF_ONLY_LIST_FILTERS = [
+  'role',
+  'status',
+  'stage',
+  'risk',
+  'joinedFrom',
+  'joinedTo',
+] as const satisfies readonly (keyof z.infer<typeof listUsersQuery>)[];
+
+export type SearchCondition = z.infer<typeof searchCondition>;
+export type SearchField = SearchCondition['field'];
+export type SearchOperator = SearchCondition['operator'];
+export type UserSortField = z.infer<typeof userSortField>;
+export type SortOrder = z.infer<typeof sortOrder>;
+export type SearchQuery = z.infer<typeof searchQuery>;
+export type ListUsersQuery = z.input<typeof listUsersQuery>;
+// GET /api/users parameters as the web app passes them.
+export type ListUsersParams = WithNumericPaging<ListUsersQuery>;

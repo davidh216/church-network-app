@@ -42,6 +42,11 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      # The backend imports @embrace/shared from its compiled dist.
+      - run: npm run build:shared
+      - run: npm run -w @embrace/shared typecheck
+      - run: npm run -w @embrace/shared lint
+      - run: npm run -w @embrace/shared test
       - run: npm run -w backend typecheck
       - run: npm run -w backend lint
       # vitest.config.mts points DATABASE_URL at church_test on localhost:5432.
@@ -71,6 +76,7 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      - run: npm run build:shared
       # Prettier over the whole repository (backend included).
       - run: npm run format:check
       - run: npm run -w frontend typecheck
@@ -109,6 +115,7 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      - run: npm run build:shared
       - name: Throwaway JWT secret and admin password
         run: |
           jwt_secret="$(openssl rand -hex 32)"

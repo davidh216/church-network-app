@@ -1,36 +1,53 @@
 import type { Prisma } from '@prisma/client';
 import type { z } from 'zod';
+import { youtubeVideoId, type createMediaInput, type listMediaQuery } from '@embrace/shared';
 import { prisma } from '../../lib/prisma';
 import { HttpError } from '../../lib/http-error';
-import type { createMediaBody, listMediaQuery } from './schemas';
+import { escapeLike } from '../../lib/like';
 
 const withUploader = {
   uploadedBy: { select: { id: true, name: true } },
 } satisfies Prisma.MediaInclude;
 
-// Approved public media, newest first. Text search and the tag filter ignore case.
-export function listMedia(query: z.output<typeof listMediaQuery>) {
+// `videoId` is derived at read time so rows stored before strict validation still load; it is
+// null when the stored URL is not a recognisable YouTube link.
+function withVideoId<T extends { url: string }>(media: T): T & { videoId: string | null } {
+  return { ...media, videoId: youtubeVideoId(media.url) };
+}
+
+// Approved public media, newest first, one page at a time. Text search and the tag filter ignore
+// case and match literally.
+export async function listMedia(query: z.output<typeof listMediaQuery>) {
   const where: Prisma.MediaWhereInput = { isPublic: true, isApproved: true };
   if (query.type) where.type = query.type;
   if (query.search) {
+    const search = escapeLike(query.search);
     where.OR = [
-      { title: { contains: query.search, mode: 'insensitive' } },
-      { description: { contains: query.search, mode: 'insensitive' } },
+      { title: { contains: search, mode: 'insensitive' } },
+      { description: { contains: search, mode: 'insensitive' } },
     ];
   }
-  if (query.tag && query.tag !== 'all') where.tags = { contains: query.tag, mode: 'insensitive' };
+  if (query.tag && query.tag !== 'all')
+    where.tags = { contains: escapeLike(query.tag), mode: 'insensitive' };
 
-  return prisma.media.findMany({
-    where,
-    orderBy: { createdAt: 'desc' },
-    take: query.limit,
-    include: withUploader,
-  });
+  const { page, pageSize } = query;
+  const [rows, total] = await prisma.$transaction([
+    prisma.media.findMany({
+      where,
+      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      include: withUploader,
+    }),
+    prisma.media.count({ where }),
+  ]);
+  return { media: rows.map(withVideoId), total, page, pageSize };
 }
 
 // Staff-added media is approved and public immediately.
-export function createMedia(uploadedById: string, body: z.output<typeof createMediaBody>) {
-  return prisma.media.create({
+// The URL arrives canonicalised by the schema (https://www.youtube.com/watch?v=<id>).
+export async function createMedia(uploadedById: string, body: z.output<typeof createMediaInput>) {
+  const media = await prisma.media.create({
     data: {
       title: body.title,
       description: body.description ?? '',
@@ -43,10 +60,11 @@ export function createMedia(uploadedById: string, body: z.output<typeof createMe
     },
     include: withUploader,
   });
+  return withVideoId(media);
 }
 
 export async function getMedia(id: string) {
   const media = await prisma.media.findUnique({ where: { id }, include: withUploader });
   if (!media) throw new HttpError(404, 'Media not found');
-  return media;
+  return withVideoId(media);
 }

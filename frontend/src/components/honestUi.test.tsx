@@ -4,8 +4,9 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { act } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import Home from '@/app/page';
-import SimpleMediaLibrary from '@/components/media/SimpleMediaLibrary';
+import MediaPage from '@/components/media/MediaPage';
+import VideoThumbnail from '@/components/media/VideoThumbnail';
+import MediaLibrary from '@/components/media/MediaLibrary';
 import VideoPlayer from '@/components/media/VideoPlayer';
 import BulkActionsToolbar from '@/components/members/BulkActionsToolbar';
 import MemberList from '@/components/members/MemberList';
@@ -32,6 +33,10 @@ vi.mock('@/lib/api/users', () => usersApi);
 
 const mediaApi = vi.hoisted(() => ({ listMedia: vi.fn(), createMedia: vi.fn() }));
 vi.mock('@/lib/api/media', () => mediaApi);
+
+// GET /api/users and /api/media return one page plus the total (Phase 2 spec 1.2).
+const usersPage = (users: unknown[]) => ({ users, total: users.length, page: 1, pageSize: 25 });
+const mediaPage = (media: unknown[]) => ({ media, total: media.length, page: 1, pageSize: 24 });
 
 const savedSearchesApi = vi.hoisted(() => ({
   listSavedSearches: vi.fn(),
@@ -67,7 +72,7 @@ function video(n: number): MediaItem {
     id: `v${n}`,
     title: `Sermon ${n}`,
     type: 'YOUTUBE_VIDEO',
-    url: `https://www.youtube.com/watch?v=abc${n}`,
+    url: `https://www.youtube.com/watch?v=abcdefghij${n}`,
     tags: '[]',
     createdAt: '2026-01-01T00:00:00.000Z',
   };
@@ -94,8 +99,8 @@ function headers(container: HTMLElement): string[] {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  usersApi.listUsers.mockResolvedValue(staffRows);
-  mediaApi.listMedia.mockResolvedValue([]);
+  usersApi.listUsers.mockResolvedValue(usersPage(staffRows));
+  mediaApi.listMedia.mockResolvedValue(mediaPage([]));
   savedSearchesApi.listSavedSearches.mockResolvedValue([]);
 });
 
@@ -147,11 +152,9 @@ describe('VideoPlayer playlist', () => {
     expect(onSelect).toHaveBeenCalledTimes(1);
   });
 
-  it('switches the playing video when a playlist item is chosen on the dashboard', async () => {
-    mediaApi.listMedia.mockResolvedValue(playlist);
-    const container = await renderAs(['member'], <Home />);
-    await act(async () => button(container, 'Media Library').click());
-    await settle();
+  it('switches the playing video when a playlist item is chosen on the media page', async () => {
+    mediaApi.listMedia.mockResolvedValue(mediaPage(playlist));
+    const container = await renderAs(['member'], <MediaPage />);
     // Play the first video, then pick the third from the playlist.
     const play = container.querySelectorAll<HTMLButtonElement>('.group > button')[0]!;
     await act(async () => play.click());
@@ -168,31 +171,17 @@ describe('VideoPlayer playlist', () => {
 });
 
 describe('media thumbnails', () => {
-  it('hides a thumbnail whose fallbacks fail instead of loading a dead placeholder host', async () => {
-    mediaApi.listMedia.mockResolvedValue([video(1)]);
-    const container = await renderAs(['member'], <SimpleMediaLibrary onPlayMedia={noop} />);
-    const img = container.querySelector('img')!;
-    expect(img.src).toContain('img.youtube.com');
-    await act(async () => img.dispatchEvent(new Event('error')));
-    expect(img.src).toContain('hqdefault.jpg');
-    await act(async () => img.dispatchEvent(new Event('error')));
-    expect(img.style.visibility).toBe('hidden');
+  it('loads hqdefault thumbnails from i.ytimg.com through next/image and hides one that fails', async () => {
+    mediaApi.listMedia.mockResolvedValue(mediaPage([video(1)]));
+    const container = await renderAs(['member'], <MediaLibrary onPlayMedia={noop} />);
+    const img = () => container.querySelector('img');
+    const src = () => decodeURIComponent(img()!.getAttribute('src')!);
+    // next/image serves the remote file through its optimiser (/_next/image?url=...). Grid
+    // cards use hqdefault, which every video has (maxresdefault is poster-only).
+    expect(src()).toContain('/_next/image?url=https://i.ytimg.com/vi/abcdefghij1/hqdefault.jpg');
+    await act(async () => img()!.dispatchEvent(new Event('error')));
+    expect(img()).toBeNull();
     expect(container.innerHTML).not.toContain('placeholder.com');
-  });
-});
-
-describe('dashboard', () => {
-  it('has no placeholder actions or hard-coded overview', async () => {
-    const container = await renderAs(['admin'], <Home />);
-    const text = container.textContent ?? '';
-    expect(text).toContain('Your Profile');
-    expect(text).not.toContain('Upcoming Events');
-    expect(text).not.toContain('Slack Workspace');
-    expect(text).not.toContain('Membership Overview');
-    expect(text).not.toContain('Active System');
-    expect(
-      buttonTexts(container).filter((b) => b.includes('Members') || b.includes('Media')),
-    ).toEqual(['👥 View Members', '🎵 Media Library']);
   });
 });
 
@@ -221,14 +210,17 @@ describe('MemberList', () => {
     await act(async () => rowCheckbox.click());
   }
 
-  it('hides Advanced Search and Saved Searches until the evaluator exists', async () => {
-    const container = await renderAs(
-      ['admin'],
-      <MemberList onEditMember={noop} onAddMember={noop} refreshTrigger={0} />,
+  it('offers Advanced Search and Saved Searches to staff only (the search API is staff-only)', async () => {
+    const staff = await renderAs(['admin'], <MemberList />);
+    expect(buttonTexts(staff)).toEqual(
+      expect.arrayContaining(['Advanced Search', 'Saved Searches']),
     );
-    const buttons = buttonTexts(container);
-    expect(buttons).not.toContain('Advanced Search');
-    expect(buttons).not.toContain('Saved Searches');
+    staff.remove();
+
+    usersApi.listUsers.mockResolvedValue(usersPage(directoryRows));
+    const member = await renderAs(['member'], <MemberList />);
+    expect(buttonTexts(member)).not.toContain('Advanced Search');
+    expect(buttonTexts(member)).not.toContain('Saved Searches');
   });
 
   it('downloads the CSV under the server-provided filename', async () => {
@@ -246,10 +238,7 @@ describe('MemberList', () => {
       filename: 'members-2026-10-04.csv',
     });
 
-    const container = await renderAs(
-      ['admin'],
-      <MemberList onEditMember={noop} onAddMember={noop} refreshTrigger={0} />,
-    );
+    const container = await renderAs(['admin'], <MemberList />);
     await selectFirstRow(container);
     await act(async () => button(container, 'Export CSV').click());
     await settle();
@@ -263,10 +252,7 @@ describe('MemberList', () => {
 
   it('shows a dismissible error toast when the export fails', async () => {
     usersApi.exportUsers.mockRejectedValue(new ApiError(403, 'Insufficient permissions'));
-    const container = await renderAs(
-      ['admin'],
-      <MemberList onEditMember={noop} onAddMember={noop} refreshTrigger={0} />,
-    );
+    const container = await renderAs(['admin'], <MemberList />);
     await selectFirstRow(container);
     await act(async () => button(container, 'Export Selected (1)').click());
     await settle();
@@ -280,21 +266,16 @@ describe('MemberList', () => {
   });
 
   it('shows members only the directory columns and filters', async () => {
-    usersApi.listUsers.mockResolvedValue(directoryRows);
-    const container = await renderAs(
-      ['member'],
-      <MemberList onEditMember={noop} onAddMember={noop} refreshTrigger={0} />,
-    );
+    usersApi.listUsers.mockResolvedValue(usersPage(directoryRows));
+    const container = await renderAs(['member'], <MemberList />);
     expect(headers(container)).toEqual(['Member', 'Role', 'Joined']);
     expect(container.textContent).not.toContain('Inactive');
-    expect(container.querySelectorAll('select')).toHaveLength(1); // roles only
+    // The API lets members search by name only, so no filter selects are offered.
+    expect(container.querySelectorAll('select[aria-label]')).toHaveLength(0);
   });
 
   it('shows staff the contact, engagement, stage and status columns', async () => {
-    const container = await renderAs(
-      ['leader'],
-      <MemberList onEditMember={noop} onAddMember={noop} refreshTrigger={0} />,
-    );
+    const container = await renderAs(['leader'], <MemberList />);
     expect(headers(container)).toEqual([
       '',
       'Member',
@@ -311,13 +292,27 @@ describe('MemberList', () => {
 });
 
 describe('SavedSearches', () => {
-  it('does not offer the predefined quick searches', async () => {
+  it('offers the predefined quick searches now that the search runs on the server', async () => {
     const container = await renderAs(
       ['admin'],
       <SavedSearches onLoadSearch={noop} onClose={noop} currentQuery={null} />,
     );
     expect(container.textContent).toContain('Your Saved Searches');
-    expect(container.textContent).not.toContain('Quick Searches');
-    expect(container.textContent).not.toContain('High Engagement Members');
+    expect(container.textContent).toContain('Quick Searches');
+    expect(container.textContent).toContain('High Engagement Members');
+    // Nothing to save without a current query.
+    expect(buttonTexts(container)).not.toContain('Save Current Search');
+  });
+});
+
+describe('VideoThumbnail', () => {
+  it('falls back from maxresdefault to hqdefault for a poster-sized image', async () => {
+    const { container } = await render(
+      <VideoThumbnail videoId="abcdefghij1" alt="Poster" large sizes="100vw" />,
+    );
+    const src = () => decodeURIComponent(container.querySelector('img')!.getAttribute('src')!);
+    expect(src()).toContain('/vi/abcdefghij1/maxresdefault.jpg');
+    await act(async () => container.querySelector('img')!.dispatchEvent(new Event('error')));
+    expect(src()).toContain('/vi/abcdefghij1/hqdefault.jpg');
   });
 });

@@ -153,15 +153,21 @@ describe('modules', () => {
   });
 
   describe('saved searches', () => {
+    const MINE_QUERY = {
+      conditions: [{ field: 'name', operator: 'contains', value: 'smith' }],
+      logic: 'AND',
+    };
+
     it('creates, lists, uses and deletes a search; others cannot delete it', async () => {
       const created = await request(app)
         .post('/api/users/saved-searches')
         .set(bearer(member))
-        .send({ name: 'Mine', query: { conditions: [] }, isPublic: true });
+        .send({ name: 'Mine', query: MINE_QUERY, isPublic: true });
       expect(created.status).toBe(201);
       expect(created.body.search).toMatchObject({
         name: 'Mine',
-        query: { conditions: [] },
+        query: MINE_QUERY,
+        invalid: false,
         isPublic: true,
       });
       const id = created.body.search.id as string;
@@ -191,7 +197,7 @@ describe('modules', () => {
       const created = await request(app).post('/api/media').set(bearer(staff)).send({
         title: 'Sermon',
         type: 'YOUTUBE_VIDEO',
-        url: 'https://www.youtube.com/watch?v=abc123',
+        url: 'https://www.youtube.com/watch?v=abc123def45',
       });
       expect(created.status).toBe(201);
       expect(created.body.media.tags).toBe('[]');

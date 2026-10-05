@@ -196,7 +196,7 @@ describe('request validation', () => {
     expect(res.body.details.body).toHaveLength(1);
   });
 
-  it('bounds limit to 100 and coerces it from the query string', async () => {
+  it('bounds limit and pageSize to 100 and coerces it from the query string', async () => {
     const tooMany = await request(app)
       .get(`/api/member-details/${memberId}/timeline?limit=101`)
       .set(bearer(token));
@@ -211,7 +211,7 @@ describe('request validation', () => {
       .get(`/api/member-details/${memberId}/timeline?limit=100&offset=0`)
       .set(bearer(token));
     expect(ok.status).toBe(200);
-    expect((await request(app).get('/api/media?limit=500').set(bearer(token))).status).toBe(400);
+    expect((await request(app).get('/api/media?pageSize=500').set(bearer(token))).status).toBe(400);
   });
 
   it('rejects unknown enum values in list filters', async () => {
@@ -221,6 +221,13 @@ describe('request validation', () => {
     expect(res.status).toBe(400);
     expect(res.body.details.category).toBeDefined();
     expect((await request(app).get('/api/media?type=IMAGE').set(bearer(token))).status).toBe(400);
+  });
+
+  it('rejects a malformed media id with 400', async () => {
+    const res = await request(app).get('/api/media/not-a-cuid').set(bearer(token));
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('VALIDATION');
+    expect(res.body.details.id).toBeDefined();
   });
 
   it('rejects malformed JSON with 400', async () => {

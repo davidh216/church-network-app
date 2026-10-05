@@ -1,9 +1,57 @@
-import type { ApiEnvelope, CreateUserInput, Member, UpdateUserInput } from '../../types/domain';
+import type { ListUsersParams, SearchQuery } from '@embrace/shared';
+import type { ApiEnvelope, CreateUserInput, Member, UpdateUserInput } from '@/types/domain';
 import { apiFetch, apiRequest } from './client';
+import { queryString, type Paged } from './query';
 
-export async function listUsers(): Promise<Member[]> {
-  const data = await apiFetch<ApiEnvelope<{ users: Member[] }>>('/users');
-  return data.users;
+interface UserPage extends Paged {
+  users: Member[];
+}
+
+/**
+ * GET /api/users: one page of members matching the filters (server-side paging, 25 per
+ * page by default). Members may only pass `q`, `sort=name`, `order`, `page` and `pageSize`.
+ * `signal` aborts a request that a newer one has superseded.
+ */
+export async function listUsers(
+  params: ListUsersParams = {},
+  signal?: AbortSignal,
+): Promise<UserPage> {
+  const { users, total, page, pageSize } = await apiFetch<ApiEnvelope<UserPage>>(
+    `/users${queryString(params)}`,
+    { signal },
+  );
+  return { users, total, page, pageSize };
+}
+
+/**
+ * POST /api/users/search (staff): one page of members matching an advanced query. Same
+ * response shape as the list.
+ */
+export async function searchUsers(query: SearchQuery, signal?: AbortSignal): Promise<UserPage> {
+  const { users, total, page, pageSize } = await apiFetch<ApiEnvelope<UserPage>>('/users/search', {
+    method: 'POST',
+    json: query,
+    signal,
+  });
+  return { users, total, page, pageSize };
+}
+
+/** Dashboard counts; only staff receive the optional ones. */
+export interface UserSummary {
+  total: number;
+  active?: number;
+  pendingApproval?: number;
+  newThisMonth?: number;
+}
+
+/**
+ * GET /api/users/summary. Staff get every count; members get only `total`, the size of the
+ * active directory they can see (Phase 2 spec 1.2).
+ */
+export async function getUserSummary(): Promise<UserSummary> {
+  const { total, active, pendingApproval, newThisMonth } =
+    await apiFetch<ApiEnvelope<UserSummary>>('/users/summary');
+  return { total, active, pendingApproval, newThisMonth };
 }
 
 export async function getUser(id: string): Promise<Member> {
@@ -27,7 +75,7 @@ export async function updateUser(id: string, input: UpdateUserInput): Promise<Me
   return data.user;
 }
 
-export interface ExportedFile {
+interface ExportedFile {
   blob: Blob;
   filename: string;
 }

@@ -1,9 +1,10 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import MemberList from '@/components/members/MemberList';
 import { AuthProvider } from '@/lib/auth/AuthProvider';
 import { makeUser } from '@/test/fixtures';
 import { render } from '@/test/render';
+import { ApiError } from '@/lib/api/client';
 import type { Member } from '@/types/domain';
 
 const router = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn() }));
@@ -17,8 +18,25 @@ const authApi = vi.hoisted(() => ({
 }));
 vi.mock('@/lib/api/auth', () => authApi);
 
-const usersApi = vi.hoisted(() => ({ listUsers: vi.fn(), exportUsers: vi.fn() }));
+const usersApi = vi.hoisted(() => ({
+  listUsers: vi.fn(),
+  searchUsers: vi.fn(),
+  exportUsers: vi.fn(),
+  createUser: vi.fn(),
+  updateUser: vi.fn(),
+}));
 vi.mock('@/lib/api/users', () => usersApi);
+
+const savedApi = vi.hoisted(() => ({
+  listSavedSearches: vi.fn(),
+  createSavedSearch: vi.fn(),
+  deleteSavedSearch: vi.fn(),
+  useSavedSearch: vi.fn(),
+}));
+vi.mock('@/lib/api/savedSearches', () => savedApi);
+
+const rolesApi = vi.hoisted(() => ({ listRoles: vi.fn() }));
+vi.mock('@/lib/api/roles', () => rolesApi);
 
 function member(id: string, name: string, roleName: string, extra: Partial<Member> = {}): Member {
   return {
@@ -48,15 +66,22 @@ const staffRows: Member[] = [
   }),
 ];
 
-const noop = () => undefined;
-
 async function renderAs(roleNames: string[]) {
   authApi.me.mockResolvedValue(makeUser(roleNames));
   return render(
     <AuthProvider>
-      <MemberList onEditMember={noop} onAddMember={noop} refreshTrigger={0} />
+      <MemberList />
     </AuthProvider>,
   );
+}
+
+function page(users: Member[], total = users.length, pageNumber = 1, pageSize = 25) {
+  return { users, total, page: pageNumber, pageSize };
+}
+
+/** The params of the latest GET /api/users call. */
+function lastParams(): Record<string, unknown> {
+  return usersApi.listUsers.mock.calls.at(-1)?.[0] as Record<string, unknown>;
 }
 
 /** Member names in table order. */
@@ -69,70 +94,171 @@ function rowNames(): string[] {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  usersApi.listUsers.mockResolvedValue(directory);
+  usersApi.listUsers.mockResolvedValue(page(directory));
 });
 
 describe('MemberList', () => {
-  it('renders a row per member from the API', async () => {
+  it('renders the page of members the API returns, with the total across pages', async () => {
+    usersApi.listUsers.mockResolvedValue(page(directory, 40));
     await renderAs(['member']);
     expect(usersApi.listUsers).toHaveBeenCalledTimes(1);
+    expect(lastParams()).toEqual({ q: undefined, page: 1, pageSize: 25 });
     expect(rowNames()).toEqual(['Carol Example', 'Ann Example', 'Bob Example']);
-    expect(screen.getByText('(3 of 3)')).toBeInTheDocument();
+    expect(screen.getByText('(40 total)')).toBeInTheDocument();
+    expect(screen.getByText('Page 1 of 2')).toBeInTheDocument();
   });
 
-  it('sorts by name ascending, then descending, then back to API order without throwing', async () => {
+  it('sorts on the server: ascending, descending, then unsorted', async () => {
     await renderAs(['member']);
-    const nameHeader = screen.getByRole('columnheader', { name: /Member/ });
+    const nameHeader = () => screen.getByRole('columnheader', { name: /Member/ });
+    const sortByName = () => fireEvent.click(within(nameHeader()).getByRole('button'));
 
-    fireEvent.click(nameHeader);
-    expect(rowNames()).toEqual(['Ann Example', 'Bob Example', 'Carol Example']);
-    expect(within(nameHeader).getByText('↑')).toBeInTheDocument();
+    sortByName();
+    await waitFor(() => expect(lastParams()).toMatchObject({ sort: 'name', order: 'asc' }));
+    expect(nameHeader()).toHaveAttribute('aria-sort', 'ascending');
+    expect(within(nameHeader()).getByText('↑')).toBeInTheDocument();
 
-    fireEvent.click(nameHeader);
-    expect(rowNames()).toEqual(['Carol Example', 'Bob Example', 'Ann Example']);
-    expect(within(nameHeader).getByText('↓')).toBeInTheDocument();
+    sortByName();
+    await waitFor(() => expect(lastParams()).toMatchObject({ sort: 'name', order: 'desc' }));
+    expect(within(nameHeader()).getByText('↓')).toBeInTheDocument();
 
-    fireEvent.click(nameHeader);
-    expect(rowNames()).toEqual(['Carol Example', 'Ann Example', 'Bob Example']);
+    sortByName();
+    await waitFor(() => expect(lastParams()).not.toHaveProperty('sort'));
+    expect(nameHeader()).toHaveAttribute('aria-sort', 'none');
   });
 
-  it('sorts staff columns whose values are missing without throwing', async () => {
-    usersApi.listUsers.mockResolvedValue(staffRows);
+  it('lets staff sort by the engagement and contact columns', async () => {
+    usersApi.listUsers.mockResolvedValue(page(staffRows));
     await renderAs(['admin']);
-    fireEvent.click(screen.getByRole('columnheader', { name: /Engagement/ }));
-    fireEvent.click(screen.getByRole('columnheader', { name: /Contact/ }));
-    expect(rowNames()).toEqual(['Ann Example', 'Bob Example', 'Carol Example']);
+    fireEvent.click(screen.getByRole('button', { name: 'Engagement' }));
+    await waitFor(() =>
+      expect(lastParams()).toMatchObject({ sort: 'engagementScore', order: 'asc' }),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Contact' }));
+    await waitFor(() => expect(lastParams()).toMatchObject({ sort: 'email', order: 'asc' }));
   });
 
-  it('reduces rows with the search box and the role filter, and restores them on Clear All', async () => {
+  it('says in the search placeholder what each caller may search', async () => {
     await renderAs(['member']);
+    expect(screen.getByRole('textbox', { name: 'Search members' })).toHaveAttribute(
+      'placeholder',
+      'Search by name...',
+    );
+    // The API rejects longer search terms (MAX_QUERY_TEXT).
+    expect(screen.getByRole('textbox', { name: 'Search members' })).toHaveAttribute(
+      'maxLength',
+      '200',
+    );
+  });
 
-    fireEvent.change(screen.getByPlaceholderText(/Search by name/), { target: { value: 'bob' } });
-    expect(rowNames()).toEqual(['Bob Example']);
-    expect(screen.getByText('(1 of 3)')).toBeInTheDocument();
+  it('offers staff the full search placeholder', async () => {
+    await renderAs(['admin']);
+    expect(screen.getByRole('textbox', { name: 'Search members' })).toHaveAttribute(
+      'placeholder',
+      'Search by name, email, phone, or bio...',
+    );
+  });
 
-    fireEvent.change(screen.getByPlaceholderText(/Search by name/), { target: { value: '' } });
-    fireEvent.change(screen.getByDisplayValue('All Roles'), { target: { value: 'leader' } });
-    expect(rowNames()).toEqual(['Ann Example']);
+  it('debounces the search box, keeps focus and the current rows, and sends one request', async () => {
+    await renderAs(['member']);
+    const input = screen.getByPlaceholderText(/Search by name/);
+    input.focus();
+    for (const value of ['b', 'bo', 'bob']) {
+      fireEvent.change(input, { target: { value } });
+    }
+    // Before the debounce fires: no new request, the rows stay and the input keeps focus.
+    expect(usersApi.listUsers).toHaveBeenCalledTimes(1);
+    expect(rowNames()).toHaveLength(3);
 
-    fireEvent.change(screen.getByDisplayValue('Leader'), { target: { value: 'admin' } });
-    expect(screen.queryAllByRole('row')).toHaveLength(1); // header row only
-    expect(screen.getByText('No members found')).toBeInTheDocument();
+    usersApi.listUsers.mockResolvedValue(page([directory[2]!]));
+    await waitFor(() => expect(lastParams()).toMatchObject({ q: 'bob', page: 1 }));
+    expect(usersApi.listUsers).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(rowNames()).toEqual(['Bob Example']));
+    expect(document.activeElement).toBe(screen.getByPlaceholderText(/Search by name/));
+    expect(screen.getByDisplayValue('bob')).toBeInTheDocument();
+  });
+
+  it('pages on the server and returns to page 1 when a filter changes', async () => {
+    usersApi.listUsers.mockResolvedValue(page(staffRows, 60));
+    await renderAs(['admin']);
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    await waitFor(() => expect(lastParams()).toMatchObject({ page: 2, pageSize: 25 }));
+
+    fireEvent.change(screen.getByLabelText('Role'), { target: { value: 'leader' } });
+    await waitFor(() => expect(lastParams()).toMatchObject({ role: 'leader', page: 1 }));
+
+    fireEvent.change(screen.getByDisplayValue('25'), { target: { value: '50' } });
+    await waitFor(() => expect(lastParams()).toMatchObject({ page: 1, pageSize: 50 }));
+  });
+
+  it('sends the staff filters, with the joined date range inclusive as typed', async () => {
+    usersApi.listUsers.mockResolvedValue(page(staffRows));
+    await renderAs(['leader']);
+    fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'inactive' } });
+    fireEvent.change(screen.getByLabelText('Membership stage'), {
+      target: { value: 'new_member' },
+    });
+    fireEvent.change(screen.getByLabelText('Risk level'), { target: { value: 'high' } });
+    fireEvent.change(screen.getByLabelText('Joined from'), { target: { value: '2026-01-01' } });
+    fireEvent.change(screen.getByLabelText('Joined to (inclusive)'), {
+      target: { value: '2026-01-31' },
+    });
+    await waitFor(() =>
+      expect(lastParams()).toMatchObject({
+        status: 'inactive',
+        stage: 'new_member',
+        risk: 'high',
+        joinedFrom: '2026-01-01',
+        joinedTo: '2026-01-31',
+        page: 1,
+      }),
+    );
+
+    // An inverted range is reported and not sent.
+    fireEvent.change(screen.getByLabelText('Joined from'), { target: { value: '2026-02-01' } });
+    expect(await screen.findByRole('alert')).toHaveTextContent('start date is after the end date');
+    await waitFor(() =>
+      expect(lastParams()).toMatchObject({ joinedFrom: undefined, joinedTo: undefined }),
+    );
 
     fireEvent.click(screen.getByRole('button', { name: 'Clear All' }));
-    expect(rowNames()).toHaveLength(3);
+    await waitFor(() => expect(lastParams()).toMatchObject({ status: undefined, risk: undefined }));
   });
 
-  it('lets staff filter by status', async () => {
-    usersApi.listUsers.mockResolvedValue(staffRows);
-    await renderAs(['leader']);
-    fireEvent.change(screen.getByDisplayValue('All Status'), { target: { value: 'inactive' } });
-    expect(rowNames()).toEqual(['Bob Example']);
-    fireEvent.change(screen.getByDisplayValue('Inactive'), { target: { value: 'active' } });
-    expect(rowNames()).toEqual(['Carol Example', 'Ann Example']);
+  it('debounces the whole filter object, so typing a date sends one request', async () => {
+    usersApi.listUsers.mockResolvedValue(page(staffRows));
+    await renderAs(['admin']);
+    const calls = usersApi.listUsers.mock.calls.length;
+    const from = screen.getByLabelText('Joined from');
+    for (const value of ['2', '20', '202', '2026-01-0', '2026-01-01'])
+      fireEvent.change(from, { target: { value } });
+    // The input shows every keystroke at once; the request waits for the pause.
+    expect(from).toHaveValue('2026-01-01');
+    expect(usersApi.listUsers).toHaveBeenCalledTimes(calls);
+    await waitFor(() => expect(lastParams()).toMatchObject({ joinedFrom: '2026-01-01' }));
+    expect(usersApi.listUsers).toHaveBeenCalledTimes(calls + 1);
   });
 
-  it('hides staff-only controls from a member', async () => {
+  it('shows "No members found" with a clear action when the filters match nothing', async () => {
+    await renderAs(['admin']);
+    usersApi.listUsers.mockResolvedValue(page([]));
+    fireEvent.change(screen.getByLabelText('Role'), { target: { value: 'admin' } });
+    expect(await screen.findByText('No members found')).toBeInTheDocument();
+    usersApi.listUsers.mockResolvedValue(page(directory));
+    fireEvent.click(screen.getByRole('button', { name: 'Clear all filters' }));
+    await waitFor(() => expect(rowNames()).toHaveLength(3));
+  });
+
+  it('shows an inline error with Retry when the list fails to load', async () => {
+    usersApi.listUsers.mockRejectedValue(new ApiError(500, 'Database unavailable'));
+    await renderAs(['admin']);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Database unavailable');
+    usersApi.listUsers.mockResolvedValue(page(staffRows));
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(rowNames()).toHaveLength(3));
+  });
+
+  it('hides staff-only controls and filters from a member', async () => {
     await renderAs(['member']);
     expect(screen.getByText('Ann Example')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Add Member' })).not.toBeInTheDocument();
@@ -141,18 +267,405 @@ describe('MemberList', () => {
     expect(screen.queryByRole('button', { name: /Export/ })).not.toBeInTheDocument();
     expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
     expect(screen.queryByRole('columnheader', { name: 'Actions' })).not.toBeInTheDocument();
+    // The API lets members search by name and sort by name only.
+    expect(screen.queryByLabelText('Role')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Joined from')).not.toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Joined' })).not.toHaveAttribute('aria-sort');
+    // Sortable headers are buttons inside the header cell; members only get the name one.
+    expect(
+      within(screen.getByRole('columnheader', { name: 'Member' })).getByRole('button'),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('columnheader', { name: 'Joined' })).queryByRole('button'),
+    ).toBeNull();
   });
 
   it('shows the staff controls, and Export after selecting a row, to a leader', async () => {
-    usersApi.listUsers.mockResolvedValue(staffRows);
+    usersApi.listUsers.mockResolvedValue(page(staffRows));
     await renderAs(['leader']);
     expect(screen.getByRole('button', { name: 'Add Member' })).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: 'View' })).toHaveLength(3);
+    // Profiles are routes now: "View" is a link to /members/[id].
+    expect(screen.queryByRole('button', { name: 'View' })).not.toBeInTheDocument();
+    expect(
+      screen.getAllByRole('link', { name: 'View' }).map((a) => a.getAttribute('href')),
+    ).toEqual(['/members/m1', '/members/m2', '/members/m3']);
     expect(screen.getAllByRole('button', { name: 'Edit' })).toHaveLength(3);
     expect(screen.queryByRole('button', { name: /Export Selected/ })).not.toBeInTheDocument();
 
     const body = screen.getAllByRole('rowgroup')[1]!;
     fireEvent.click(within(body).getAllByRole('checkbox')[0]!);
     expect(screen.getByRole('button', { name: 'Export Selected (1)' })).toBeInTheDocument();
+  });
+
+  it('selects all on the current page and counts a selection across pages honestly', async () => {
+    usersApi.listUsers.mockResolvedValue(page(staffRows, 30));
+    await renderAs(['admin']);
+    const selectAll = screen.getByLabelText('Select all members on this page');
+    fireEvent.click(selectAll);
+    expect(screen.getAllByText('3 selected').length).toBeGreaterThan(0);
+
+    const nextRows = [member('m4', 'Dan Example', 'member', { email: 'dan@example.com' })];
+    usersApi.listUsers.mockResolvedValue(page(nextRows, 30, 2));
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    await waitFor(() => expect(screen.getByText('Dan Example')).toBeInTheDocument());
+    expect(screen.getByText('3 selected across pages')).toBeInTheDocument();
+    expect(screen.getByLabelText('Select all members on this page')).not.toBeChecked();
+    // Each row's checkbox is named after its member.
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select Dan Example' }));
+    expect(screen.getByText('4 selected across pages')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select Dan Example' }));
+
+    fireEvent.click(screen.getByLabelText('Select all members on this page'));
+    expect(screen.getByText('4 selected across pages')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Export Selected (4)' })).toBeInTheDocument();
+  });
+
+  it('opens the member form in place for Add Member and Edit, and refetches after saving', async () => {
+    usersApi.listUsers.mockResolvedValue(page(staffRows));
+    rolesApi.listRoles.mockResolvedValue([]);
+    usersApi.updateUser.mockResolvedValue(staffRows[1]);
+    await renderAs(['admin']);
+    expect(screen.queryByText('Add New Member')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add Member' }));
+    expect(screen.getByText('Add New Member')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByText('Add New Member')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Edit' })[1]!);
+    expect(screen.getByRole('heading', { name: 'Edit Member' })).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Ann Example')).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(
+        within(screen.getByRole('dialog')).getByRole('button', { name: /Update|Save/ }),
+      );
+    });
+    expect(usersApi.updateUser).toHaveBeenCalledWith('m2', expect.any(Object));
+    // The update invalidates the member queries, so the list refetches.
+    await waitFor(() => expect(usersApi.listUsers).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole('heading', { name: 'Edit Member' })).not.toBeInTheDocument();
+  });
+
+  it('runs an advanced query from the quick filters, shows its result, and clears it', async () => {
+    usersApi.listUsers.mockResolvedValue(page(staffRows));
+    usersApi.searchUsers.mockResolvedValue(page([staffRows[1]!], 31));
+    await renderAs(['admin']);
+    await screen.findByText('Carol Example');
+
+    fireEvent.change(screen.getByLabelText('Membership stage'), {
+      target: { value: 'new_member' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced Search' }));
+    // The builder starts from the quick filters.
+    expect(screen.getByLabelText('Condition 1 field')).toHaveValue('engagement.membershipStage');
+    expect(screen.getByLabelText('Condition 1 value')).toHaveValue('new_member');
+    fireEvent.click(screen.getByRole('button', { name: 'Add Condition' }));
+    fireEvent.change(screen.getByLabelText('Condition 2 field'), {
+      target: { value: 'engagement.engagementScore' },
+    });
+    fireEvent.change(screen.getByLabelText('Condition 2 operator'), { target: { value: 'gte' } });
+    fireEvent.change(screen.getByLabelText('Condition 2 value'), { target: { value: '50' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply Search' }));
+
+    await waitFor(() =>
+      expect(usersApi.searchUsers).toHaveBeenCalledWith(
+        {
+          conditions: [
+            { field: 'engagement.membershipStage', operator: 'equals', value: 'new_member' },
+            { field: 'engagement.engagementScore', operator: 'gte', value: 50 },
+          ],
+          logic: 'AND',
+          page: 1,
+          pageSize: 25,
+        },
+        expect.any(AbortSignal),
+      ),
+    );
+    expect(await screen.findByText('(31 total)')).toBeInTheDocument();
+    expect(rowNames()).toEqual(['Ann Example']);
+    expect(screen.getByText('Advanced query active')).toBeInTheDocument();
+    // The quick filters are folded into the query, so they are hidden while it is active.
+    expect(screen.queryByLabelText('Membership stage')).not.toBeInTheDocument();
+    expect(screen.getByText('Page 1 of 2')).toBeInTheDocument();
+
+    // Paging and sorting go to the search, not the list.
+    const listCalls = usersApi.listUsers.mock.calls.length;
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    await waitFor(() =>
+      expect(usersApi.searchUsers).toHaveBeenLastCalledWith(
+        expect.objectContaining({ page: 2 }),
+        expect.any(AbortSignal),
+      ),
+    );
+    expect(usersApi.listUsers).toHaveBeenCalledTimes(listCalls);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear advanced query' }));
+    await waitFor(() =>
+      expect(screen.queryByText('Advanced query active')).not.toBeInTheDocument(),
+    );
+    expect(await screen.findByText('Carol Example')).toBeInTheDocument();
+    expect(screen.getByLabelText('Membership stage')).toHaveValue('all');
+  });
+
+  it('saves the quick filters as a query and applies a saved search through the search API', async () => {
+    usersApi.listUsers.mockResolvedValue(page(staffRows));
+    usersApi.searchUsers.mockResolvedValue(page([staffRows[2]!]));
+    const query = {
+      conditions: [{ field: 'engagement.riskLevel', operator: 'equals', value: 'high' }],
+      logic: 'AND',
+      sort: 'name',
+      order: 'desc',
+    };
+    savedApi.listSavedSearches.mockResolvedValue([
+      {
+        id: 's1',
+        name: 'High risk',
+        description: null,
+        createdAt: '2026-10-01',
+        isPublic: false,
+        invalid: false,
+        query,
+      },
+    ]);
+    savedApi.createSavedSearch.mockResolvedValue({ id: 's2' });
+    savedApi.useSavedSearch.mockResolvedValue(undefined);
+    await renderAs(['admin']);
+    await screen.findByText('Carol Example');
+
+    fireEvent.change(screen.getByLabelText('Risk level'), { target: { value: 'high' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Saved Searches' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save Current Search' }));
+    fireEvent.change(screen.getByLabelText('Search name'), { target: { value: 'High risk' } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    });
+    expect(savedApi.createSavedSearch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'High risk',
+        query: {
+          conditions: [{ field: 'engagement.riskLevel', operator: 'equals', value: 'high' }],
+          logic: 'AND',
+        },
+      }),
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Apply High risk' }));
+    await waitFor(() =>
+      expect(usersApi.searchUsers).toHaveBeenCalledWith(
+        {
+          conditions: query.conditions,
+          logic: 'AND',
+          sort: 'name',
+          order: 'desc',
+          page: 1,
+          pageSize: 25,
+        },
+        expect.any(AbortSignal),
+      ),
+    );
+    await waitFor(() => expect(savedApi.useSavedSearch).toHaveBeenCalledWith('s1'));
+    expect(await screen.findByText('Advanced query active')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Saved Searches' })).not.toBeInTheDocument();
+  });
+
+  it('is titled by an h1 and keeps focus on the panel toggles when panels close or apply', async () => {
+    usersApi.listUsers.mockResolvedValue(page(staffRows));
+    usersApi.searchUsers.mockResolvedValue(page([staffRows[1]!]));
+    savedApi.listSavedSearches.mockResolvedValue([]);
+    await renderAs(['admin']);
+    expect(screen.getByRole('heading', { level: 1, name: 'Church Members' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1 }).tagName).toBe('H1');
+
+    const advanced = screen.getByRole('button', { name: 'Advanced Search' });
+    expect(advanced).toHaveAttribute('aria-controls', 'advanced-search-panel');
+    fireEvent.click(advanced);
+    expect(screen.getByRole('region', { name: 'Advanced Search' })).toHaveAttribute(
+      'id',
+      'advanced-search-panel',
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Close advanced search' }));
+    expect(document.activeElement).toBe(advanced);
+
+    const saved = screen.getByRole('button', { name: 'Saved Searches' });
+    expect(saved).toHaveAttribute('aria-controls', 'saved-searches-panel');
+    fireEvent.click(saved);
+    fireEvent.click(screen.getByRole('button', { name: 'Close saved searches' }));
+    expect(document.activeElement).toBe(saved);
+
+    // Applying a query closes the builder and returns focus to its toggle.
+    fireEvent.click(advanced);
+    fireEvent.change(screen.getByLabelText('Condition 1 value'), { target: { value: 'ann' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply Search' }));
+    expect(document.activeElement).toBe(advanced);
+
+    // Clearing the advanced query puts focus in the search box that replaces it.
+    fireEvent.click(await screen.findByRole('button', { name: 'Clear advanced query' }));
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Search members' })),
+    );
+  });
+
+  it('focuses the search box after a filter chip is cleared', async () => {
+    usersApi.listUsers.mockResolvedValue(page(staffRows));
+    await renderAs(['admin']);
+    fireEvent.change(screen.getByLabelText('Role'), { target: { value: 'leader' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Clear Role: Leader' }));
+    expect(screen.queryByRole('button', { name: 'Clear Role: Leader' })).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Search members' }));
+  });
+
+  it('marks select-all mixed when only some rows on the page are selected', async () => {
+    usersApi.listUsers.mockResolvedValue(page(staffRows));
+    await renderAs(['admin']);
+    const selectAll = screen.getByLabelText<HTMLInputElement>('Select all members on this page');
+    expect(selectAll.indeterminate).toBe(false);
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select Ann Example' }));
+    expect(selectAll.indeterminate).toBe(true);
+    expect(selectAll).not.toBeChecked();
+    fireEvent.click(selectAll);
+    expect(selectAll.indeterminate).toBe(false);
+    expect(selectAll).toBeChecked();
+  });
+
+  it('shows only the skeleton while loading, and marks the results busy while refetching', async () => {
+    let resolve: (value: ReturnType<typeof page>) => void = () => undefined;
+    usersApi.listUsers.mockReturnValueOnce(new Promise((r) => (resolve = r)));
+    await renderAs(['member']);
+    expect(screen.getByRole('status', { name: 'Loading members' })).toBeInTheDocument();
+    expect(screen.queryByRole('table')).toBeNull();
+    expect(screen.queryByText('(0 total)')).toBeNull();
+    await act(async () => resolve(page(directory)));
+    const table = await screen.findByRole('table');
+    expect(table.parentElement!.parentElement).toHaveAttribute('aria-busy', 'false');
+
+    let resolveNext: (value: ReturnType<typeof page>) => void = () => undefined;
+    usersApi.listUsers.mockReturnValueOnce(new Promise((r) => (resolveNext = r)));
+    fireEvent.click(screen.getByRole('button', { name: 'Member' }));
+    await waitFor(() =>
+      expect(table.parentElement!.parentElement).toHaveAttribute('aria-busy', 'true'),
+    );
+    // The previous rows stay while the next page loads.
+    expect(screen.getByText('Carol Example')).toBeInTheDocument();
+    await act(async () => resolveNext(page(directory)));
+    await waitFor(() =>
+      expect(table.parentElement!.parentElement).toHaveAttribute('aria-busy', 'false'),
+    );
+  });
+
+  it('routes the quick filters through the search API when an engagement band is set', async () => {
+    usersApi.listUsers.mockResolvedValue(page(staffRows));
+    usersApi.searchUsers.mockResolvedValue(page([staffRows[0]!], 1));
+    await renderAs(['admin']);
+    fireEvent.change(screen.getByLabelText('Risk level'), { target: { value: 'low' } });
+    fireEvent.change(screen.getByLabelText('Engagement'), { target: { value: 'medium' } });
+    await waitFor(() =>
+      expect(usersApi.searchUsers).toHaveBeenLastCalledWith(
+        {
+          conditions: [
+            { field: 'engagement.riskLevel', operator: 'equals', value: 'low' },
+            { field: 'engagement.engagementScore', operator: 'gte', value: 50 },
+            { field: 'engagement.engagementScore', operator: 'lt', value: 80 },
+          ],
+          logic: 'AND',
+          page: 1,
+          pageSize: 25,
+        },
+        expect.any(AbortSignal),
+      ),
+    );
+    expect(await screen.findByText('(1 total)')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Clear Engagement: Medium (50-79)' })).toBeVisible();
+
+    // With a text search too, the search is a name match, and the list says so.
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search members' }), {
+      target: { value: 'car' },
+    });
+    expect(
+      await screen.findByText('With an engagement filter, the text search matches names only.'),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(usersApi.searchUsers.mock.calls.at(-1)?.[0].conditions[0]).toEqual({
+        field: 'name',
+        operator: 'contains',
+        value: 'car',
+      }),
+    );
+  });
+
+  it('gives every quick filter a chip, including risk, status and the joined range', async () => {
+    usersApi.listUsers.mockResolvedValue(page(staffRows));
+    await renderAs(['admin']);
+    fireEvent.change(screen.getByLabelText('Risk level'), { target: { value: 'high' } });
+    fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'inactive' } });
+    fireEvent.change(screen.getByLabelText('Joined from'), { target: { value: '2026-01-01' } });
+    fireEvent.change(screen.getByLabelText('Joined to (inclusive)'), {
+      target: { value: '2026-01-31' },
+    });
+    expect(screen.getByRole('button', { name: 'Clear Risk: High' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Clear Status: Inactive' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Clear Joined: 2026-01-01 to 2026-01-31' }));
+    expect(screen.getByLabelText('Joined from')).toHaveValue('');
+    expect(screen.getByLabelText('Joined to (inclusive)')).toHaveValue('');
+    expect(screen.getByLabelText('Risk level')).toHaveValue('high');
+  });
+
+  it('notes that a saved text search next to other filters is a name match only', async () => {
+    usersApi.listUsers.mockResolvedValue(page(staffRows));
+    savedApi.listSavedSearches.mockResolvedValue([]);
+    await renderAs(['admin']);
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search members' }), {
+      target: { value: 'ann' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Saved Searches' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save Current Search' }));
+    // The search alone matches name, email, phone or bio: no note.
+    expect(screen.queryByRole('note')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    fireEvent.change(screen.getByLabelText('Role'), { target: { value: 'leader' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save Current Search' }));
+    expect(screen.getByRole('note')).toHaveTextContent(
+      'The text search is saved as a name match only: next to other filters it matches names, not email, phone or bio.',
+    );
+    expect(screen.getByText('Name contains ann AND Role includes Leader')).toBeInTheDocument();
+  });
+
+  it('moves back to the last page when the total shrinks below the current page', async () => {
+    usersApi.listUsers.mockResolvedValue(page(staffRows, 60, 1));
+    rolesApi.listRoles.mockResolvedValue([]);
+    usersApi.updateUser.mockResolvedValue(staffRows[0]);
+    await renderAs(['admin']);
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    await waitFor(() => expect(lastParams()).toMatchObject({ page: 3 }));
+    // A save refetches page 3, which no longer exists (members left the filter elsewhere).
+    usersApi.listUsers.mockImplementation((params: { page: number }) =>
+      Promise.resolve(params.page === 3 ? page([], 30, 3) : page(staffRows, 30, params.page)),
+    );
+    fireEvent.click(screen.getAllByRole('button', { name: 'Edit' })[0]!);
+    await act(async () => {
+      fireEvent.click(
+        within(screen.getByRole('dialog')).getByRole('button', { name: /Update|Save/ }),
+      );
+    });
+    await waitFor(() => expect(lastParams()).toMatchObject({ page: 2 }));
+    expect(await screen.findByText('Page 2 of 2')).toBeInTheDocument();
+  });
+
+  it('keeps the rows on screen while switching from the list to an advanced query', async () => {
+    usersApi.listUsers.mockResolvedValue(page(staffRows, 3));
+    let resolveSearch: (value: ReturnType<typeof page>) => void = () => undefined;
+    usersApi.searchUsers.mockReturnValue(new Promise((r) => (resolveSearch = r)));
+    await renderAs(['admin']);
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced Search' }));
+    fireEvent.change(screen.getByLabelText('Condition 1 value'), { target: { value: 'ann' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply Search' }));
+    await waitFor(() => expect(usersApi.searchUsers).toHaveBeenCalled());
+    // While the search is pending, the list rows and total stay; no "(0 total)" flash.
+    expect(screen.getByText('Carol Example')).toBeInTheDocument();
+    expect(screen.getByText('(3 total)')).toBeInTheDocument();
+    expect(screen.queryByText('(0 total)')).toBeNull();
+    await act(async () => resolveSearch(page([staffRows[1]!], 1)));
+    expect(await screen.findByText('(1 total)')).toBeInTheDocument();
   });
 });

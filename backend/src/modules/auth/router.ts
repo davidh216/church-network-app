@@ -1,5 +1,6 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
+import { changePasswordInput, loginInput, registerInput } from '@embrace/shared';
 import { authenticate, SESSION_COOKIE, sessionCookieOptions } from '../../middleware/auth';
 import {
   loginAccountRateLimit,
@@ -8,13 +9,12 @@ import {
   registerRateLimit,
 } from '../../middleware/rate-limit';
 import { validate } from '../../middleware/validate';
-import { changePasswordBody, loginBody, registerBody } from './schemas';
 import * as auth from './service';
 
 const router = express.Router();
 
 // The same 201 body whether the email was new or already registered (no email enumeration).
-router.post('/register', registerRateLimit, validate({ body: registerBody }), async (req, res) => {
+router.post('/register', registerRateLimit, validate({ body: registerInput }), async (req, res) => {
   await auth.register(req.body);
   res.status(201).json({
     success: true,
@@ -29,7 +29,7 @@ router.post(
   loginIpRateLimit,
   loginEmailRateLimit,
   loginAccountRateLimit,
-  validate({ body: loginBody }),
+  validate({ body: loginInput }),
   async (req, res) => {
     const { user, token } = await auth.login(req.body);
     // The cookie lives exactly as long as the token (JWT_EXPIRES_IN).
@@ -62,7 +62,7 @@ router.get('/me', authenticate, (req, res) => {
 router.post(
   '/change-password',
   authenticate,
-  validate({ body: changePasswordBody }),
+  validate({ body: changePasswordInput }),
   async (req, res) => {
     await auth.changePassword(req.user!.id, req.body);
     res.json({ success: true, message: 'Password changed. Please sign in again.' });
