@@ -11,7 +11,7 @@ function video(url: string, videoId: string | null = null): MediaItem {
     type: 'YOUTUBE_VIDEO',
     url,
     videoId,
-    tags: '["worship","youth","prayer"]',
+    tags: ['worship', 'youth', 'prayer'],
     createdAt: '2026-01-01T00:00:00.000Z',
   };
 }

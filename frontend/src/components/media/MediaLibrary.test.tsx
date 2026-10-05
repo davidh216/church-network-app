@@ -29,7 +29,7 @@ function video(n: number): MediaItem {
     type: 'YOUTUBE_VIDEO',
     url: `https://www.youtube.com/watch?v=abcdefghij${n}`,
     videoId: `abcdefghij${n}`,
-    tags: '[]',
+    tags: [],
     createdAt: '2026-01-01T00:00:00.000Z',
   };
 }

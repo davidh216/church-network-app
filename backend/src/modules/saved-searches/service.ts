@@ -6,19 +6,10 @@ import { HttpError } from '../../lib/http-error';
 import { isAdmin } from '../../middleware/auth';
 import type { AuthenticatedUser } from '../../types/auth';
 
-function parseJson(raw: string): unknown {
-  try {
-    return JSON.parse(raw) as unknown;
-  } catch {
-    return null;
-  }
-}
-
 // Stored queries are validated again on load: one that no longer matches `searchQuery` (written
 // before validation existed, or by an older schema) comes back as stored with `invalid: true`, and
 // the UI must not apply it.
-function loadQuery(raw: string) {
-  const stored = parseJson(raw);
+function loadQuery(stored: Prisma.JsonValue) {
   const parsed = searchQuery.safeParse(stored);
   return parsed.success ? { query: parsed.data, invalid: false } : { query: stored, invalid: true };
 }
@@ -60,7 +51,7 @@ export async function createSavedSearch(
     data: {
       name: body.name,
       description: body.description ?? null,
-      query: JSON.stringify(body.query),
+      query: body.query,
       isPublic: body.isPublic ?? false,
       createdById: userId,
     },

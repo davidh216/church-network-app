@@ -25,16 +25,6 @@ export function formatDateTime(dateString?: string | null): string {
   );
 }
 
-/** A JSON-encoded string array (skills, interests); anything unparsable or non-array is []. */
-export function parseJsonList(value?: string | null): string[] {
-  try {
-    const parsed: unknown = JSON.parse(value || '[]');
-    return Array.isArray(parsed) ? parsed.map(String) : [];
-  } catch {
-    return [];
-  }
-}
-
 /** Whole years since the date of birth, or null without one. */
 export function calculateAge(dateOfBirth?: string | null, now: Date = new Date()): number | null {
   if (!dateOfBirth) return null;

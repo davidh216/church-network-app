@@ -41,7 +41,21 @@ export const optionalQueryText = (label: string, max: number) =>
     .transform((v) => (v === '' ? undefined : v))
     .optional();
 
-// Arbitrary JSON metadata attached to activities and interactions (stored as a JSON string).
+// A list of short labels stored as a text[] column (skills, interests): each entry trimmed and
+// non-blank, duplicates removed (first spelling wins, ignoring case).
+export const labelList = (label: string, maxItems: number, maxLength = 50) =>
+  z
+    .array(requiredText(`Each ${label.toLowerCase()}`, maxLength, `${label} cannot be blank`), {
+      error: `${label} must be a list`,
+    })
+    .max(maxItems, `Add at most ${maxItems} ${label.toLowerCase()}`)
+    .transform((items) =>
+      items.filter(
+        (item, i) => items.findIndex((other) => other.toLowerCase() === item.toLowerCase()) === i,
+      ),
+    );
+
+// Arbitrary JSON metadata attached to activities and interactions (stored as a JSON object).
 export const metadata = z.record(z.string(), z.unknown()).optional();
 
 // The longest free-text search term (member `q`, media `search`, search condition values).

@@ -378,7 +378,7 @@ describe('route matrix', () => {
           title: 'Seed video',
           type: 'YOUTUBE_VIDEO',
           url: 'https://youtu.be/abc123',
-          tags: '[]',
+          tags: [],
           uploadedById: admin.id,
         },
       })

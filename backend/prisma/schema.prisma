@@ -54,8 +54,8 @@ model User {
   notes            String?
   lastAttended     DateTime?
   lastLoginAt      DateTime?   // Track when user last logged in
-  volunteerSkills  String?    // JSON array as string
-  interests        String?    // JSON array as string
+  volunteerSkills  String[]   @default([])
+  interests        String[]   @default([])
   
   // Timestamps
   createdAt DateTime @default(now())
@@ -100,7 +100,7 @@ model Role {
   id          String @id @default(cuid())
   name        String @unique // "admin", "leader", "member"
   description String?
-  permissions String // JSON string for now
+  permissions String[] @default([])
   
   // Relations
   users UserRole[]
@@ -133,7 +133,7 @@ model Media {
   mimeType    String?
   
   // Content organization
-  tags        String    // JSON array as string
+  tags        String[]  @default([])
   isApproved  Boolean   @default(false)
   isPublic    Boolean   @default(true)
   
@@ -302,7 +302,7 @@ model MemberActivity {
   userId      String
   activityType ActivityType
   description String?
-  metadata    String?  // JSON string for additional data
+  metadata    Json?    // Additional data (an object)
   points      Int      @default(0) // Points awarded for this activity
   
   // Timestamps
@@ -333,7 +333,7 @@ model MemberInteraction {
   responseReceived Boolean @default(false)
   
   // Metadata
-  metadata       String?  // JSON for additional data
+  metadata       Json?    // Additional data (an object)
   responseTime   Int?     // Minutes to respond (for two-way communications)
   
   // Timestamps
@@ -436,7 +436,7 @@ model SavedSearch {
   id          String   @id @default(cuid())
   name        String
   description String?
-  query       String   // JSON string containing the search query
+  query       Json     // A searchQuery (validated on save and on load)
   isPublic    Boolean  @default(false)
   createdById String   // User who created the search
   createdBy   User     @relation(fields: [createdById], references: [id], onDelete: Cascade)

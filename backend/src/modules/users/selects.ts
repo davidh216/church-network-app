@@ -23,6 +23,8 @@ export const selfSelect = {
   phone: true,
   avatar: true,
   bio: true,
+  volunteerSkills: true,
+  interests: true,
   isActive: true,
   createdAt: true,
   updatedAt: true,

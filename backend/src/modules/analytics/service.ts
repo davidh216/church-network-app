@@ -1,4 +1,4 @@
-import type { MemberInteraction } from '@prisma/client';
+import type { MemberInteraction, Prisma } from '@prisma/client';
 import type { z } from 'zod';
 import type {
   ActivityType,
@@ -9,6 +9,10 @@ import type {
 } from '@embrace/shared';
 import { prisma } from '../../lib/prisma';
 import { logger } from '../../lib/logger';
+
+// Request metadata (a JSON object validated by the shared schema) as a Prisma JSON input.
+const jsonOrUndefined = (value: Record<string, unknown> | undefined) =>
+  value as Prisma.InputJsonObject | undefined;
 
 export interface EngagementMetrics {
   attendanceScore: number;
@@ -206,7 +210,7 @@ export async function recordActivity(
       userId,
       activityType: body.activityType,
       description: body.description,
-      metadata: body.metadata ? JSON.stringify(body.metadata) : null,
+      metadata: jsonOrUndefined(body.metadata),
       points: body.points,
     },
   });
@@ -229,7 +233,7 @@ export async function recordInteraction(
       subject: body.subject,
       content: body.content,
       staffMemberId,
-      metadata: body.metadata ? JSON.stringify(body.metadata) : null,
+      metadata: jsonOrUndefined(body.metadata),
       completedAt: new Date(),
     },
   });
@@ -316,15 +320,12 @@ async function lastActivityDate(userId: string): Promise<Date | null> {
 }
 
 // Hours recorded in a volunteer activity's metadata; one hour when absent or unreadable.
-function volunteerHours(metadata: string | null): number {
-  try {
-    const parsed = JSON.parse(metadata ?? '{}') as unknown;
-    const hours =
-      parsed && typeof parsed === 'object' && 'hours' in parsed ? parsed.hours : undefined;
-    return typeof hours === 'number' && hours > 0 ? hours : 1;
-  } catch {
-    return 1;
-  }
+function volunteerHours(metadata: Prisma.JsonValue): number {
+  const hours =
+    metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+      ? metadata.hours
+      : undefined;
+  return typeof hours === 'number' && hours > 0 ? hours : 1;
 }
 
 async function countActivities(userId: string, startDate: Date) {

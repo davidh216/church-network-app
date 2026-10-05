@@ -191,6 +191,8 @@ export async function createUser(
       password: await bcrypt.hash(body.password, 10),
       phone: body.phone ?? null,
       bio: body.bio ?? null,
+      volunteerSkills: body.volunteerSkills ?? [],
+      interests: body.interests ?? [],
       isActive: body.isActive ?? true,
       roles: { create: roleIds.map((roleId) => ({ roleId })) },
       // Every account has an engagement row (defaults: score 0, visitor, low risk).
@@ -252,6 +254,8 @@ export async function updateUser(
       name: body.name,
       phone: body.phone,
       bio: body.bio,
+      volunteerSkills: body.volunteerSkills,
+      interests: body.interests,
       isActive: body.isActive,
       roles: roleIds
         ? { deleteMany: {}, create: roleIds.map((roleId) => ({ roleId })) }

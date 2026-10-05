@@ -66,6 +66,10 @@ describe('human validation messages', () => {
       'roleIds.0': 'Must be a valid id',
     });
     expect(messages(updateUserInput, { name: ' ' })).toEqual({ name: 'Name is required' });
+    expect(messages(updateUserInput, { volunteerSkills: ['ok', ' '], interests: 'x' })).toEqual({
+      'volunteerSkills.1': 'Skills cannot be blank',
+      interests: 'Interests must be a list',
+    });
   });
 
   it('media form', () => {

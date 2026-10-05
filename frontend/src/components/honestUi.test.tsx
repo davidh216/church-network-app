@@ -73,7 +73,7 @@ function video(n: number): MediaItem {
     title: `Sermon ${n}`,
     type: 'YOUTUBE_VIDEO',
     url: `https://www.youtube.com/watch?v=abcdefghij${n}`,
-    tags: '[]',
+    tags: [],
     createdAt: '2026-01-01T00:00:00.000Z',
   };
 }

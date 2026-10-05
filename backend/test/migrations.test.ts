@@ -470,3 +470,140 @@ describe('20261006020000_relations_keys_indexes (D3)', () => {
     });
   });
 });
+
+describe('20261006030000_native_column_types (D4)', () => {
+  const schema = 'fixture_d4_native_types';
+  const rows = <T>(sql: string) => prisma.$queryRawUnsafe<T[]>(sql.replaceAll('$s', schema));
+
+  beforeAll(() => {
+    migrateFixture(
+      schema,
+      '20261006030000_native_column_types',
+      `
+      INSERT INTO "roles" ("id", "name", "permissions") VALUES
+        ('r1', 'admin', '["*"]'),
+        ('r2', 'leader', '["members:read", " media:write ", 7, null, "", {"a": 1}]'),
+        ('r3', 'member', 'not json'),
+        ('r4', 'guest', '{"read": true}');
+      INSERT INTO "users" ("id", "email", "password", "name", "updatedAt", "volunteerSkills", "interests") VALUES
+        ('u1', 'u1@example.org', 'x', 'U1', now(), '["Music", "Teaching"]', '["Hiking"]'),
+        ('u2', 'u2@example.org', 'x', 'U2', now(), 'Music, Teaching', ''),
+        ('u3', 'u3@example.org', 'x', 'U3', now(), NULL, '"Hiking"'),
+        ('u4', 'u4@example.org', 'x', 'U4', now(), '[]', 'null');
+      INSERT INTO "media" ("id", "title", "type", "url", "tags", "uploadedById", "updatedAt") VALUES
+        ('m1', 'Kept', 'YOUTUBE_VIDEO', 'https://www.youtube.com/watch?v=abcdefghijk', '["worship","youth"]', 'u1', now()),
+        ('m2', 'Broken', 'YOUTUBE_VIDEO', 'https://www.youtube.com/watch?v=abcdefghijk', '[worship', 'u1', now()),
+        ('m3', 'Blank', 'YOUTUBE_VIDEO', 'https://www.youtube.com/watch?v=abcdefghijk', '', 'u1', now());
+      INSERT INTO "member_activities" ("id", "userId", "activityType", "metadata") VALUES
+        ('a1', 'u1', 'volunteer', '{"hours": 3}'),
+        ('a2', 'u1', 'volunteer', '{hours: 3}'),
+        ('a3', 'u1', 'volunteer', NULL),
+        ('a4', 'u1', 'volunteer', 'null'),
+        ('a5', 'u1', 'volunteer', '   ');
+      INSERT INTO "member_interactions" ("id", "userId", "interactionType", "channel", "metadata") VALUES
+        ('i1', 'u1', 'call_made', 'phone', '{"duration": 12, "tags": ["a"]}'),
+        ('i2', 'u1', 'call_made', 'phone', 'oops');
+      INSERT INTO "saved_searches" ("id", "name", "query", "createdById", "updatedAt") VALUES
+        ('s1', 'Valid', '{"conditions":[{"field":"name","operator":"contains","value":"a"}],"logic":"AND"}', 'u1', now()),
+        ('s2', 'Stale', '{"conditions":[{"field":"age","operator":"gt","value":30}]}', 'u1', now()),
+        ('s3', 'Broken', '{not json', 'u1', now()),
+        ('s4', 'Empty', '', 'u2', now());
+      `,
+    );
+  }, 60_000);
+
+  afterAll(() => dropSchema(schema));
+
+  const values = async <V>(table: string, col: string) =>
+    Object.fromEntries(
+      (
+        await rows<{ id: string; v: V }>(
+          `SELECT "id", "${col}" AS v FROM "$s"."${table}" ORDER BY "id"`,
+        )
+      ).map(({ id, v }) => [id, v]),
+    );
+
+  it('converts the columns to text[] and jsonb', async () => {
+    const types = await rows<{ c: string; t: string }>(
+      `SELECT table_name || '.' || column_name AS c, data_type AS t FROM information_schema.columns
+       WHERE table_schema = '$s' AND (
+         (table_name = 'users' AND column_name IN ('volunteerSkills', 'interests')) OR
+         (table_name = 'media' AND column_name = 'tags') OR
+         (table_name = 'roles' AND column_name = 'permissions') OR
+         (table_name IN ('member_activities', 'member_interactions') AND column_name = 'metadata') OR
+         (table_name = 'saved_searches' AND column_name = 'query'))
+       ORDER BY 1`,
+    );
+    expect(types).toEqual([
+      { c: 'media.tags', t: 'ARRAY' },
+      { c: 'member_activities.metadata', t: 'jsonb' },
+      { c: 'member_interactions.metadata', t: 'jsonb' },
+      { c: 'roles.permissions', t: 'ARRAY' },
+      { c: 'saved_searches.query', t: 'jsonb' },
+      { c: 'users.interests', t: 'ARRAY' },
+      { c: 'users.volunteerSkills', t: 'ARRAY' },
+    ]);
+  });
+
+  it('parses JSON string lists; unparsable or non-array values become []', async () => {
+    expect(await values<string[]>('roles', 'permissions')).toEqual({
+      r1: ['*'],
+      r2: ['members:read', 'media:write', '7'],
+      r3: [],
+      r4: [],
+    });
+    expect(await values<string[]>('users', 'volunteerSkills')).toEqual({
+      u1: ['Music', 'Teaching'],
+      u2: [],
+      u3: [],
+      u4: [],
+    });
+    expect(await values<string[]>('users', 'interests')).toEqual({
+      u1: ['Hiking'],
+      u2: [],
+      u3: [],
+      u4: [],
+    });
+    expect(await values<string[]>('media', 'tags')).toEqual({
+      m1: ['worship', 'youth'],
+      m2: [],
+      m3: [],
+    });
+  });
+
+  it('parses metadata; unparsable, blank and JSON null values become NULL', async () => {
+    expect(await values<unknown>('member_activities', 'metadata')).toEqual({
+      a1: { hours: 3 },
+      a2: null,
+      a3: null,
+      a4: null,
+      a5: null,
+    });
+    expect(await values<unknown>('member_interactions', 'metadata')).toEqual({
+      i1: { duration: 12, tags: ['a'] },
+      i2: null,
+    });
+  });
+
+  it('keeps parsable saved searches (stale ones too) and deletes the ones that do not parse', async () => {
+    expect(await values<unknown>('saved_searches', 'query')).toEqual({
+      s1: { conditions: [{ field: 'name', operator: 'contains', value: 'a' }], logic: 'AND' },
+      s2: { conditions: [{ field: 'age', operator: 'gt', value: 30 }] },
+    });
+  });
+
+  it('gives new rows an empty list and leaves no helper functions behind', async () => {
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "${schema}"."users" ("id", "email", "password", "name", "updatedAt") VALUES ('u5', 'u5@example.org', 'x', 'U5', now())`,
+    );
+    const [fresh] = await rows<{ volunteerSkills: string[]; interests: string[] }>(
+      `SELECT "volunteerSkills", "interests" FROM "$s"."users" WHERE "id" = 'u5'`,
+    );
+    expect(fresh).toEqual({ volunteerSkills: [], interests: [] });
+    const helpers = await rows<{ proname: string }>(
+      `SELECT p.proname FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+       WHERE n.nspname = '$s' AND p.proname LIKE 'phase3_%'`,
+    );
+    expect(helpers).toEqual([]);
+  });
+});

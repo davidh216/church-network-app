@@ -36,7 +36,7 @@ export interface Role {
   id: string;
   name: string;
   description?: string | null;
-  permissions?: string;
+  permissions?: string[];
 }
 
 interface UserRole {
@@ -68,6 +68,8 @@ export interface User {
   updatedAt: string;
   lastLoginAt?: string | null;
   membershipDate?: string | null;
+  volunteerSkills?: string[];
+  interests?: string[];
   roles: UserRole[];
 }
 
@@ -100,8 +102,7 @@ export interface MediaItem {
   /** The YouTube video id, or null when the stored URL cannot be embedded. */
   videoId?: string | null;
   thumbnailUrl?: string | null;
-  /** JSON-encoded string array. */
-  tags: string;
+  tags: string[];
   createdAt: string;
   uploadedBy?: {
     id: string;
@@ -176,8 +177,8 @@ export interface MemberDetails {
   // Notes and tracking
   notes?: string;
   lastAttended?: string;
-  volunteerSkills?: string;
-  interests?: string;
+  volunteerSkills?: string[];
+  interests?: string[];
 
   createdAt: string;
   updatedAt: string;

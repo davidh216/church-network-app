@@ -66,7 +66,7 @@ router.get('/:id', validate({ params: idParams }), async (req, res) => {
   res.json({ success: true, user: await users.getUser(req.params.id, full) });
 });
 
-// Members edit their own name/phone/bio. Staff may also activate/deactivate members.
+// Members edit their own name/phone/bio, skills and interests. Staff may also activate/deactivate members.
 // Only admins change roles; the service applies the rules that depend on the target account.
 router.put('/:id', validate({ params: idParams, body: updateUserInput }), async (req, res) => {
   const requester = req.user!;

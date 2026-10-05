@@ -44,7 +44,7 @@ describe('delete rules', () => {
         title: 'Sermon',
         type: 'YOUTUBE_VIDEO',
         url: 'https://www.youtube.com/watch?v=abcdefghijk',
-        tags: '[]',
+        tags: [],
         uploadedById: staff.id,
       },
     });
@@ -100,7 +100,7 @@ describe('delete rules', () => {
         title: 'Orphan',
         type: 'YOUTUBE_VIDEO',
         url: 'https://www.youtube.com/watch?v=bcdefghijkl',
-        tags: '[]',
+        tags: [],
         isApproved: true,
       },
     });

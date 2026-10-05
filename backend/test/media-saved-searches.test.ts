@@ -67,7 +67,7 @@ describe('media and saved searches (S3)', () => {
             title: `Video ${String(i).padStart(2, '0')}`,
             type: 'YOUTUBE_VIDEO',
             url: `https://www.youtube.com/watch?v=${id}`,
-            tags: '[]',
+            tags: [],
             uploadedById: staffId,
             isApproved: true,
             isPublic: true,
@@ -82,7 +82,7 @@ describe('media and saved searches (S3)', () => {
             title: 'Legacy',
             type: 'YOUTUBE_VIDEO',
             url: 'https://youtu.be/abc123',
-            tags: '[]',
+            tags: [],
             uploadedById: staffId,
             isApproved: true,
             isPublic: true,
@@ -96,7 +96,7 @@ describe('media and saved searches (S3)', () => {
           title: 'Unapproved',
           type: 'YOUTUBE_VIDEO',
           url: 'https://youtu.be/dQw4w9WgXcQ',
-          tags: '[]',
+          tags: [],
           uploadedById: staffId,
           isApproved: false,
         },
@@ -175,7 +175,7 @@ describe('media and saved searches (S3)', () => {
       const stored = await prisma.savedSearch.findUniqueOrThrow({
         where: { id: created.body.search.id },
       });
-      expect(JSON.parse(stored.query)).toEqual(query);
+      expect(stored.query).toEqual(query);
       const listed = await request(app).get('/api/users/saved-searches').set(bearer(member));
       expect(listed.body.searches).toContainEqual(
         expect.objectContaining({ id: created.body.search.id, query, invalid: false }),
@@ -206,12 +206,12 @@ describe('media and saved searches (S3)', () => {
       const stale = await prisma.savedSearch.create({
         data: {
           name: 'Old format',
-          query: JSON.stringify({ conditions: [{ field: 'age', operator: 'gt', value: 30 }] }),
+          query: { conditions: [{ field: 'age', operator: 'gt', value: 30 }] },
           createdById: memberId,
         },
       });
       const broken = await prisma.savedSearch.create({
-        data: { name: 'Not JSON', query: '{not json', createdById: memberId },
+        data: { name: 'Not a query', query: 'name contains smith', createdById: memberId },
       });
       const listed = await request(app).get('/api/users/saved-searches').set(bearer(member));
       const byId = new Map(
@@ -221,7 +221,7 @@ describe('media and saved searches (S3)', () => {
         invalid: true,
         query: { conditions: [{ field: 'age', operator: 'gt', value: 30 }] },
       });
-      expect(byId.get(broken.id)).toMatchObject({ invalid: true, query: null });
+      expect(byId.get(broken.id)).toMatchObject({ invalid: true, query: 'name contains smith' });
 
       const used = await request(app)
         .post(`/api/users/saved-searches/${stale.id}/use`)

@@ -7,7 +7,6 @@ import {
   interactionIcon,
   membershipDuration,
   milestoneIcon,
-  parseJsonList,
   priorityClass,
   profileDate,
   riskBadgeClass,
@@ -28,13 +27,6 @@ describe('member profile helpers', () => {
     profileDate('2024-01-05T12:00:00');
     expect(spy).toHaveBeenCalledWith(undefined, expect.any(Object));
     expect(profileDate(null)).toBeNull();
-  });
-
-  it('parses JSON string lists and falls back to an empty list', () => {
-    expect(parseJsonList('["a","b"]')).toEqual(['a', 'b']);
-    expect(parseJsonList(undefined)).toEqual([]);
-    expect(parseJsonList('not json')).toEqual([]);
-    expect(parseJsonList('{"a":1}')).toEqual([]);
   });
 
   it('counts whole years of age, before and after the birthday', () => {

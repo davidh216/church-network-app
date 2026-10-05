@@ -63,6 +63,15 @@ describe('input schemas', () => {
     expect(parsed).toEqual({ name: 'Ann', phone: null, bio: 'Hi' });
   });
 
+  it('takes skills and interests as lists: trimmed, de-duplicated ignoring case, at most 30', () => {
+    expect(
+      updateUserInput.parse({ volunteerSkills: [' Music', 'MUSIC ', 'Art'], interests: [] }),
+    ).toEqual({ volunteerSkills: ['Music', 'Art'], interests: [] });
+    expect(updateUserInput.safeParse({ interests: '["Hiking"]' }).success).toBe(false);
+    expect(updateUserInput.safeParse({ interests: [' '] }).success).toBe(false);
+    expect(updateUserInput.safeParse({ interests: Array(31).fill('x') }).success).toBe(false);
+  });
+
   it('only accepts cuid role ids, at most 10', () => {
     expect(updateUserInput.safeParse({ roleIds: ['not-a-cuid'] }).success).toBe(false);
     expect(

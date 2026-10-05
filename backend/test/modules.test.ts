@@ -205,7 +205,7 @@ describe('modules', () => {
         url: 'https://www.youtube.com/watch?v=abc123def45',
       });
       expect(created.status).toBe(201);
-      expect(created.body.media.tags).toBe('[]');
+      expect(created.body.media.tags).toEqual([]);
       const fetched = await request(app)
         .get(`/api/media/${created.body.media.id}`)
         .set(bearer(member));

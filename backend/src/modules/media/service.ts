@@ -15,8 +15,17 @@ function withVideoId<T extends { url: string }>(media: T): T & { videoId: string
   return { ...media, videoId: youtubeVideoId(media.url) };
 }
 
-// Approved public media, newest first, one page at a time. Text search and the tag filter ignore
-// case and match literally.
+// Ids of the media whose tag list holds `tag`, ignoring case. Prisma's list filters (`has`) are
+// case-sensitive, so the element comparison is done in SQL.
+async function mediaIdsWithTag(tag: string): Promise<string[]> {
+  const rows = await prisma.$queryRaw<{ id: string }[]>`
+    SELECT "id" FROM "media"
+     WHERE EXISTS (SELECT 1 FROM unnest("tags") AS t WHERE lower(t) = lower(${tag}))`;
+  return rows.map((row) => row.id);
+}
+
+// Approved public media, newest first, one page at a time. Text search ignores case and matches
+// literally; the tag filter matches a whole tag, ignoring case.
 export async function listMedia(query: z.output<typeof listMediaQuery>) {
   const where: Prisma.MediaWhereInput = { isPublic: true, isApproved: true };
   if (query.type) where.type = query.type;
@@ -27,8 +36,7 @@ export async function listMedia(query: z.output<typeof listMediaQuery>) {
       { description: { contains: search, mode: 'insensitive' } },
     ];
   }
-  if (query.tag && query.tag !== 'all')
-    where.tags = { contains: escapeLike(query.tag), mode: 'insensitive' };
+  if (query.tag && query.tag !== 'all') where.id = { in: await mediaIdsWithTag(query.tag) };
 
   const { page, pageSize } = query;
   const [rows, total] = await prisma.$transaction([
@@ -53,7 +61,7 @@ export async function createMedia(uploadedById: string, body: z.output<typeof cr
       description: body.description ?? '',
       type: body.type,
       url: body.url,
-      tags: JSON.stringify(body.tags),
+      tags: body.tags,
       isApproved: true,
       isPublic: true,
       uploadedById,

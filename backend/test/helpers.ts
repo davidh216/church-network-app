@@ -20,7 +20,7 @@ export async function resetDatabase() {
   await prisma.user.deleteMany();
   await prisma.role.deleteMany();
   for (const name of ['admin', 'leader', 'member'] as RoleName[]) {
-    await prisma.role.create({ data: { name, permissions: '[]' } });
+    await prisma.role.create({ data: { name, permissions: [] } });
   }
 }
 
