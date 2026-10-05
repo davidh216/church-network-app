@@ -1,4 +1,4 @@
-import type { Prisma } from '@prisma/client';
+import type { Prisma, RelationshipType } from '@prisma/client';
 import type { z } from 'zod';
 import type {
   addInteractionInput,
@@ -21,6 +21,52 @@ function visibleNotes(viewer: AuthenticatedUser): Prisma.MemberNoteWhereInput {
 const relative = {
   select: { id: true, name: true, firstName: true, lastName: true, avatar: true, isActive: true },
 };
+const person = { select: { id: true, name: true } };
+
+const INVERSE_RELATIONSHIP: Record<RelationshipType, RelationshipType> = {
+  spouse: 'spouse',
+  parent: 'child',
+  child: 'parent',
+  sibling: 'sibling',
+  grandparent: 'grandchild',
+  grandchild: 'grandparent',
+  other: 'other',
+};
+
+/** `a` is the `type` of `b` -> `b` is the inverse type of `a` (parent <-> child, ...). */
+export function inverseRelationship(type: RelationshipType): RelationshipType {
+  return INVERSE_RELATIONSHIP[type];
+}
+
+export interface FamilyPair {
+  primaryUserId: string;
+  relatedUserId: string;
+  /** The primary's relation to the related user. */
+  relationshipType: RelationshipType;
+}
+
+/**
+ * Each family pair is stored once, with primaryUserId < relatedUserId (PHASE3_SPECS.md 1.2):
+ * a pair given the other way round is swapped and its type inverted.
+ */
+export function normaliseFamilyPair(pair: FamilyPair): FamilyPair {
+  if (pair.primaryUserId <= pair.relatedUserId) return pair;
+  return {
+    primaryUserId: pair.relatedUserId,
+    relatedUserId: pair.primaryUserId,
+    relationshipType: inverseRelationship(pair.relationshipType),
+  };
+}
+
+/** Records (or updates) the relationship between two members of a family, normalised. */
+export function setFamilyRelationship(familyId: string, pair: FamilyPair, isActive = true) {
+  const { primaryUserId, relatedUserId, relationshipType } = normaliseFamilyPair(pair);
+  return prisma.familyRelationship.upsert({
+    where: { primaryUserId_relatedUserId: { primaryUserId, relatedUserId } },
+    create: { familyId, primaryUserId, relatedUserId, relationshipType, isActive },
+    update: { familyId, relationshipType, isActive },
+  });
+}
 
 // The full CRM profile of a member: roles, engagement, family, recent interactions,
 // milestones, notes the viewer may see and tags (the timeline has its own paged endpoint). Never the password hash.
@@ -33,19 +79,30 @@ export async function getMemberDetails(id: string, viewer: AuthenticatedUser) {
       family: true,
       familyRelationships: { include: { relatedUser: relative } },
       relatedFamilyMembers: { include: { primaryUser: relative } },
-      interactions: { orderBy: { createdAt: 'desc' }, take: 50 },
+      interactions: {
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+        include: { staffMember: person },
+      },
       milestones: { orderBy: { achievedDate: 'desc' }, take: 20 },
-      memberNotes: { where: visibleNotes(viewer), orderBy: { createdAt: 'desc' }, take: 20 },
+      memberNotes: {
+        where: visibleNotes(viewer),
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+        include: { author: person },
+      },
       memberTags: { include: { tag: true } },
     },
   });
   if (!user) throw new HttpError(404, 'User not found');
 
-  // Relationships in both directions, flattened and de-duplicated by person.
+  // Relationships in both directions, flattened and de-duplicated by person. Each entry's
+  // relationshipType is the relative's relation to this member: a stored type is the primary's
+  // relation to the related user, so it is inverted where this member is the primary.
   const familyMembers = [
     ...user.familyRelationships.map((rel) => ({
       ...rel.relatedUser,
-      relationshipType: rel.relationshipType,
+      relationshipType: inverseRelationship(rel.relationshipType),
       isPrimary: true,
     })),
     ...user.relatedFamilyMembers.map((rel) => ({
@@ -58,7 +115,10 @@ export async function getMemberDetails(id: string, viewer: AuthenticatedUser) {
     (member, index) => index === familyMembers.findIndex((m) => m.id === member.id),
   );
 
-  return { ...user, familyMembers: uniqueFamilyMembers };
+  // Head of family is derived from the family row (users.isHeadOfFamily was dropped in P3-D3).
+  const isHeadOfFamily = user.family?.headOfFamilyId === user.id;
+
+  return { ...user, isHeadOfFamily, familyMembers: uniqueFamilyMembers };
 }
 
 // "call_made" -> "Call made"
@@ -183,6 +243,7 @@ export function listInteractions(userId: string, query: z.output<typeof interact
     orderBy: { createdAt: 'desc' },
     take: query.limit,
     skip: query.offset,
+    include: { staffMember: person },
   });
 }
 
@@ -205,12 +266,19 @@ export function listNotes(
     orderBy: { createdAt: 'desc' },
     take: query.limit,
     skip: query.offset,
+    include: { author: person },
   });
 }
 
-export function addInteraction(userId: string, body: z.output<typeof addInteractionInput>) {
+// The staff member recording the interaction is kept as its staffMember.
+export function addInteraction(
+  userId: string,
+  staffMemberId: string,
+  body: z.output<typeof addInteractionInput>,
+) {
   return prisma.memberInteraction.create({
-    data: { userId, ...body, status: 'completed', completedAt: new Date() },
+    data: { userId, staffMemberId, ...body, status: 'completed', completedAt: new Date() },
+    include: { staffMember: person },
   });
 }
 
@@ -219,5 +287,8 @@ export function addMilestone(userId: string, body: z.output<typeof addMilestoneI
 }
 
 export function addNote(userId: string, authorId: string, body: z.output<typeof addNoteInput>) {
-  return prisma.memberNote.create({ data: { userId, authorId, ...body } });
+  return prisma.memberNote.create({
+    data: { userId, authorId, ...body },
+    include: { author: person },
+  });
 }

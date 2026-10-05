@@ -1,4 +1,4 @@
-import type { SavedSearch } from '@prisma/client';
+import type { Prisma, SavedSearch } from '@prisma/client';
 import type { z } from 'zod';
 import { searchQuery, type createSavedSearchInput } from '@embrace/shared';
 import { prisma } from '../../lib/prisma';
@@ -23,13 +23,19 @@ function loadQuery(raw: string) {
   return parsed.success ? { query: parsed.data, invalid: false } : { query: stored, invalid: true };
 }
 
-function format(s: SavedSearch) {
+// Who saved a search (public searches are shared, so the list names their author).
+const withCreator = {
+  createdBy: { select: { id: true, name: true } },
+} satisfies Prisma.SavedSearchInclude;
+
+function format(s: SavedSearch & { createdBy?: { id: string; name: string } }) {
   return {
     id: s.id,
     name: s.name,
     description: s.description,
     ...loadQuery(s.query),
     isPublic: s.isPublic,
+    ...(s.createdBy ? { createdBy: s.createdBy } : {}),
     createdAt: s.createdAt,
     usageCount: s.usageCount,
     lastUsed: s.lastUsed,
@@ -39,8 +45,9 @@ function format(s: SavedSearch) {
 // The caller's own searches plus every public one, most recently used first.
 export async function listSavedSearches(userId: string) {
   const searches = await prisma.savedSearch.findMany({
-    where: { OR: [{ createdBy: userId }, { isPublic: true }] },
+    where: { OR: [{ createdById: userId }, { isPublic: true }] },
     orderBy: [{ lastUsed: 'desc' }, { createdAt: 'desc' }],
+    include: withCreator,
   });
   return searches.map(format);
 }
@@ -55,7 +62,7 @@ export async function createSavedSearch(
       description: body.description ?? null,
       query: JSON.stringify(body.query),
       isPublic: body.isPublic ?? false,
-      createdBy: userId,
+      createdById: userId,
     },
   });
   const { usageCount: _usageCount, lastUsed: _lastUsed, ...search } = format(saved);
@@ -66,7 +73,7 @@ export async function createSavedSearch(
 export async function deleteSavedSearch(user: AuthenticatedUser, id: string) {
   const search = await prisma.savedSearch.findUnique({ where: { id } });
   if (!search) throw new HttpError(404, 'Search not found');
-  if (search.createdBy !== user.id && !isAdmin(user))
+  if (search.createdById !== user.id && !isAdmin(user))
     throw new HttpError(403, 'Not authorized to delete this search');
   await prisma.savedSearch.delete({ where: { id } });
 }
@@ -74,7 +81,7 @@ export async function deleteSavedSearch(user: AuthenticatedUser, id: string) {
 // Counts a use of a search the caller can see (their own or a public one).
 export async function useSavedSearch(user: AuthenticatedUser, id: string) {
   const search = await prisma.savedSearch.findUnique({ where: { id } });
-  if (!search || (search.createdBy !== user.id && !search.isPublic))
+  if (!search || (search.createdById !== user.id && !search.isPublic))
     throw new HttpError(404, 'Search not found');
   await prisma.savedSearch.update({
     where: { id },

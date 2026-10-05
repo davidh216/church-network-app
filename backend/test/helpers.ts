@@ -44,7 +44,10 @@ export async function createUser(opts: {
 }
 
 // createUser inserts rows directly, like accounts created before every account got an
-// engagement row. This runs the data migration that backfilled those rows, returning the
+// engagement row. backfillEngagementRows fills those gaps the way the data migration
+// 20261005000000_engagement_rows_for_all_users did, on the current schema (member_engagement is
+// keyed by userId since P3-D3, so the migration's own SQL, which also wrote a surrogate id, no
+// longer runs here; test/migrations.test.ts runs it against its historical schema). It returns the
 // number of rows it inserted.
 export const ENGAGEMENT_BACKFILL_SQL = readFileSync(
   resolve(
@@ -54,7 +57,10 @@ export const ENGAGEMENT_BACKFILL_SQL = readFileSync(
   'utf8',
 );
 export function backfillEngagementRows(): Promise<number> {
-  return prisma.$executeRawUnsafe(ENGAGEMENT_BACKFILL_SQL);
+  return prisma.$executeRawUnsafe(`
+    INSERT INTO "member_engagement" ("userId", "updatedAt")
+    SELECT u."id", CURRENT_TIMESTAMP FROM "users" AS u
+    WHERE NOT EXISTS (SELECT 1 FROM "member_engagement" AS e WHERE e."userId" = u."id")`);
 }
 
 // The JWT from the session cookie of a successful login (the body carries no token). Tests send

@@ -121,6 +121,8 @@ interface SavedSearchBase {
   isPublic: boolean;
   usageCount?: number;
   lastUsed?: string | null;
+  /** Who saved it (list responses only). */
+  createdBy?: { id: string; name: string };
 }
 
 export type SavedSearch = SavedSearchBase &
@@ -168,6 +170,7 @@ export interface MemberDetails {
 
   // Family information
   familyId?: string;
+  /** Derived on the server from the family's headOfFamilyId. */
   isHeadOfFamily: boolean;
 
   // Notes and tracking
@@ -221,6 +224,8 @@ export interface MemberDetails {
     responseReceived: boolean;
     createdAt: string;
     completedAt?: string;
+    /** The staff member who recorded it, when known. */
+    staffMember?: { id: string; name: string } | null;
   }>;
   milestones?: Array<{
     id: string;
@@ -242,6 +247,7 @@ export interface MemberDetails {
     isFollowUp: boolean;
     followUpDate?: string;
     createdAt: string;
+    author?: { id: string; name: string };
   }>;
 }
 

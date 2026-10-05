@@ -49,7 +49,6 @@ model User {
   
   // Family information
   familyId         String?
-  isHeadOfFamily   Boolean  @default(false)
   
   // Notes and tracking
   notes            String?
@@ -80,7 +79,20 @@ model User {
   // Phase 3: Family Relationships
   familyRelationships     FamilyRelationship[] @relation("UserAsPrimary")
   relatedFamilyMembers    FamilyRelationship[] @relation("UserAsRelated")
+
+  // Rows this user authored, owns or leads (PHASE3_SPECS.md 1.2)
+  authoredNotes     MemberNote[]        @relation("NoteAuthor")
+  staffInteractions MemberInteraction[] @relation("InteractionStaff")
+  savedSearches     SavedSearch[]
+  tagsAdded         UserTag[]           @relation("TagAddedBy")
+  ledGroups         Group[]
+  headedFamilies    Family[]            @relation("FamilyHead")
   
+  @@index([familyId])
+  @@index([isActive])
+  @@index([createdAt])
+  @@index([lastLoginAt])
+  @@index([membershipDate])
   @@map("users")
 }
 
@@ -106,6 +118,7 @@ model UserRole {
   role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
   
   @@unique([userId, roleId])
+  @@index([roleId])
   @@map("user_roles")
 }
 
@@ -125,20 +138,23 @@ model Media {
   isPublic    Boolean   @default(true)
   
   // Upload info
-  uploadedById String
-  uploadedBy   User      @relation(fields: [uploadedById], references: [id])
+  uploadedById String?
+  uploadedBy   User?     @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
   
   // Timestamps
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   
+  @@index([uploadedById])
+  @@index([createdAt])
   @@map("media")
 }
 
 model Family {
   id          String @id @default(cuid())
   familyName  String
-  headOfFamily String?
+  headOfFamilyId String?
+  headOfFamily   User?   @relation("FamilyHead", fields: [headOfFamilyId], references: [id], onDelete: SetNull)
   address     String?
   city        String?
   state       String?
@@ -153,6 +169,7 @@ model Family {
   members     User[]
   relationships FamilyRelationship[]
   
+  @@index([headOfFamilyId])
   @@map("families")
 }
 
@@ -174,7 +191,11 @@ model FamilyRelationship {
   family          Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
   familyId        String
   
-  @@unique([primaryUserId, relatedUserId, relationshipType])
+  // One row per pair, stored with primaryUserId < relatedUserId; relationshipType is the
+  // primary's relation to the related user (PHASE3_SPECS.md 1.2).
+  @@unique([primaryUserId, relatedUserId])
+  @@index([relatedUserId])
+  @@index([familyId])
   @@map("family_relationships")
 }
 
@@ -190,6 +211,7 @@ model Group {
   
   // Leadership
   leaderId    String?
+  leader      User?   @relation(fields: [leaderId], references: [id], onDelete: SetNull)
   
   // Timestamps
   createdAt   DateTime @default(now())
@@ -198,6 +220,7 @@ model Group {
   // Relations
   members     GroupMember[]
   
+  @@index([leaderId])
   @@map("groups")
 }
 
@@ -214,6 +237,7 @@ model GroupMember {
   group    Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
   
   @@unique([userId, groupId])
+  @@index([groupId])
   @@map("group_members")
 }
 
@@ -232,12 +256,12 @@ model Attendance {
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
   @@unique([userId, serviceDate, serviceType])
+  @@index([userId])
   @@map("attendance")
 }
 
 model MemberEngagement {
-  id                 String   @id @default(cuid())
-  userId             String
+  userId             String   @id
   engagementScore    Float    @default(0)    // 0-100 engagement score
   lastCalculated     DateTime @default(now())
   
@@ -267,7 +291,9 @@ model MemberEngagement {
   // Relations
   user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
-  @@unique([userId])
+  @@index([engagementScore])
+  @@index([membershipStage])
+  @@index([riskLevel])
   @@map("member_engagement")
 }
 
@@ -285,6 +311,7 @@ model MemberActivity {
   // Relations
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
+  @@index([userId, createdAt])
   @@map("member_activities")
 }
 
@@ -295,6 +322,7 @@ model MemberInteraction {
   subject        String?
   content        String?
   staffMemberId  String?  // Who initiated the interaction
+  staffMember    User?    @relation("InteractionStaff", fields: [staffMemberId], references: [id], onDelete: SetNull)
   channel        Channel
   status         InteractionStatus @default(completed)
   
@@ -316,6 +344,8 @@ model MemberInteraction {
   // Relations
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
+  @@index([userId, createdAt])
+  @@index([staffMemberId])
   @@map("member_interactions")
 }
 
@@ -340,6 +370,7 @@ model MemberMilestone {
   // Relations
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
+  @@index([userId, achievedDate])
   @@map("member_milestones")
 }
 
@@ -347,6 +378,7 @@ model MemberNote {
   id           String   @id @default(cuid())
   userId       String
   authorId     String   // Staff member who wrote the note
+  author       User     @relation("NoteAuthor", fields: [authorId], references: [id], onDelete: Restrict)
   title        String?
   content      String
   noteType     NoteType @default(general)
@@ -361,6 +393,8 @@ model MemberNote {
   // Relations
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
+  @@index([userId, createdAt])
+  @@index([authorId])
   @@map("member_notes")
 }
 
@@ -384,7 +418,8 @@ model UserTag {
   id       String @id @default(cuid())
   userId   String
   tagId    String
-  addedBy  String? // Staff member who added the tag
+  addedById String? // Staff member who added the tag
+  addedBy   User?   @relation("TagAddedBy", fields: [addedById], references: [id], onDelete: SetNull)
   addedAt  DateTime @default(now())
   
   // Relations
@@ -392,6 +427,8 @@ model UserTag {
   tag      MemberTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
   
   @@unique([userId, tagId])
+  @@index([tagId])
+  @@index([addedById])
   @@map("user_tags")
 }
 
@@ -401,7 +438,8 @@ model SavedSearch {
   description String?
   query       String   // JSON string containing the search query
   isPublic    Boolean  @default(false)
-  createdBy   String   // User who created the search
+  createdById String   // User who created the search
+  createdBy   User     @relation(fields: [createdById], references: [id], onDelete: Cascade)
   usageCount  Int      @default(0)
   
   // Timestamps
@@ -409,6 +447,7 @@ model SavedSearch {
   updatedAt   DateTime @updatedAt
   lastUsed    DateTime?
   
+  @@index([createdById])
   @@map("saved_searches")
 }
 

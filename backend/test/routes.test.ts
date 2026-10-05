@@ -385,12 +385,12 @@ describe('route matrix', () => {
     ).id;
     ids.search = (
       await prisma.savedSearch.create({
-        data: { name: 'Kept', query: '{}', createdBy: ids.member },
+        data: { name: 'Kept', query: '{}', createdById: ids.member },
       })
     ).id;
     ids.searchToDelete = (
       await prisma.savedSearch.create({
-        data: { name: 'Doomed', query: '{}', createdBy: ids.member },
+        data: { name: 'Doomed', query: '{}', createdById: ids.member },
       })
     ).id;
     for (const role of ['admin', 'leader', 'member'] as RoleName[])
@@ -436,7 +436,7 @@ describe('route matrix', () => {
       ).status,
     ).toBe(403);
     const theirs = await prisma.savedSearch.create({
-      data: { name: 'Private', query: '{}', createdBy: ids.other, isPublic: false },
+      data: { name: 'Private', query: '{}', createdById: ids.other, isPublic: false },
     });
     expect(
       (

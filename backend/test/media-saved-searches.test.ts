@@ -207,11 +207,11 @@ describe('media and saved searches (S3)', () => {
         data: {
           name: 'Old format',
           query: JSON.stringify({ conditions: [{ field: 'age', operator: 'gt', value: 30 }] }),
-          createdBy: memberId,
+          createdById: memberId,
         },
       });
       const broken = await prisma.savedSearch.create({
-        data: { name: 'Not JSON', query: '{not json', createdBy: memberId },
+        data: { name: 'Not JSON', query: '{not json', createdById: memberId },
       });
       const listed = await request(app).get('/api/users/saved-searches').set(bearer(member));
       const byId = new Map(

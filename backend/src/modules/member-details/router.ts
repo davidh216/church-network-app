@@ -54,7 +54,10 @@ router.post(
   '/:id/interactions',
   validate({ params: idParams, body: addInteractionInput }),
   async (req, res) => {
-    res.json({ success: true, interaction: await details.addInteraction(req.params.id, req.body) });
+    res.json({
+      success: true,
+      interaction: await details.addInteraction(req.params.id, req.user!.id, req.body),
+    });
   },
 );
 
