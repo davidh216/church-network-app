@@ -29,6 +29,8 @@ export const queryKeys = {
     list: (params: ListMediaParams) => ['media', 'list', params] as const,
   },
   analytics: { all: ['analytics'] as const },
+  /** Outside `analytics` so invalidating the analytics after a job does not refetch the job. */
+  engagementJobs: { detail: (id: string) => ['engagement-jobs', id] as const },
   roles: { all: ['roles'] as const },
   savedSearches: { all: ['saved-searches'] as const },
 };

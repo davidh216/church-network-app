@@ -1,5 +1,6 @@
 import { fireEvent, screen } from '@testing-library/react';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MAX_TIMELINE_PAGE } from '@embrace/shared';
 import MemberProfile from '@/components/members/MemberProfile';
 import { ApiError } from '@/lib/api/client';
 import { render } from '@/test/render';
@@ -183,6 +184,40 @@ describe('MemberProfile', () => {
       { page: 2, pageSize: 20 },
       expect.anything(),
     );
+  });
+
+  it('stops Next at the last page the API accepts, not at the end of the total', async () => {
+    detailsApi.getMemberDetails.mockResolvedValue(details);
+    detailsApi.getMemberTimeline.mockImplementation((_id: string, params: { page: number }) =>
+      Promise.resolve({
+        items: [
+          {
+            kind: 'note',
+            id: `n${params.page}`,
+            date: '2025-12-01T12:00:00.000Z',
+            dateOnly: false,
+            title: 'General',
+            summary: `Page ${params.page} note`,
+          },
+        ],
+        total: MAX_TIMELINE_PAGE * 20 + 1,
+        page: params.page,
+        pageSize: 20,
+      }),
+    );
+    await render(<MemberProfile memberId="u1" />);
+    await screen.findByRole('heading', { level: 1 });
+    fireEvent.click(screen.getByRole('tab', { name: /Timeline/ }));
+    await screen.findByText('Page 1 note');
+
+    for (let page = 2; page <= MAX_TIMELINE_PAGE; page += 1) {
+      fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+      await screen.findByText(`Page ${page} note`);
+    }
+    expect(screen.getByText(`${MAX_TIMELINE_PAGE * 20 + 1} activities`)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
+    const pages = detailsApi.getMemberTimeline.mock.calls.map(([, params]) => params.page);
+    expect(Math.max(...pages)).toBe(MAX_TIMELINE_PAGE);
   });
 
   it('shows a timeline error with a retry', async () => {

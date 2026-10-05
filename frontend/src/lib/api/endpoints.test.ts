@@ -216,17 +216,35 @@ describe('roles, media, analytics, member details', () => {
     expect(call()).toEqual({ url: '/api/media', method: 'POST', body: input });
   });
 
-  it('getAnalytics and refreshAllEngagement', async () => {
+  it('getAnalytics, refreshAllEngagement (202 job) and getEngagementJob', async () => {
     respond({ success: true, analytics: { totalMembers: 3 } });
     await expect(analytics.getAnalytics()).resolves.toEqual({ totalMembers: 3 });
     expect(call(0).url).toBe('/api/analytics/members');
 
-    respond({ success: true, message: 'Updated 3' });
-    await expect(analytics.refreshAllEngagement()).resolves.toBe('Updated 3');
+    const job = {
+      jobId: 'job-1',
+      status: 'running',
+      processed: 0,
+      failed: 0,
+      skipped: 0,
+      total: 0,
+      startedAt: '2026-10-05T10:00:00.000Z',
+      finishedAt: null,
+    };
+    respond({ success: true, ...job, message: 'Engagement refresh started' }, { status: 202 });
+    await expect(analytics.refreshAllEngagement()).resolves.toEqual(job);
     expect(call(1)).toMatchObject({
       url: '/api/analytics/members/engagement/refresh-all',
       method: 'POST',
     });
+
+    const done = { ...job, status: 'completed', processed: 3, total: 3 };
+    respond({ success: true, ...done, finishedAt: '2026-10-05T10:00:02.000Z' });
+    await expect(analytics.getEngagementJob('job-1')).resolves.toEqual({
+      ...done,
+      finishedAt: '2026-10-05T10:00:02.000Z',
+    });
+    expect(call(2)).toEqual({ url: '/api/analytics/jobs/job-1', method: 'GET', body: undefined });
   });
 
   it('getMemberDetails', async () => {

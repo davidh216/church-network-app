@@ -167,6 +167,22 @@ describe('MediaLibrary', () => {
     expect(screen.getByRole('link', { name: /Open Sermon 2 on YouTube/ })).toBeInTheDocument();
   });
 
+  it('shows no "By" line for a video whose uploader was deleted, in both views', async () => {
+    mediaApi.listMedia.mockResolvedValue(
+      mediaPage([
+        { ...video(1), uploadedBy: null },
+        { ...video(2), uploadedBy: { id: 'u2', name: 'Grace Hopper' } },
+      ]),
+    );
+    await renderAs(['member']);
+    expect(await screen.findByText('By Grace Hopper')).toBeInTheDocument();
+    expect(screen.getAllByText(/^By /)).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: 'List View' }));
+    expect(screen.getByText('By Grace Hopper')).toBeInTheDocument();
+    expect(screen.getAllByText(/^By /)).toHaveLength(1);
+    expect(screen.getAllByText('•')).toHaveLength(1);
+  });
+
   it('requests hqdefault thumbnails for the grid', async () => {
     await renderAs(['member']);
     const image = await screen.findByAltText('Sermon 1');

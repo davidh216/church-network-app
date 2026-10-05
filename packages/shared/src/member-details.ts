@@ -58,7 +58,8 @@ export const TIMELINE_KINDS = ['interaction', 'milestone', 'note', 'attendance']
 export const timelineKind = z.enum(TIMELINE_KINDS);
 export const DEFAULT_TIMELINE_PAGE_SIZE = 20;
 // The feed is merged from four tables, so deep pages cost more; 100 pages of 100 items covers any
-// realistic member history.
+// realistic member history. `total` is not capped, so clients must not page past this (the
+// profile's Next button stops here).
 export const MAX_TIMELINE_PAGE = 100;
 
 export const timelineQuery = z.object({

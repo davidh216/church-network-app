@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { DEFAULT_TIMELINE_PAGE_SIZE, type TimelineKind } from '@embrace/shared';
+import { DEFAULT_TIMELINE_PAGE_SIZE, MAX_TIMELINE_PAGE, type TimelineKind } from '@embrace/shared';
 import type { MemberDetails } from '@/types/domain';
 import { formatDate, formatDay } from '@/lib/members/profile';
 import { useMemberTimeline } from '@/lib/queries/memberDetails';
@@ -89,6 +89,7 @@ export default function Timeline({ member }: { member: MemberDetails }) {
           pageSize={pageSize}
           onPageChange={setPage}
           itemLabel="activities"
+          maxPage={MAX_TIMELINE_PAGE}
         />
       )}
     </div>

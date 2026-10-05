@@ -1,5 +1,6 @@
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import type { UseQueryResult } from '@tanstack/react-query';
+import type { EngagementJob } from '@embrace/shared';
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { ApiError } from '@/lib/api/client';
 import { makeTestQueryClient, queryWrapper } from '@/test/render';
@@ -27,7 +28,11 @@ const usersApi = vi.hoisted(() => ({
 vi.mock('@/lib/api/users', () => usersApi);
 const mediaApi = vi.hoisted(() => ({ listMedia: vi.fn(), createMedia: vi.fn() }));
 vi.mock('@/lib/api/media', () => mediaApi);
-const analyticsApi = vi.hoisted(() => ({ getAnalytics: vi.fn(), refreshAllEngagement: vi.fn() }));
+const analyticsApi = vi.hoisted(() => ({
+  getAnalytics: vi.fn(),
+  refreshAllEngagement: vi.fn(),
+  getEngagementJob: vi.fn(),
+}));
 vi.mock('@/lib/api/analytics', () => analyticsApi);
 const rolesApi = vi.hoisted(() => ({ listRoles: vi.fn() }));
 vi.mock('@/lib/api/roles', () => rolesApi);
@@ -253,14 +258,6 @@ const mutationCases: MutationCase[] = [
     invalidates: [queryKeys.media.all],
   },
   {
-    name: 'useRefreshAllEngagement',
-    api: analyticsApi.refreshAllEngagement,
-    useHook: useRefreshAllEngagement,
-    variables: undefined,
-    args: [],
-    invalidates: [queryKeys.analytics.all, queryKeys.users.all, queryKeys.memberDetails.all],
-  },
-  {
     name: 'useCreateSavedSearch',
     api: savedApi.createSavedSearch,
     useHook: useCreateSavedSearch,
@@ -307,5 +304,100 @@ describe.each(mutationCases)('$name', ({ api, useHook, variables, args, invalida
     ).rejects.toBe(failure);
     await waitFor(() => expect(result.current.error).toBe(failure));
     expect(invalidate).not.toHaveBeenCalled();
+  });
+});
+
+describe('useRefreshAllEngagement', () => {
+  const job = (patch: Partial<EngagementJob> = {}): EngagementJob => ({
+    jobId: 'job-1',
+    status: 'running',
+    processed: 0,
+    failed: 0,
+    skipped: 0,
+    total: 3,
+    startedAt: '2026-10-05T10:00:00.000Z',
+    finishedAt: null,
+    ...patch,
+  });
+  const scoreKeys = [queryKeys.analytics.all, queryKeys.users.all, queryKeys.memberDetails.all];
+
+  function setup(options = { pollMs: 5, timeoutMs: 120_000 }) {
+    const client = makeTestQueryClient();
+    const invalidate = vi.spyOn(client, 'invalidateQueries');
+    const hook = renderHook(() => useRefreshAllEngagement(options), {
+      wrapper: queryWrapper(client),
+    });
+    const invalidated = () => invalidate.mock.calls.map(([filters]) => filters?.queryKey);
+    return { ...hook, invalidated };
+  }
+
+  it('polls the 202 job until it completes and only then refetches scores', async () => {
+    analyticsApi.refreshAllEngagement.mockResolvedValue(job());
+    let current = job({ processed: 1 });
+    analyticsApi.getEngagementJob.mockImplementation(() => Promise.resolve(current));
+    const { result, invalidated } = setup();
+    act(() => result.current.start());
+    await waitFor(() => expect(result.current.job?.processed).toBe(1));
+    await waitFor(() => expect(analyticsApi.getEngagementJob.mock.calls.length).toBeGreaterThan(2));
+    expect(result.current.refreshing).toBe(true);
+    expect(invalidated()).toEqual([]);
+
+    current = job({ status: 'completed', processed: 3 });
+    await waitFor(() => expect(result.current.job?.status).toBe('completed'));
+    await waitFor(() => expect(invalidated()).toEqual(scoreKeys));
+    expect(result.current.refreshing).toBe(false);
+    expect(result.current.error).toBeNull();
+    expect(analyticsApi.getEngagementJob).toHaveBeenCalledWith('job-1');
+    const polls = analyticsApi.getEngagementJob.mock.calls.length;
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(analyticsApi.getEngagementJob.mock.calls.length).toBe(polls);
+    expect(invalidated()).toEqual(scoreKeys);
+  });
+
+  it('refetches scores after a failed job too (some members may have been updated)', async () => {
+    analyticsApi.refreshAllEngagement.mockResolvedValue(job());
+    analyticsApi.getEngagementJob.mockResolvedValue(job({ status: 'failed' }));
+    const { result, invalidated } = setup();
+    act(() => result.current.start());
+    await waitFor(() => expect(result.current.job?.status).toBe('failed'));
+    await waitFor(() => expect(invalidated()).toEqual(scoreKeys));
+    expect(result.current.refreshing).toBe(false);
+  });
+
+  it('reports a failed start and refetches nothing', async () => {
+    analyticsApi.refreshAllEngagement.mockRejectedValue(failure);
+    const { result, invalidated } = setup();
+    act(() => result.current.start());
+    await waitFor(() => expect(result.current.error).toBe(failure));
+    expect(result.current.refreshing).toBe(false);
+    expect(analyticsApi.getEngagementJob).not.toHaveBeenCalled();
+    expect(invalidated()).toEqual([]);
+  });
+
+  it('stops polling with the error when the job is gone (404 after an API restart)', async () => {
+    const gone = new ApiError(404, 'Job not found');
+    analyticsApi.refreshAllEngagement.mockResolvedValue(job());
+    analyticsApi.getEngagementJob.mockRejectedValue(gone);
+    const { result, invalidated } = setup();
+    act(() => result.current.start());
+    await waitFor(() => expect(result.current.error).toBe(gone));
+    expect(result.current.refreshing).toBe(false);
+    const polls = analyticsApi.getEngagementJob.mock.calls.length;
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(analyticsApi.getEngagementJob.mock.calls.length).toBe(polls);
+    expect(invalidated()).toEqual([]);
+  });
+
+  it('gives up after the timeout while the job is still running', async () => {
+    analyticsApi.refreshAllEngagement.mockResolvedValue(job());
+    analyticsApi.getEngagementJob.mockResolvedValue(job({ processed: 1 }));
+    const { result, invalidated } = setup({ pollMs: 5, timeoutMs: 40 });
+    act(() => result.current.start());
+    await waitFor(() => expect(result.current.timedOut).toBe(true));
+    expect(result.current.refreshing).toBe(false);
+    const polls = analyticsApi.getEngagementJob.mock.calls.length;
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(analyticsApi.getEngagementJob.mock.calls.length).toBe(polls);
+    expect(invalidated()).toEqual([]);
   });
 });

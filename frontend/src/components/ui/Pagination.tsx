@@ -11,6 +11,8 @@ interface PaginationProps {
   onPageSizeChange?: (pageSize: number) => void;
   /** Noun for the summary line, e.g. "members". */
   itemLabel: string;
+  /** The last page the API accepts, when it caps paging below the total. */
+  maxPage?: number;
 }
 
 const buttonClass =
@@ -25,8 +27,10 @@ export default function Pagination({
   pageSizeOptions,
   onPageSizeChange,
   itemLabel,
+  maxPage,
 }: PaginationProps) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const lastPage = maxPage === undefined ? totalPages : Math.min(totalPages, maxPage);
   const first = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const last = Math.min(page * pageSize, total);
 
@@ -74,7 +78,7 @@ export default function Pagination({
           type="button"
           className={buttonClass}
           onClick={() => onPageChange(page + 1)}
-          disabled={page >= totalPages}
+          disabled={page >= lastPage}
         >
           Next
         </button>

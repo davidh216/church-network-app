@@ -72,8 +72,10 @@ export default function MediaGrid({ media, onPlay }: MediaGridProps) {
                 )}
               </div>
               <div className="flex justify-between items-center text-sm text-gray-500">
-                <span className="truncate mr-2">By {item.uploadedBy?.name}</span>
-                <span className="whitespace-nowrap">{formatMediaDate(item.createdAt)}</span>
+                {item.uploadedBy && (
+                  <span className="truncate mr-2">By {item.uploadedBy.name}</span>
+                )}
+                <span className="whitespace-nowrap ml-auto">{formatMediaDate(item.createdAt)}</span>
               </div>
             </div>
           </div>

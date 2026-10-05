@@ -102,10 +102,11 @@ export interface MediaItem {
   thumbnailUrl?: string | null;
   tags: string[];
   createdAt: string;
+  /** Null once the uploader's account has been deleted (the media is kept). */
   uploadedBy?: {
     id: string;
     name: string;
-  };
+  } | null;
 }
 
 /**
@@ -254,6 +255,7 @@ export interface MemberAnalytics {
   totalMembers: number;
   activeMembers: number;
   newMembersThisMonth: number;
+  /** Active accounts whose riskLevel is 'high' (stage at_risk or inactive); not medium risk. */
   atRiskMembers: number;
   averageEngagementScore: number;
   /** Averages of the stored engagement rows of active accounts. */

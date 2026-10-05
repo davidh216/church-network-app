@@ -55,8 +55,12 @@ export default function MediaListView({ media, onPlay }: MediaListViewProps) {
                       {item.title}
                     </h2>
                     <div className="flex items-center space-x-3 text-sm text-gray-500 mb-2">
-                      <span>By {item.uploadedBy?.name}</span>
-                      <span>•</span>
+                      {item.uploadedBy && (
+                        <>
+                          <span>By {item.uploadedBy.name}</span>
+                          <span aria-hidden="true">•</span>
+                        </>
+                      )}
                       <span>{formatMediaDate(item.createdAt)}</span>
                     </div>
                     {item.description && (
