@@ -119,6 +119,44 @@ describe('Dialog', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
+  it('leaves Escape to a control inside that handled it', () => {
+    const onClose = vi.fn();
+    render(
+      <Dialog labelledBy="x" onClose={onClose}>
+        <h2 id="x">X</h2>
+        <input
+          aria-label="Filter"
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') e.preventDefault();
+          }}
+        />
+      </Dialog>,
+    );
+    fireEvent.keyDown(screen.getByLabelText('Filter'), { key: 'Escape' });
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('respects a cancelled Escape even when the handler shares its listener node', () => {
+    // Next mounts React on `document`, the node this dialog listens on, so a control's
+    // stopPropagation cannot hold the dialog back; only the cancelled event can.
+    const handledByControl = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') e.preventDefault();
+    };
+    document.addEventListener('keydown', handledByControl);
+    try {
+      const onClose = vi.fn();
+      render(
+        <Dialog labelledBy="x" onClose={onClose}>
+          <h2 id="x">X</h2>
+        </Dialog>,
+      );
+      fireEvent.keyDown(document, { key: 'Escape' });
+      expect(onClose).not.toHaveBeenCalled();
+    } finally {
+      document.removeEventListener('keydown', handledByControl);
+    }
+  });
+
   it('lets only the most recently opened dialog react to Escape', () => {
     const outer = vi.fn();
     const inner = vi.fn();

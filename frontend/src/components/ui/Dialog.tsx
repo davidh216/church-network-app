@@ -76,6 +76,10 @@ export default function Dialog({
     const onKeyDown = (e: KeyboardEvent) => {
       if (openDialogs[openDialogs.length - 1] !== id) return;
       if (e.key === 'Escape') {
+        // A control inside the dialog that handled Escape itself (a filter clearing its text)
+        // cancels the event. React may listen on `document` too, so stopPropagation is not
+        // enough to keep this listener from running.
+        if (e.defaultPrevented) return;
         e.preventDefault();
         (handlers.current.onEscape ?? handlers.current.onClose)();
       } else if (e.key === 'Tab') {

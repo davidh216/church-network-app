@@ -114,8 +114,8 @@ export default function AttendanceChecklist({
           // Enter filters rather than saving; Escape clears the filter instead of closing.
           if (e.key === 'Enter') e.preventDefault();
           else if (e.key === 'Escape' && filter) {
+            // preventDefault tells the Dialog the key was handled, so the sheet stays open.
             e.preventDefault();
-            e.stopPropagation();
             setFilter('');
           }
         }}

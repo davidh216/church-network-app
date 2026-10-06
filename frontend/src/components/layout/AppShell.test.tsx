@@ -173,16 +173,18 @@ describe('app shell', () => {
 describe('dashboard', () => {
   it('shows the staff counts from /api/users/summary', async () => {
     usersApi.getUserSummary.mockResolvedValue(staffSummary);
-    const container = await renderDashboard(['leader']);
+    await renderDashboard(['leader']);
     const tiles = () =>
-      Array.from(container.querySelectorAll('dl > div')).map((d) => d.textContent);
+      screen
+        .getAllByRole('term')
+        .map((term, i) => [term.textContent, screen.getAllByRole('definition')[i]?.textContent]);
     await waitFor(() =>
       expect(tiles()).toEqual([
-        'Total members12',
-        'Active10',
-        'Pending approval2',
-        'New this month3',
-        'Services this month4',
+        ['Total members', '12'],
+        ['Active', '10'],
+        ['Pending approval', '2'],
+        ['New this month', '3'],
+        ['Services this month', '4'],
       ]),
     );
     // The current calendar month, one row: only `total` is read.

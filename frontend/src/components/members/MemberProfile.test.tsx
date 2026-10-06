@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MAX_TIMELINE_PAGE } from '@embrace/shared';
 import MemberProfile from '@/components/members/MemberProfile';
@@ -238,8 +238,7 @@ describe('MemberProfile', () => {
     expect(region).toHaveAttribute('aria-busy', 'true');
 
     resolveNext({ ...summary, months: 3, serviceCount: 1, attendedCount: 1 });
-    await settle();
-    expect(screen.getByRole('status')).toHaveTextContent('');
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(''));
     expect(region).toHaveAttribute('aria-busy', 'false');
     expect(screen.getByText(/attended\s+of/)).toHaveTextContent(/attended 1 of 1 /);
   });
