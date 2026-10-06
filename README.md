@@ -83,10 +83,15 @@ A comprehensive church management platform built with modern web technologies, d
 - Content categorization and tagging
 - Approval workflow for published content
 
-#### **Attendance Tracking**
-- Service attendance monitoring
-- Multiple service types support
-- Historical attendance data
+#### **Services and Attendance**
+- One `Service` per date and type (Sunday service, Bible study, prayer meeting and so on)
+- Attendance rows link a member to a service; staff record them on the attendance sheet
+- Attendance summaries per member, and a "Services this month" tile for staff
+
+#### **Engagement**
+- Three components: attendance (last 12 weeks of scoring services, weight 0.6), community (active group memberships, 0.2) and communication (responses over asks in 12 months, 0.2)
+- Membership stage and risk follow fixed, documented rules (see `docs/PHASE3_SPECS.md` 1.5 and 6.1)
+- Monthly snapshots drive the trends; a background job refreshes every member
 
 ## 🚦 Getting Started
 
@@ -218,7 +223,26 @@ All routes except `/health`, `POST /api/auth/register`, `POST /api/auth/login` a
 - `PUT /api/users/:id` - Update profile; staff may set `isActive`, admins may set `roleIds`
 - `GET /api/users/export` - CSV export *(staff)*
 - `GET|POST|DELETE /api/users/saved-searches` - Saved searches
-- `GET /api/analytics/...` and `GET /api/member-details/...` - CRM and analytics *(staff)*
+
+### **Services and Attendance** *(staff; delete is admin only)*
+- `GET /api/services?from&to&type&page&pageSize` - Services in a date range
+- `POST /api/services`, `GET|PUT|DELETE /api/services/:id` - Create, read, update, delete (delete removes its attendance)
+- `GET /api/services/:id/attendance` - Attendance sheet for every active member
+- `PUT /api/services/:id/attendance` - Record `{ present: [...ids], absent: [...ids] }`
+
+### **Member CRM** *(staff unless noted)*
+- `GET /api/member-details/:id` - Profile with notes, interactions, milestones, family and engagement
+- `GET /api/member-details/:id/timeline?page&pageSize` - Interactions, milestones, notes and attended services, newest first
+- `GET /api/member-details/:id/attendance?months&types` - Attendance summary
+- `GET /api/member-details/me/attendance` - Your own attendance summary *(any signed-in user)*
+- `GET|POST /api/member-details/:id/interactions|milestones|notes` - CRM records
+
+### **Analytics** *(staff)*
+- `GET /api/analytics/members` - Stage and risk distributions, averages, top engaged members
+- `GET /api/analytics/members/:id/engagement` - Engagement computed now; `POST .../engagement/refresh` stores it
+- `GET /api/analytics/members/:id/trends?months` - Monthly snapshots
+- `POST /api/analytics/members/engagement/refresh-all` - Starts the refresh job (202 with `jobId`); `GET /api/analytics/jobs/:id` reports progress
+- `POST /api/analytics/members/:id/activities|interactions` - Record activities and interactions
 
 ### **Media Management**
 - `GET /api/media` - Get media library content
@@ -236,6 +260,12 @@ All routes except `/health`, `POST /api/auth/register`, `POST /api/auth/login` a
 3. **Search & Filter**: Use the advanced search to find members by name, email, phone, role, or status
 4. **View Modes**: Toggle between table and card views for different browsing experiences
 
+### **Services and Attendance** (staff)
+1. **Services page**: Open Services in the navigation to see the month's services; use Previous and Next to change month
+2. **Creating a service**: "New Service" asks for the date, type and an optional title and notes
+3. **Recording attendance**: "Attendance for ..." opens the sheet; tick who was present and save
+4. **Engagement**: Refresh engagement on the Analytics page after recording attendance, or schedule the refresh job (see Upgrading an existing database)
+
 ### **Media Library**
 1. **Adding Videos**: Add YouTube videos with titles, descriptions, and category tags
 2. **Video Player**: Enhanced player with playlist support, fullscreen, and keyboard controls
@@ -244,7 +274,7 @@ All routes except `/health`, `POST /api/auth/register`, `POST /api/auth/login` a
 ### **User Roles**
 - **Admin**: Full system access, user management, and configuration
 - **Leader**: Member management, content approval, and ministry oversight
-- **Member**: Basic access to media library and personal profile management
+- **Member**: Media library, the member directory, and their own profile (contact details, skills and interests, own attendance)
 
 ## 🔮 Roadmap
 

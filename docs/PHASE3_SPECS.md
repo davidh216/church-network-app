@@ -135,3 +135,41 @@ D1 to D6 were implemented on `modernize/phase-3` and verified by the planner (ro
 ### 6.2 Refuted or deferred
 - **Ownerless saved-search deletion stays.** Deleting saved searches whose owner no longer exists follows the column's Cascade rule. Those rows are now archived first.
 - **Stale stored scores are documented, not recomputed.** Stored scores keep their pre-upgrade values until the first refresh after deploy. This is the documented design, so the README tells the operator to run the refresh job once after upgrading.
+
+## 7. Frontend review outcome (2026-10-06)
+D7 ran as two items: D7a covered the engagement, profile, edit form and dashboard tile, and D7b the `/services` route and attendance sheet. D8 followed them. A five-lens adversarial review covered accessibility, contract and regressions, UI authorization, test quality and spec compliance, with one skeptical verifier per finding. It confirmed 48 findings (16 should-fix and 32 nits) and refuted 3. The planner added one item, F051. An independent checker rechecked each of the four fix batches, and the planner closed the three gaps those rechecks found.
+
+### 7.1 Behaviour settled by the fixes
+- **Attendance sheet.**
+  - The sheet keeps only the user's own unsaved changes on top of the latest server sheet. A save sends only the marks that differ from the server, so another staff member's marks are never overwritten. Changes made while a save is in flight are kept and reported as unsaved.
+  - Closing the sheet with unsaved changes asks for confirmation.
+  - Escape in the filter clears it, and Enter does not save. The shared Dialog ignores an Escape that a control inside has already handled.
+  - Each row shows the member's email. When two members share a name, the label includes the email.
+  - The dialog is named after the service.
+- **Service dialog.**
+  - Errors are linked to their fields and receive focus.
+  - Editing sends only the changed fields.
+  - The month list shows a loading state while a month loads, and its note says which services it lists.
+- **Chip inputs.**
+  - Tab commits the entry and focus moves on.
+  - Removing a chip moves focus to a neighbouring chip.
+  - A refused entry keeps the typed text and shows a visible message.
+- **Media tags.** Tags are normalised to the category format (`special-event`). Media search also matches tags.
+- **Members' own profile.** Members edit their own skills and interests on their profile.
+- **F051, first and last names.** Staff can edit first and last names. Initials use them when both are set.
+- **Dates.** Calendar dates, including the last-activity service date, render as their UTC day.
+- **Analytics.**
+  - The engagement weights and help text come from `ENGAGEMENT_WEIGHTS`.
+  - The `/analytics` headings form a flat outline.
+  - The attendance tab shows a busy state while it reloads.
+  - The services tile offers Retry when its request fails.
+- **E2E.**
+  - The attendance flow picks a free Sunday within the last 14 days. It checks the refreshed scores on the member's Church Info tab against the trends snapshot.
+  - It runs axe on Church Info and on the delete dialog, and deletes the service through the UI.
+  - The suite passes twice in a row and leaves no services or attendance behind.
+- **Migration test.** The whole-chain test pins the checksums of the two Phase 2 migrations and compares the enum labels.
+
+### 7.2 Accepted limits
+- **Month in component state.** The month shown on `/services` is not in the URL.
+- **100 services per month.** A month lists at most 100 services, with a note saying so.
+- **2000 members per save.** Marking more than 2000 never-recorded members present in one save is refused by the API's batch limit.
