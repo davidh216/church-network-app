@@ -48,14 +48,12 @@ export default function MemberAnalyticsDashboard() {
 
         <StatTiles analytics={analytics} />
 
-        {analytics.averageScores && (
-          <div className="mb-8">
-            <EngagementComponents
-              scores={analytics.averageScores}
-              title="Average engagement components (active members)"
-            />
-          </div>
-        )}
+        <div className="mb-8">
+          <EngagementComponents
+            scores={analytics.averageScores}
+            title="Average engagement components (active members)"
+          />
+        </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2">

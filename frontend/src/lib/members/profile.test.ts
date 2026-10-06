@@ -4,7 +4,7 @@ import {
   formatDate,
   formatDateTime,
   formatDay,
-  formatMilestoneDate,
+  formatDayOrDate,
   impactClass,
   interactionIcon,
   membershipDuration,
@@ -29,10 +29,10 @@ describe('member profile helpers', () => {
     try {
       expect(formatDay('2026-10-04T00:00:00.000Z')).toBe('October 4, 2026');
       expect(formatDay(null)).toBe('Not set');
-      expect(formatMilestoneDate('2026-10-04T00:00:00.000Z')).toBe('October 4, 2026');
+      expect(formatDayOrDate('2026-10-04T00:00:00.000Z')).toBe('October 4, 2026');
       // 02:00 UTC is 9 pm the day before in Chicago: a timestamp shows the local day.
-      expect(formatMilestoneDate('2026-10-04T02:00:00.000Z')).toBe('October 3, 2026');
-      expect(formatMilestoneDate(undefined)).toBe('Not set');
+      expect(formatDayOrDate('2026-10-04T02:00:00.000Z')).toBe('October 3, 2026');
+      expect(formatDayOrDate(undefined)).toBe('Not set');
     } finally {
       if (originalTz === undefined) delete process.env.TZ;
       else process.env.TZ = originalTz;

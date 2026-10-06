@@ -28,8 +28,11 @@ export function formatDay(dateString?: string | null): string {
   );
 }
 
-/** A milestone's achievedDate: its UTC day when it is a calendar date (UTC midnight). */
-export function formatMilestoneDate(dateString?: string | null): string {
+/**
+ * A value that is either a calendar date (UTC midnight: a service date, a milestone's achievedDate)
+ * or a timestamp: the former as its UTC day, the latter in the viewer's time zone.
+ */
+export function formatDayOrDate(dateString?: string | null): string {
   return isUtcMidnight(dateString) ? formatDay(dateString) : formatDate(dateString);
 }
 

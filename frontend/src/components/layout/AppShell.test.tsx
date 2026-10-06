@@ -1,5 +1,5 @@
 import { act } from 'react';
-import { waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Dashboard from '@/components/dashboard/Dashboard';
 import { summaryTiles } from '@/components/dashboard/SummaryTiles';
@@ -192,14 +192,34 @@ describe('dashboard', () => {
     expect(params.to.slice(0, 7)).toBe(params.from.slice(0, 7));
   });
 
-  it('says the services count is unavailable when it fails, keeping the other counts', async () => {
+  /** The value (<dd>) of the dashboard tile whose label (<dt>) is `label`. */
+  const tileValue = (label: string) => {
+    const index = screen.getAllByRole('term').findIndex((term) => term.textContent === label);
+    return screen.getAllByRole('definition')[index]!;
+  };
+
+  it('says the services count is unavailable when it fails, with a Retry that recovers', async () => {
     usersApi.getUserSummary.mockResolvedValue(staffSummary);
-    servicesApi.listServices.mockRejectedValue(new ApiError(500, 'Boom'));
-    const container = await renderDashboard(['admin']);
-    const tiles = () =>
-      Array.from(container.querySelectorAll('dl > div')).map((d) => d.textContent);
-    await waitFor(() => expect(tiles().at(-1)).toBe('Services this monthUnavailable'));
-    expect(tiles()[0]).toBe('Total members12');
+    servicesApi.listServices.mockRejectedValueOnce(new ApiError(500, 'Boom'));
+    servicesApi.listServices.mockResolvedValue({ services: [], total: 4, page: 1, pageSize: 1 });
+    await renderDashboard(['admin']);
+    await waitFor(() => expect(tileValue('Services this month')).toHaveTextContent('Unavailable'));
+    expect(tileValue('Total members')).toHaveTextContent('12');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(tileValue('Services this month')).toHaveTextContent(/^4$/));
+    expect(servicesApi.listServices).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+  });
+
+  it('says "Loading" in the services tile while the count loads', async () => {
+    usersApi.getUserSummary.mockResolvedValue(staffSummary);
+    servicesApi.listServices.mockReturnValue(new Promise(() => {}));
+    await renderDashboard(['admin']);
+    await waitFor(() => expect(tileValue('Total members')).toHaveTextContent('12'));
+    const value = tileValue('Services this month');
+    expect(value).toHaveTextContent(/^Loading$/);
+    expect(value).toHaveAttribute('aria-busy', 'true');
   });
 
   it('shows a member a single Members tile', async () => {

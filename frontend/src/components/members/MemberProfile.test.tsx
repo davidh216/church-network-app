@@ -1,4 +1,4 @@
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MAX_TIMELINE_PAGE } from '@embrace/shared';
 import MemberProfile from '@/components/members/MemberProfile';
@@ -38,6 +38,8 @@ const details = {
     attendanceScore: 0,
     communityScore: 0,
     communicationScore: 0,
+    // Latest activity was a service: a calendar date at UTC midnight.
+    lastActivity: '2026-10-04T00:00:00.000Z',
   },
   familyMembers: [
     {
@@ -124,8 +126,14 @@ describe('MemberProfile', () => {
     expect(screen.getByText('u1')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('tab', { name: /Church Info/ }));
-    expect(screen.getByText('72/100')).toBeTruthy();
-    expect(screen.getByText('Medium Risk', { selector: 'p' })).toBeTruthy();
+    const churchInfo = screen.getByRole('tabpanel');
+    expect(within(churchInfo).getByText('72/100')).toBeTruthy();
+    expect(within(churchInfo).getByText('Medium Risk')).toBeTruthy();
+    // The service day, not the evening before in the viewer's zone (tests run in Los Angeles).
+    expect(within(churchInfo).getByText('October 4, 2026')).toBeTruthy();
+    expect(within(churchInfo).queryByText('October 3, 2026')).toBeNull();
+    // The overall-score formula is stated once, inside the components section.
+    expect(within(churchInfo).getAllByText(/^Overall score:/)).toHaveLength(1);
     const components = screen.getByRole('region', { name: 'Score components' });
     expect(components).toHaveTextContent('Attendance (60% of the score)0/100');
     expect(components).toHaveTextContent('Communication (20% of the score)0/100');
@@ -162,21 +170,32 @@ describe('MemberProfile', () => {
     );
     const list = screen.getByRole('list', { name: 'Services attended' });
     expect(list).toHaveTextContent('Harvest');
-    expect(list).toHaveTextContent(
-      new Date('2026-10-04T00:00:00Z').toLocaleDateString(undefined, {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        timeZone: 'UTC',
-      }),
-    );
+    // Calendar days, not the evening before in the viewer's zone (tests run in Los Angeles).
+    expect(
+      within(list)
+        .getAllByRole('listitem')
+        .map((item) => item.textContent),
+    ).toEqual([
+      expect.stringMatching(/^October 4, 2026 · Harvest/),
+      expect.stringMatching(/^September 27, 2026Sunday Service$/),
+    ]);
     expect(detailsApi.getMemberAttendance).toHaveBeenCalledWith(
       'u1',
       { months: 12, types: ['sunday_service'] },
       expect.anything(),
     );
-    // The only counted type cannot be unchecked.
-    expect(screen.getByRole('checkbox', { name: 'Sunday Service' })).toBeDisabled();
+    // The only counted type cannot be unchecked, but stays focusable and says why.
+    const sunday = screen.getByRole('checkbox', { name: 'Sunday Service' });
+    expect(sunday).toBeEnabled();
+    expect(sunday).toHaveAttribute('aria-disabled', 'true');
+    expect(sunday).toHaveAccessibleDescription(
+      'At least one type is counted, so the last checked type cannot be cleared.',
+    );
+    sunday.focus();
+    expect(sunday).toHaveFocus();
+    fireEvent.click(sunday);
+    expect(sunday).toBeChecked();
+    expect(detailsApi.getMemberAttendance).toHaveBeenCalledTimes(1);
 
     fireEvent.change(screen.getByLabelText('Period'), { target: { value: '3' } });
     fireEvent.click(screen.getByRole('checkbox', { name: 'Bible Study' }));
@@ -186,6 +205,43 @@ describe('MemberProfile', () => {
       { months: 3, types: ['sunday_service', 'bible_study'] },
       expect.anything(),
     );
+  });
+
+  it('marks the summary busy while a new window loads, then shows the new count', async () => {
+    const summary = {
+      months: 12,
+      from: '2025-10-06',
+      to: '2026-10-05',
+      types: ['sunday_service'],
+      serviceCount: 3,
+      attendedCount: 2,
+      attended: [],
+    };
+    let resolveNext: (value: unknown) => void = () => {};
+    detailsApi.getMemberDetails.mockResolvedValue(details);
+    detailsApi.getMemberAttendance.mockResolvedValueOnce(summary).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveNext = resolve;
+      }),
+    );
+    await render(<MemberProfile memberId="u1" />);
+    await screen.findByRole('heading', { level: 1 });
+    fireEvent.click(screen.getByRole('tab', { name: /Attendance/ }));
+    const sentence = await screen.findByText(/attended\s+of/);
+    expect(screen.getByRole('status')).toHaveTextContent('');
+    expect(sentence).toHaveAttribute('aria-live', 'polite');
+
+    fireEvent.change(screen.getByLabelText('Period'), { target: { value: '3' } });
+    await settle();
+    expect(screen.getByRole('status')).toHaveTextContent('Updating attendance…');
+    const region = screen.getByRole('region', { name: 'Attendance summary' });
+    expect(region).toHaveAttribute('aria-busy', 'true');
+
+    resolveNext({ ...summary, months: 3, serviceCount: 1, attendedCount: 1 });
+    await settle();
+    expect(screen.getByRole('status')).toHaveTextContent('');
+    expect(region).toHaveAttribute('aria-busy', 'false');
+    expect(screen.getByText(/attended\s+of/)).toHaveTextContent(/attended 1 of 1 /);
   });
 
   it('says so when no service was attended, and offers Retry on an error', async () => {
@@ -251,7 +307,7 @@ describe('MemberProfile', () => {
     expect(await screen.findByRole('heading', { level: 3, name: 'Baptised' })).toBeTruthy();
     expect(screen.getByText('Easter service')).toBeTruthy();
     expect(screen.getByText('Milestone')).toBeTruthy();
-    expect(screen.getByText('Attendance', { selector: 'span.rounded-full' })).toBeTruthy();
+    expect(within(screen.getByRole('tabpanel')).getByText('Attendance')).toBeTruthy();
     expect(screen.getByText('21 activities')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Next' }));

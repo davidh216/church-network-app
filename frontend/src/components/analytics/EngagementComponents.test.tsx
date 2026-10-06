@@ -12,9 +12,10 @@ describe('EngagementComponents', () => {
       />,
     );
     const section = screen.getByRole('region', { name: 'Score breakdown' });
-    expect(
-      within(section).getByRole('heading', { level: 3, name: 'Score breakdown' }),
-    ).toBeTruthy();
+    const heading = within(section).getByRole('heading', { level: 3, name: 'Score breakdown' });
+    // The region is named by its visible heading rather than a repeated aria-label.
+    expect(section).toHaveAttribute('aria-labelledby', heading.id);
+    expect(section).not.toHaveAttribute('aria-label');
     const terms = within(section)
       .getAllByRole('term')
       .map((t) => t.textContent);

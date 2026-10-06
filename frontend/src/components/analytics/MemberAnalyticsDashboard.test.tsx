@@ -26,6 +26,12 @@ const analytics: MemberAnalytics = {
   })),
   membershipStageDistribution: { core_member: 30, at_risk: 5 },
   riskLevelDistribution: { low: 35, high: 5 },
+  averageScores: {
+    engagementScore: 61,
+    attendanceScore: 70,
+    communityScore: 45,
+    communicationScore: 52,
+  },
 };
 
 beforeEach(() => vi.resetAllMocks());
@@ -53,27 +59,29 @@ describe('MemberAnalyticsDashboard', () => {
   });
 
   it('shows the average of each engagement component with its help text', async () => {
-    analyticsApi.getAnalytics.mockResolvedValue({
-      ...analytics,
-      averageScores: {
-        engagementScore: 61,
-        attendanceScore: 70,
-        communityScore: 45,
-        communicationScore: 52,
-      },
-    });
-    await render(<MemberAnalyticsDashboard />);
-    const section = await screen.findByRole('region', { name: /Average engagement components/ });
-    expect(within(section).getByText('Attendance').closest('div')?.textContent).toContain('70/100');
-    expect(within(section).getByText('Community').closest('div')?.textContent).toContain('45/100');
-    expect(within(section).getByText(/Responses over asks/)).toBeTruthy();
-  });
-
-  it('leaves the component tiles out when the API sends no averages', async () => {
     analyticsApi.getAnalytics.mockResolvedValue(analytics);
     await render(<MemberAnalyticsDashboard />);
-    await screen.findByRole('heading', { name: 'Member Analytics Dashboard' });
-    expect(screen.queryByRole('region', { name: /Average engagement components/ })).toBeNull();
+    const section = await screen.findByRole('region', { name: /Average engagement components/ });
+    const terms = within(section).getAllByRole('term');
+    const values = within(section).getAllByRole('definition');
+    const valueOf = (label: string) =>
+      values[terms.findIndex((term) => term.textContent?.startsWith(label))]?.textContent;
+    expect(valueOf('Attendance')).toMatch(/^70\/100/);
+    expect(valueOf('Community')).toMatch(/^45\/100/);
+    expect(valueOf('Communication')).toMatch(/^52\/100Responses over asks/);
+  });
+
+  it('puts every section of the page at the same level under the page heading', async () => {
+    analyticsApi.getAnalytics.mockResolvedValue(analytics);
+    await render(<MemberAnalyticsDashboard />);
+    await screen.findByRole('heading', { level: 1, name: 'Member Analytics Dashboard' });
+    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
+      'Average engagement components (active members)',
+      'Most Engaged Members',
+      'Membership Stages',
+      'Risk Levels',
+    ]);
+    expect(screen.queryByRole('heading', { level: 3 })).toBeNull();
   });
 
   it('shows an inline error with Retry when analytics fail', async () => {

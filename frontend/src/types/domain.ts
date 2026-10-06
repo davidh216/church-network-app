@@ -4,6 +4,7 @@
 
 import type {
   Channel,
+  EngagementComponents,
   Gender,
   Impact,
   InteractionCategory,
@@ -267,12 +268,7 @@ export interface MemberAnalytics {
   atRiskMembers: number;
   averageEngagementScore: number;
   /** Averages of the stored engagement rows of active accounts. */
-  averageScores?: {
-    engagementScore: number;
-    attendanceScore: number;
-    communityScore: number;
-    communicationScore: number;
-  };
+  averageScores: EngagementComponents;
   topEngagedMembers: Array<{
     user: {
       id: string;

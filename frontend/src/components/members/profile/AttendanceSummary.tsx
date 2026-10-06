@@ -19,7 +19,7 @@ export default function AttendanceSummary({ summary, subject }: AttendanceSummar
   const types = serviceTypesLabel(summary.types);
   return (
     <div className="space-y-4">
-      <p className="text-sm text-gray-700">
+      <p aria-live="polite" className="text-sm text-gray-700">
         {subject} attended <strong>{summary.attendedCount}</strong> of{' '}
         <strong>{summary.serviceCount}</strong> {types} services between {formatDay(summary.from)}{' '}
         and {formatDay(summary.to)}

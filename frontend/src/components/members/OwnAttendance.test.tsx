@@ -1,4 +1,4 @@
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import OwnAttendance from '@/components/members/OwnAttendance';
 import { ApiError } from '@/lib/api/client';
@@ -30,7 +30,17 @@ describe('OwnAttendance', () => {
     expect(await screen.findByText(/You attended/)).toHaveTextContent(
       /You attended 2 of 2 Sunday Service services .*\(100%\)/,
     );
-    expect(screen.getByRole('list', { name: 'Services attended' }).children).toHaveLength(2);
+    expect(screen.getByText(/You attended/)).toHaveTextContent(
+      /between October 6, 2025 and October 5, 2026/,
+    );
+    // Calendar days, not the evening before (tests run in Los Angeles).
+    const items = within(screen.getByRole('list', { name: 'Services attended' })).getAllByRole(
+      'listitem',
+    );
+    expect(items.map((item) => item.textContent)).toEqual([
+      'October 4, 2026 · HarvestSunday Service',
+      'September 27, 2026Sunday Service',
+    ]);
     expect(detailsApi.getOwnAttendance).toHaveBeenCalledWith({}, expect.anything());
   });
 

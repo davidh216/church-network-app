@@ -63,6 +63,17 @@ describe('ServicesPage', () => {
   it("lists the current month's services and moves between months", async () => {
     await renderAs(['leader']);
     expect(await screen.findByRole('cell', { name: 'Harvest' })).toBeTruthy();
+    // The first of the month as a calendar day, not the evening before (tests run in Los Angeles).
+    const [year, monthNumber] = from.split('-').map(Number) as [number, number];
+    const shortMonths = 'Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec'.split(' ');
+    expect(
+      screen.getByRole('cell', { name: `${shortMonths[monthNumber - 1]} 1, ${year}` }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole('button', {
+        name: `Attendance for Harvest (Sunday Service) on ${monthNumber}/1/${year}`,
+      }),
+    ).toBeTruthy();
     expect(servicesApi.listServices).toHaveBeenCalledWith(
       { ...monthBounds(month), pageSize: 100 },
       expect.anything(),

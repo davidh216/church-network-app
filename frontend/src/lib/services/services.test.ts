@@ -49,8 +49,9 @@ describe('service names', () => {
     expect(serviceTitle({ title: 'Harvest', type: 'sunday_service' })).toBe(
       'Harvest (Sunday Service)',
     );
-    expect(serviceName({ title: null, type: 'sunday_service', date: '2026-10-04' })).toMatch(
-      /^Sunday Service on .*2026/,
+    // The calendar day in every zone (tests run in Los Angeles, where UTC midnight is October 3).
+    expect(serviceName({ title: null, type: 'sunday_service', date: '2026-10-04' })).toBe(
+      'Sunday Service on 10/4/2026',
     );
   });
 });

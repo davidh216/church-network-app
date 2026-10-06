@@ -26,9 +26,13 @@ const selectClass =
 export default function Attendance({ member }: { member: MemberDetails }) {
   const [months, setMonths] = useState<number>(DEFAULT_ATTENDANCE_MONTHS);
   const [types, setTypes] = useState<ServiceType[]>([...DEFAULT_SCORING_SERVICE_TYPES]);
-  const { data, isPending, error, refetch } = useMemberAttendance(member.id, { months, types });
+  const { data, isPending, isPlaceholderData, error, refetch } = useMemberAttendance(member.id, {
+    months,
+    types,
+  });
 
   // At least one type stays checked: the API needs one, and an empty list would count nothing.
+  // The last checked box stays focusable (aria-disabled) and the hint below says why.
   const toggleType = (type: ServiceType) =>
     setTypes((current) =>
       current.includes(type)
@@ -59,25 +63,30 @@ export default function Attendance({ member }: { member: MemberDetails }) {
             ))}
           </select>
         </div>
-        <fieldset>
+        <fieldset aria-describedby="attendance-types-hint">
           <legend className="text-sm font-medium text-gray-700">Service types counted</legend>
           <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1">
             {SERVICE_TYPES.map((type) => {
               const checked = types.includes(type);
+              const locked = checked && types.length === 1;
               return (
                 <label key={type} className="flex items-center text-sm text-gray-700">
                   <input
                     type="checkbox"
                     checked={checked}
-                    disabled={checked && types.length === 1}
+                    aria-disabled={locked || undefined}
+                    aria-describedby={locked ? 'attendance-types-hint' : undefined}
                     onChange={() => toggleType(type)}
-                    className="rounded-sm border-gray-300 text-blue-600 focus:ring-blue-500"
+                    className="rounded-sm border-gray-300 text-blue-600 focus:ring-blue-500 aria-disabled:opacity-50"
                   />
                   <span className="ml-2">{stageLabel(type)}</span>
                 </label>
               );
             })}
           </div>
+          <p id="attendance-types-hint" className="mt-1 text-xs text-gray-500">
+            At least one type is counted, so the last checked type cannot be cleared.
+          </p>
         </fieldset>
       </div>
       {isPending ? (
@@ -89,7 +98,13 @@ export default function Attendance({ member }: { member: MemberDetails }) {
           onRetry={() => void refetch()}
         />
       ) : (
-        <AttendanceSummary summary={data} subject={member.name} />
+        <section aria-label="Attendance summary" aria-busy={isPlaceholderData}>
+          {/* Always mounted, so the busy text is announced when it appears. */}
+          <p role="status" className="text-sm text-gray-500">
+            {isPlaceholderData ? 'Updating attendance…' : ''}
+          </p>
+          <AttendanceSummary summary={data} subject={member.name} />
+        </section>
       )}
     </div>
   );

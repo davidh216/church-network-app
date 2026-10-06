@@ -10,18 +10,30 @@ import { useServices } from '@/lib/queries/services';
  */
 export default function ServicesThisMonthTile() {
   const range = useMemo(() => monthRange(), []);
-  const { data, error, isPending } = useServices({ ...range, pageSize: 1 });
-  let value: string | number;
-  if (data) value = data.total;
-  else if (error) value = 'Unavailable';
-  else value = '…';
+  const { data, error, isPending, refetch } = useServices({ ...range, pageSize: 1 });
+  let value;
+  if (data) {
+    value = <span className="text-3xl">{data.total}</span>;
+  } else if (error) {
+    value = (
+      <span className="flex items-center gap-3 text-base">
+        Unavailable
+        <button
+          type="button"
+          onClick={() => void refetch()}
+          className="text-sm font-medium text-blue-700 underline hover:text-blue-900"
+        >
+          Retry
+        </button>
+      </span>
+    );
+  } else {
+    value = <span className="text-base">Loading</span>;
+  }
   return (
     <div className="bg-white shadow-sm rounded-lg p-5">
       <dt className="text-sm font-medium text-gray-500">Services this month</dt>
-      <dd
-        className={`mt-1 font-semibold text-gray-900 ${typeof value === 'number' ? 'text-3xl' : 'text-base'}`}
-        aria-busy={isPending && !error}
-      >
+      <dd className="mt-1 font-semibold text-gray-900" aria-busy={isPending && !error}>
         {value}
       </dd>
     </div>

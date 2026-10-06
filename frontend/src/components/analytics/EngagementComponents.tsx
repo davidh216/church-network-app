@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import {
   ENGAGEMENT_COMPONENTS,
   ENGAGEMENT_SCORE_HELP,
@@ -22,9 +23,12 @@ export default function EngagementComponents({
   title,
   headingLevel: Heading = 'h2',
 }: EngagementComponentsProps) {
+  const headingId = useId();
   return (
-    <section aria-label={title} className="space-y-3">
-      <Heading className="text-lg font-medium text-gray-900">{title}</Heading>
+    <section aria-labelledby={headingId} className="space-y-3">
+      <Heading id={headingId} className="text-lg font-medium text-gray-900">
+        {title}
+      </Heading>
       <dl className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {ENGAGEMENT_COMPONENTS.map((component) => (
           <div key={component.key} className="bg-white p-4 rounded-lg border border-gray-200">

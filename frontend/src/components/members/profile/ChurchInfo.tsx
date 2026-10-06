@@ -1,8 +1,7 @@
 import type { MemberDetails } from '@/types/domain';
 import EngagementComponents from '@/components/analytics/EngagementComponents';
-import { ENGAGEMENT_SCORE_HELP } from '@/lib/analytics/display';
 import { riskLabel, stageLabel } from '@/lib/members/display';
-import { formatDate, formatDay, membershipDuration } from '@/lib/members/profile';
+import { formatDate, formatDay, formatDayOrDate, membershipDuration } from '@/lib/members/profile';
 import { Field } from './Field';
 
 /** The "Church Info" tab: membership, background and engagement analytics. */
@@ -40,13 +39,10 @@ export default function ChurchInfo({ member }: { member: MemberDetails }) {
         <div className="space-y-4">
           <h2 className="text-lg font-medium text-gray-900">Engagement Analytics</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div>
-              <Field label="Overall Score">{Math.round(engagement.engagementScore)}/100</Field>
-              <p className="text-xs text-gray-500">{ENGAGEMENT_SCORE_HELP}</p>
-            </div>
+            <Field label="Overall Score">{Math.round(engagement.engagementScore)}/100</Field>
             <Field label="Membership Stage">{stageLabel(engagement.membershipStage)}</Field>
             <Field label="Risk Level">{riskLabel(engagement.riskLevel)}</Field>
-            <Field label="Last Activity">{formatDate(engagement.lastActivity)}</Field>
+            <Field label="Last Activity">{formatDayOrDate(engagement.lastActivity)}</Field>
           </div>
           <EngagementComponents title="Score components" headingLevel="h3" scores={engagement} />
         </div>

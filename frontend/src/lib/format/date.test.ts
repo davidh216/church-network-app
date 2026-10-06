@@ -10,6 +10,11 @@ import {
 } from './date';
 
 describe('date formatting', () => {
+  it('runs the frontend tests in a zone west of UTC (vitest.config.mts sets TZ)', () => {
+    // UTC midnight is the evening before here, so local formatting of a calendar date would fail.
+    expect(new Date('2026-10-04T00:00:00.000Z').getDate()).toBe(3);
+  });
+
   it('parses real dates and rejects missing or invalid ones', () => {
     expect(parseDate('2024-01-05T00:00:00Z')?.toISOString()).toBe('2024-01-05T00:00:00.000Z');
     expect(parseDate(undefined)).toBeNull();
