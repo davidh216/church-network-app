@@ -117,7 +117,33 @@ export async function deleteServices(admin: APIRequestContext, prefix: string) {
   for (const id of ids) expect((await admin.delete(`/api/services/${id}`)).ok()).toBe(true);
 }
 
-/** Runs the engagement refresh-all job and waits until it is no longer running. */
+/**
+ * The most recent UTC day in the last `days` days (today first) with no service of `type`, so the
+ * suite can create one there even when church_dev already holds services (they are unique per day
+ * and type). Fails with a clear message when every day is taken.
+ */
+export async function freeServiceDate(
+  admin: APIRequestContext,
+  type: string,
+  days = 14,
+): Promise<string> {
+  const day = (offset: number) =>
+    new Date(Date.now() - offset * 86_400_000).toISOString().slice(0, 10);
+  const list = await admin.get('/api/services', {
+    params: { from: day(days - 1), to: day(0), type, pageSize: 100 },
+  });
+  expect(list.ok()).toBe(true);
+  const { services } = (await list.json()) as { services: { date: string }[] };
+  const taken = new Set(services.map((s) => s.date));
+  for (let offset = 0; offset < days; offset += 1) {
+    if (!taken.has(day(offset))) return day(offset);
+  }
+  throw new Error(
+    `Every day in the last ${days} days already has a ${type}; the e2e needs one free`,
+  );
+}
+
+/** Runs the engagement refresh-all job, waits for it and asserts every member was refreshed. */
 export async function refreshEngagement(admin: APIRequestContext): Promise<string> {
   const started = await admin.post('/api/analytics/members/engagement/refresh-all');
   expect(started.status()).toBe(202);
@@ -127,5 +153,8 @@ export async function refreshEngagement(admin: APIRequestContext): Promise<strin
       timeout: 60_000,
     })
     .not.toBe('running');
+  const final = await admin.get(`/api/analytics/jobs/${jobId}`);
+  expect(final.ok()).toBe(true);
+  expect(await final.json()).toMatchObject({ status: 'completed', failed: 0 });
   return jobId;
 }

@@ -139,7 +139,9 @@ test('admin navigates the dashboard, members, a profile, media and analytics, th
   await expect(page).toHaveURL(/\/login/);
 });
 
-test('a member visiting /analytics lands on the dashboard with a notice', async ({ page }) => {
+test('a member visiting /analytics or /services lands on the dashboard with a notice', async ({
+  page,
+}) => {
   // The one reusable member account (no staff role), created only if it cannot sign in.
   const admin = await adminRequest();
   const user = await ensureE2eMember(admin);
@@ -158,6 +160,16 @@ test('a member visiting /analytics lands on the dashboard with a notice', async 
   ).toBeVisible();
   // A member's dashboard has the single Members tile.
   await expect(page.locator('section[aria-label="Member counts"] dt')).toHaveText(['Members']);
+
+  // The staff-only services route: no nav link, and a visit redirects with the same notice.
+  await expect(
+    page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Services' }),
+  ).toHaveCount(0);
+  await page.goto('/services');
+  await expect(page).toHaveURL(/\/\?notice=staff-only$/);
+  await expect(
+    page.getByRole('status').filter({ hasText: 'That page is only available to staff.' }),
+  ).toBeVisible();
 
   // Members may open their own profile, but not anyone else's.
   await page.goto(`/members/${user.id}`);

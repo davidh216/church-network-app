@@ -1,4 +1,5 @@
 import { execSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { PrismaClient } from '@prisma/client';
@@ -1170,7 +1171,29 @@ describe('a Phase 2 database upgraded by prisma migrate deploy (whole chain)', (
       env: { ...process.env, DATABASE_URL: schemaUrl },
       stdio: ['pipe', 'pipe', 'pipe'],
     }).toString();
+  // The checksums Phase 2 databases recorded in _prisma_migrations (church_dev_phase2.sql).
+  // `migrate deploy` skips applied migrations by name, so an edited Phase 2 file would reach fresh
+  // databases but never real ones, and the baseline below would silently follow the edit.
+  const PHASE2_CHECKSUMS: Record<string, string> = {
+    '20261004000000_init_postgres':
+      '177ffc1476b527c7910ccc1484862078542bec3f4511657f375c4ea2e8042985',
+    '20261005000000_engagement_rows_for_all_users':
+      '9b9d3730ef2531750a8e8c4c95c03ad9abebd040fa60d33b9692c9bf910f2e3c',
+  };
   let deployOutput = '';
+
+  it('starts from the Phase 2 migration files byte for byte as Phase 2 databases applied them', () => {
+    const checksums = Object.fromEntries(
+      phase2.map((name) => [
+        name,
+        // The raw bytes, as Prisma hashes them.
+        createHash('sha256')
+          .update(readFileSync(resolve(MIGRATIONS, name, 'migration.sql')))
+          .digest('hex'),
+      ]),
+    );
+    expect(checksums).toEqual(PHASE2_CHECKSUMS);
+  });
 
   beforeAll(() => {
     expect(migrationNames.slice(0, 2)).toEqual(phase2);
@@ -1298,10 +1321,21 @@ describe('a Phase 2 database upgraded by prisma migrate deploy (whole chain)', (
          WHERE n.nspname = $1 AND c.conname <> '_prisma_migrations_pkey' ORDER BY 1`,
         name,
       );
-      return [...columns, ...indexes, ...constraints].map((r) => strip(r.d));
+      // Enum types with their labels in order (columns above only name the type).
+      const enums = await prisma.$queryRawUnsafe<{ d: string }[]>(
+        `SELECT 'enum ' || t.typname || ':' || string_agg(e.enumlabel, ',' ORDER BY e.enumsortorder) AS d
+         FROM pg_type t JOIN pg_enum e ON e.enumtypid = t.oid
+         JOIN pg_namespace n ON n.oid = t.typnamespace
+         WHERE n.nspname = $1 GROUP BY t.typname ORDER BY 1`,
+        name,
+      );
+      return [...columns, ...indexes, ...constraints, ...enums].map((r) => strip(r.d));
     };
     const upgraded = await describeSchema(schema);
     expect(upgraded.length).toBeGreaterThan(200);
+    expect(upgraded.filter((d) => d.startsWith('enum '))).toContain(
+      'enum ServiceType:sunday_service,bible_study,prayer_meeting,special_event,other',
+    );
     expect(upgraded).toEqual(await describeSchema('public'));
   });
 
