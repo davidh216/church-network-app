@@ -20,6 +20,8 @@ export const selfSelect = {
   id: true,
   email: true,
   name: true,
+  firstName: true,
+  lastName: true,
   phone: true,
   avatar: true,
   bio: true,

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { formatLocalDate } from '@/lib/format/date';
 import type { User } from '@/types/domain';
 import OwnAttendance from './OwnAttendance';
+import OwnProfileLists from './OwnProfileLists';
 
 /**
  * A member's own profile at `/members/<own id>`. The detailed CRM view (member-details) is
@@ -36,6 +37,7 @@ export default function OwnProfile({ user }: { user: User }) {
             </div>
           ))}
       </dl>
+      <OwnProfileLists user={user} />
       <OwnAttendance />
     </section>
   );

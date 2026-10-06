@@ -558,6 +558,40 @@ describe('route matrix', () => {
     ).toBe(0);
   });
 
+  // PHASE3 fix F10: first and last names are written and returned by the staff and self projections.
+  it('staff and members write optional first and last names; blank clears them', async () => {
+    const as = (role: RoleName) => ({ Authorization: `Bearer ${tokens[role]}` });
+    const created = await request(app).post('/api/users').set(as('leader')).send({
+      name: 'Grace Hopper',
+      firstName: ' Grace ',
+      lastName: 'Hopper',
+      email: 'routes-names@routes.test.local',
+      password: PASSWORD,
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.user).toMatchObject({ firstName: 'Grace', lastName: 'Hopper' });
+    const edited = await request(app)
+      .put(`/api/users/${created.body.user.id}`)
+      .set(as('leader'))
+      .send({ lastName: '  ' });
+    expect(edited.status).toBe(200);
+    expect(edited.body.user).toMatchObject({ firstName: 'Grace', lastName: null });
+    const tooLong = await request(app)
+      .put(`/api/users/${created.body.user.id}`)
+      .set(as('leader'))
+      .send({ firstName: 'x'.repeat(51), lastName: 'a\u0000b' });
+    expect(tooLong.status).toBe(400);
+    expect(Object.keys(tooLong.body.details).sort()).toEqual(['firstName', 'lastName']);
+
+    const own = await request(app)
+      .put(`/api/users/${ids.member}`)
+      .set(as('member'))
+      .send({ firstName: 'Mem', lastName: 'Ber' });
+    expect(own.status).toBe(200);
+    const me = await request(app).get('/api/auth/me').set(as('member'));
+    expect(me.body.user).toMatchObject({ firstName: 'Mem', lastName: 'Ber' });
+  });
+
   it.each(ROUTES)('$route happy path', async (r) => {
     const res = await call(r, r.as);
     expect(res.status, JSON.stringify(res.body)).toBe(r.status);

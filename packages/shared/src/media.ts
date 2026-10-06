@@ -53,6 +53,16 @@ export const youtubeUrl = z
   })
   .transform((url) => canonicalYouTubeUrl(youtubeVideoId(url)!));
 
+// The canonical form of a media tag, as the fixed categories are written ('special-event'):
+// trimmed, lower-case, each run of spaces or hyphens a single hyphen. Free-text tags are allowed
+// and stored in this form, so "Special event" and 'special-event' are the same tag.
+export function normalizeMediaTag(raw: string): string {
+  return raw
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '-');
+}
+
 // The most tags one video may carry.
 export const MAX_MEDIA_TAGS = 20;
 
@@ -65,7 +75,9 @@ export const createMediaInput = z.object({
   tags: z
     .array(requiredText('Each tag', 50, 'Tags cannot be blank'))
     .max(MAX_MEDIA_TAGS, `Add at most ${MAX_MEDIA_TAGS} tags`)
-    .default([]),
+    .default([])
+    // Normalised, then duplicates (same canonical form) dropped, first one kept.
+    .transform((tags) => [...new Set(tags.map(normalizeMediaTag))]),
 });
 
 export const DEFAULT_MEDIA_PAGE_SIZE = 24;

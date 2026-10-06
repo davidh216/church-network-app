@@ -1,3 +1,4 @@
+import { errorId } from '@/lib/forms/validate';
 import type { Role } from '@/types/domain';
 import FieldError from '@/components/ui/FieldError';
 
@@ -11,7 +12,7 @@ interface RoleCheckboxesProps {
 /** The member form's role checkboxes, one per role with its description. */
 export default function RoleCheckboxes({ roles, selected, onToggle, error }: RoleCheckboxesProps) {
   return (
-    <fieldset>
+    <fieldset aria-describedby={error ? errorId('member-roles') : undefined}>
       <legend className="block text-sm font-medium text-gray-700 mb-2">Roles</legend>
       <div className="space-y-2 max-h-32 overflow-y-auto">
         {roles.map((role) => (
@@ -20,6 +21,7 @@ export default function RoleCheckboxes({ roles, selected, onToggle, error }: Rol
               type="checkbox"
               checked={selected.includes(role.id)}
               onChange={() => onToggle(role.id)}
+              aria-invalid={error ? true : undefined}
               className="rounded-sm border-gray-300 text-blue-600 focus:ring-blue-500"
             />
             <span className="ml-2 text-sm text-gray-700 capitalize">

@@ -16,6 +16,13 @@ describe('member display helpers', () => {
     expect(initials('')).toBe('');
   });
 
+  it('uses the first and last names for initials when both are set', () => {
+    expect(initials({ name: 'Ada King', firstName: 'augusta', lastName: 'Lovelace' })).toBe('AL');
+    expect(initials({ name: 'Ada King', firstName: 'Augusta', lastName: null })).toBe('AK');
+    expect(initials({ name: 'Ada King', firstName: ' ', lastName: 'Lovelace' })).toBe('AK');
+    expect(initials({ name: 'Grace Hopper' })).toBe('GH');
+  });
+
   it('labels stages and risk levels in title case', () => {
     expect(stageLabel('core_member')).toBe('Core Member');
     expect(stageLabel('a_b_c')).toBe('A B C');

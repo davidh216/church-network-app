@@ -36,14 +36,23 @@ describe('AddMediaDialog', () => {
     fireEvent.keyDown(tags, { key: 'Enter' });
     fireEvent.change(tags, { target: { value: ' Easter 2026 ' } });
     fireEvent.keyDown(tags, { key: ',' });
+    // Free text is stored in the categories' format, so the label as shown is the same tag.
+    fireEvent.change(tags, { target: { value: 'Special Event' } });
+    fireEvent.keyDown(tags, { key: 'Enter' });
+    fireEvent.change(tags, { target: { value: 'special event' } });
+    fireEvent.keyDown(tags, { key: 'Enter' });
+    expect(tags).toHaveValue('special event');
+    expect(screen.getAllByRole('button', { name: 'Remove Special event' })).toHaveLength(1);
     expect(screen.getByRole('button', { name: 'Remove Sermon' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Remove Easter 2026' })).toBeTruthy();
+    fireEvent.change(tags, { target: { value: '' } });
     await submit();
     expect(mediaApi.createMedia).toHaveBeenCalledWith({
       title: 'New sermon',
       description: '',
       type: 'YOUTUBE_VIDEO',
       url: 'https://www.youtube.com/watch?v=abcdefghijk',
-      tags: ['sermon', 'Easter 2026'],
+      tags: ['sermon', 'easter-2026', 'special-event'],
     });
     expect(onSaved).toHaveBeenCalledTimes(1);
   });

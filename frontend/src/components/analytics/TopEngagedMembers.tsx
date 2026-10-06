@@ -36,7 +36,7 @@ export default function TopEngagedMembers({
                     />
                   ) : (
                     <span className="text-sm font-medium text-gray-600">
-                      {initials(member.user.name)}
+                      {initials(member.user)}
                     </span>
                   )}
                 </div>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { changedLists, profileLists } from './memberForm';
+import { changedLists, changedNames, nameParts, profileLists } from './memberForm';
 
 describe('member form lists', () => {
   it('starts from the stored lists, or empty ones', () => {
@@ -21,5 +21,18 @@ describe('member form lists', () => {
     expect(changedLists({}, { volunteerSkills: [], interests: ['Art'] })).toEqual({
       interests: ['Art'],
     });
+  });
+
+  it('reads the stored name parts and sends only the ones that changed', () => {
+    expect(nameParts(null)).toEqual({ firstName: '', lastName: '' });
+    expect(nameParts({ firstName: 'Ada', lastName: null })).toEqual({
+      firstName: 'Ada',
+      lastName: '',
+    });
+    const member = { firstName: 'Ada', lastName: 'Lovelace' };
+    expect(changedNames(member, { firstName: ' Ada ', lastName: 'Lovelace' })).toEqual({});
+    expect(changedNames(member, { firstName: 'Ada', lastName: '' })).toEqual({ lastName: '' });
+    expect(changedNames({}, { firstName: '', lastName: '' })).toEqual({});
+    expect(changedNames({}, { firstName: 'Grace', lastName: '' })).toEqual({ firstName: 'Grace' });
   });
 });

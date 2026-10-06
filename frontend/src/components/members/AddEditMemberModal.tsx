@@ -1,12 +1,7 @@
 'use client';
 
 import { useState, useEffect, useId, type RefObject } from 'react';
-import {
-  createUserInput,
-  MAX_PROFILE_LIST_ITEMS,
-  MIN_PASSWORD_LENGTH,
-  updateUserInput,
-} from '@embrace/shared';
+import { createUserInput, MIN_PASSWORD_LENGTH, updateUserInput } from '@embrace/shared';
 import {
   apiErrorsFor,
   fieldA11y,
@@ -15,14 +10,21 @@ import {
   type FieldErrors,
 } from '@/lib/forms/validate';
 import Dialog from '@/components/ui/Dialog';
-import ChipInput from '@/components/ui/ChipInput';
 import FieldError from '@/components/ui/FieldError';
 import InlineError from '@/components/ui/InlineError';
 import TextField from '@/components/ui/TextField';
 import { useRoles } from '@/lib/queries/roles';
 import { useCreateUser, useUpdateUser } from '@/lib/queries/users';
-import { changedLists, MEMBER_FORM_FIELDS, profileLists } from '@/lib/members/memberForm';
+import {
+  changedLists,
+  changedNames,
+  MEMBER_FORM_FIELDS,
+  nameParts,
+  profileLists,
+} from '@/lib/members/memberForm';
 import type { Member } from '@/types/domain';
+import MemberNameFields from './MemberNameFields';
+import ProfileListFields from './ProfileListFields';
 import RoleCheckboxes from './RoleCheckboxes';
 
 interface AddEditMemberModalProps {
@@ -44,6 +46,7 @@ export default function AddEditMemberModal({
 }: AddEditMemberModalProps) {
   const [formData, setFormData] = useState({
     name: '',
+    ...nameParts(null),
     email: '',
     phone: '',
     bio: '',
@@ -74,6 +77,7 @@ export default function AddEditMemberModal({
     if (isOpen) {
       setFormData({
         name: member?.name ?? '',
+        ...nameParts(member),
         email: member?.email ?? '',
         phone: member?.phone || '',
         bio: member?.bio || '',
@@ -98,6 +102,7 @@ export default function AddEditMemberModal({
         JSON.stringify(originalRoleIds) !== JSON.stringify([...selectedRoles].sort());
       const checked = validateForm(updateUserInput, {
         name: formData.name,
+        ...changedNames(member, formData),
         phone: formData.phone,
         bio: formData.bio,
         ...changedLists(member, lists),
@@ -174,14 +179,10 @@ export default function AddEditMemberModal({
         )}
 
         <form onSubmit={handleSubmit} noValidate className="space-y-4">
-          <TextField
-            id="member-name"
-            label="Full Name *"
-            value={formData.name}
-            onChange={(name) => setFormData((prev) => ({ ...prev, name }))}
-            error={fieldErrors.name}
-            required
-            placeholder="John Doe"
+          <MemberNameFields
+            values={formData}
+            onChange={(key, value) => setFormData((prev) => ({ ...prev, [key]: value }))}
+            errors={fieldErrors}
           />
           <TextField
             id="member-email"
@@ -235,21 +236,11 @@ export default function AddEditMemberModal({
             <FieldError fieldId="member-bio" message={fieldErrors.bio} />
           </div>
 
-          <ChipInput
-            id="member-skills"
-            label="Volunteer Skills"
-            values={lists.volunteerSkills}
-            onChange={(volunteerSkills) => setLists((prev) => ({ ...prev, volunteerSkills }))}
-            error={fieldErrors.volunteerSkills}
-            maxItems={MAX_PROFILE_LIST_ITEMS}
-          />
-          <ChipInput
-            id="member-interests"
-            label="Interests"
-            values={lists.interests}
-            onChange={(interests) => setLists((prev) => ({ ...prev, interests }))}
-            error={fieldErrors.interests}
-            maxItems={MAX_PROFILE_LIST_ITEMS}
+          <ProfileListFields
+            idPrefix="member"
+            lists={lists}
+            onChange={setLists}
+            errors={fieldErrors}
           />
 
           <RoleCheckboxes

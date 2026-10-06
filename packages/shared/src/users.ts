@@ -9,10 +9,17 @@ export const MAX_PROFILE_LIST_ITEMS = 30;
 const volunteerSkills = labelList('Skills', MAX_PROFILE_LIST_ITEMS);
 const interests = labelList('Interests', MAX_PROFILE_LIST_ITEMS);
 
+// Optional given and family names (the display `name` stays required); blank clears to null.
+export const MAX_PERSON_NAME_PART = 50;
+const firstName = optionalText('First name', MAX_PERSON_NAME_PART);
+const lastName = optionalText('Last name', MAX_PERSON_NAME_PART);
+
 // POST /api/users (staff)
 export const createUserInput = z
   .object({
     name: requiredText('Name', 200),
+    firstName,
+    lastName,
     email: emailAddress,
     password: passwordSchema,
     phone: optionalText('Phone', 50),
@@ -27,6 +34,8 @@ export const createUserInput = z
 // PUT /api/users/:id
 export const updateUserInput = z.object({
   name: requiredText('Name', 200).optional(),
+  firstName,
+  lastName,
   phone: optionalText('Phone', 50),
   bio: optionalText('Bio', 2000),
   volunteerSkills: volunteerSkills.optional(),

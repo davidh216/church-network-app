@@ -58,6 +58,8 @@ export interface User {
   id: string;
   email: string;
   name: string;
+  firstName?: string | null;
+  lastName?: string | null;
   phone?: string | null;
   avatar?: string | null;
   bio?: string | null;
@@ -78,6 +80,9 @@ export interface User {
 export interface Member {
   id: string;
   name: string;
+  /** Staff projections only. */
+  firstName?: string | null;
+  lastName?: string | null;
   email?: string;
   phone?: string | null;
   bio?: string | null;

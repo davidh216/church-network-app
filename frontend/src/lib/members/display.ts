@@ -1,8 +1,22 @@
 /** Labels and colours for members, shared by the member list, profile, search and analytics. */
 import { enumLabel, type MembershipStage, type RiskLevel } from '@embrace/shared';
 
-/** Up to the first letter of each word in a name, upper-cased ("Ada Lovelace" -> "AL"). */
-export function initials(name: string): string {
+/** A person's display name and, where the projection carries them, first and last names. */
+export interface NamedPerson {
+  name: string;
+  firstName?: string | null;
+  lastName?: string | null;
+}
+
+/**
+ * Initials, upper-cased: the first letters of the first and last names when both are set, else
+ * the first letter of each word of the display name ("Ada Lovelace" -> "AL").
+ */
+export function initials(person: NamedPerson | string): string {
+  const { name, firstName, lastName } = typeof person === 'string' ? { name: person } : person;
+  const first = firstName?.trim();
+  const last = lastName?.trim();
+  if (first && last) return `${first[0]}${last[0]}`.toUpperCase();
   return name
     .split(' ')
     .filter(Boolean)

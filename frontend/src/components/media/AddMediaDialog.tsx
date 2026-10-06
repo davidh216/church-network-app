@@ -1,7 +1,7 @@
 'use client';
 
 import { useId, useState, type FormEvent, type RefObject } from 'react';
-import { createMediaInput, MAX_MEDIA_TAGS } from '@embrace/shared';
+import { createMediaInput, MAX_MEDIA_TAGS, normalizeMediaTag } from '@embrace/shared';
 import {
   apiErrorsFor,
   fieldA11y,
@@ -140,6 +140,7 @@ export default function AddMediaDialog({ onClose, onSaved, fallbackFocus }: AddM
             maxItems={MAX_MEDIA_TAGS}
             suggestions={MEDIA_TAGS}
             formatChip={tagLabel}
+            normalize={normalizeMediaTag}
             placeholder="worship, sermon, youth..."
           />
 

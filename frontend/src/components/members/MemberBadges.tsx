@@ -26,7 +26,7 @@ export function MemberAvatar({ member, size }: { member: Member; size: 'sm' | 'm
         <span
           className={size === 'sm' ? 'text-sm font-medium text-gray-600' : 'text-lg text-gray-600'}
         >
-          {initials(member.name)}
+          {initials(member)}
         </span>
       )}
     </div>

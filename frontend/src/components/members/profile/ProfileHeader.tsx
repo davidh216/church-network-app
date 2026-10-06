@@ -28,7 +28,7 @@ export default function ProfileHeader({
               className="w-16 h-16 rounded-full object-cover"
             />
           ) : (
-            <span className="text-2xl text-gray-600">{initials(member.name)}</span>
+            <span className="text-2xl text-gray-600">{initials(member)}</span>
           )}
         </div>
         <div>

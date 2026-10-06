@@ -183,6 +183,8 @@ export async function createUser(
   return prisma.user.create({
     data: {
       name: body.name,
+      firstName: body.firstName ?? null,
+      lastName: body.lastName ?? null,
       email,
       password: await bcrypt.hash(body.password, 10),
       phone: body.phone ?? null,
@@ -248,6 +250,8 @@ export async function updateUser(
     where: { id },
     data: {
       name: body.name,
+      firstName: body.firstName,
+      lastName: body.lastName,
       phone: body.phone,
       bio: body.bio,
       volunteerSkills: body.volunteerSkills,

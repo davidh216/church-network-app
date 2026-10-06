@@ -30,9 +30,10 @@ describe('media tags', () => {
         tags: ['Worship', 'Youth Night'],
       });
     expect(created.status).toBe(201);
-    expect(created.body.media.tags).toEqual(['Worship', 'Youth Night']);
+    // Stored in the categories' format (PHASE3 fix F8): trimmed, lower-case, hyphenated.
+    expect(created.body.media.tags).toEqual(['worship', 'youth-night']);
     const stored = await prisma.media.findUniqueOrThrow({ where: { id: created.body.media.id } });
-    expect(stored.tags).toEqual(['Worship', 'Youth Night']);
+    expect(stored.tags).toEqual(['worship', 'youth-night']);
 
     const titles = async (tag: string) => {
       const res = await request(app)
@@ -46,6 +47,7 @@ describe('media tags', () => {
     };
     expect(await titles('youth night')).toEqual(['Tagged']);
     expect(await titles('WORSHIP')).toEqual(['Tagged']);
+    expect(await titles('YOUTH-NIGHT')).toEqual(['Tagged']);
     expect(await titles('Youth')).toEqual([]);
   });
 });
