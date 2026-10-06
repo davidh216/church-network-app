@@ -216,7 +216,14 @@ describe('services and attendance', () => {
         ['Member', true, true],
         ['Other', false, true],
       ]);
-      expect(Object.keys(res.body.members[0].user).sort()).toEqual(['avatar', 'id', 'name']);
+      // The email tells same-name members apart on the staff-only sheet.
+      expect(Object.keys(res.body.members[0].user).sort()).toEqual([
+        'avatar',
+        'email',
+        'id',
+        'name',
+      ]);
+      expect(res.body.members[0].user.email).toBe('svc-admin@services.test.local');
     });
 
     it('upserts idempotently and leaves members in neither list untouched', async () => {

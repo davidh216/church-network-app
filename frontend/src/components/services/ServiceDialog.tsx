@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useState, type FormEvent, type RefObject } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent, type RefObject } from 'react';
 import { createServiceInput, SERVICE_TYPES, type Service, type ServiceType } from '@embrace/shared';
 import {
   apiErrorsFor,
@@ -11,6 +11,7 @@ import {
 } from '@/lib/forms/validate';
 import { enumOptions } from '@/lib/members/display';
 import { useCreateService, useUpdateService } from '@/lib/queries/services';
+import { changedServiceFields } from '@/lib/services/services';
 import Dialog from '@/components/ui/Dialog';
 import FieldError from '@/components/ui/FieldError';
 
@@ -34,7 +35,9 @@ const TYPE_OPTIONS = enumOptions(SERVICE_TYPES);
 
 /**
  * Staff form for creating or editing a service. A second service of the same type on the same
- * date is refused by the API (409), and its message is shown in the dialog.
+ * date is refused by the API (409), and its message is shown in the dialog. A failed save moves
+ * focus to the first invalid field, or to the error message when no field is at fault. An edit
+ * sends only the fields that changed.
  */
 export default function ServiceDialog({
   service,
@@ -55,31 +58,51 @@ export default function ServiceDialog({
   const updateService = useUpdateService();
   const saving = createService.isPending || updateService.isPending;
   const titleId = useId();
+  const formRef = useRef<HTMLFormElement>(null);
+  const alertRef = useRef<HTMLDivElement>(null);
+  // Counts failed saves; each one moves focus to what needs fixing once the errors render.
+  const [failures, setFailures] = useState(0);
   const heading = service ? 'Edit Service' : 'New Service';
 
   const update = (key: keyof typeof form, value: string) =>
     setForm((prev) => ({ ...prev, [key]: value }));
 
+  useEffect(() => {
+    if (failures === 0) return;
+    const invalid = formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]');
+    (invalid ?? alertRef.current)?.focus();
+  }, [failures]);
+
+  const fail = (errors: FieldErrors, message: string) => {
+    setFieldErrors(errors);
+    setError(message);
+    setFailures((n) => n + 1);
+  };
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    // The full form is valid input for both routes (an edit sends every field).
+    // The full form is valid input for both routes; an edit then sends only what changed.
     const checked = validateForm(createServiceInput, form);
     if (!checked.ok) {
-      setFieldErrors(checked.errors);
-      setError(checked.errors[FORM_ERROR_KEY] ?? '');
+      fail(checked.errors, checked.errors[FORM_ERROR_KEY] ?? '');
       return;
     }
     setFieldErrors({});
     setError('');
+    const changes = service ? changedServiceFields(service, checked.data) : null;
+    if (service && changes && Object.keys(changes).length === 0) {
+      onClose();
+      return;
+    }
     try {
-      const saved = service
-        ? await updateService.mutateAsync({ id: service.id, input: checked.data })
-        : await createService.mutateAsync(checked.data);
+      const saved =
+        service && changes
+          ? await updateService.mutateAsync({ id: service.id, input: changes })
+          : await createService.mutateAsync(checked.data);
       onSaved(saved);
     } catch (err: unknown) {
       const failed = apiErrorsFor(err, FIELDS, 'Failed to save the service');
-      setFieldErrors(failed.fieldErrors);
-      setError(failed.message);
+      fail(failed.fieldErrors, failed.message);
     }
   };
 
@@ -91,14 +114,16 @@ export default function ServiceDialog({
 
       {error && (
         <div
+          ref={alertRef}
           role="alert"
+          tabIndex={-1}
           className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-sm"
         >
           {error}
         </div>
       )}
 
-      <form onSubmit={handleSubmit} noValidate className="space-y-4">
+      <form ref={formRef} onSubmit={handleSubmit} noValidate className="space-y-4">
         <div>
           <label htmlFor="service-date" className={labelClass}>
             Date *

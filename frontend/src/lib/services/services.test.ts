@@ -1,18 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import {
   attendanceBody,
+  changedServiceFields,
   currentMonth,
+  hasUnsavedMarks,
+  markDraft,
+  sharedNames,
+  withoutSaved,
   defaultServiceDate,
   monthBounds,
   monthTitle,
-  presentIds,
   serviceName,
   serviceTitle,
   shiftMonth,
 } from './services';
 
 const member = (id: string, present: boolean, recorded: boolean) => ({
-  user: { id, name: id, avatar: null },
+  user: { id, name: id, email: `${id}@example.com`, avatar: null },
   present,
   recorded,
 });
@@ -51,19 +55,60 @@ describe('service names', () => {
   });
 });
 
-describe('attendanceBody', () => {
-  it('sends checked members present and only previously recorded ones absent', () => {
-    const members = [
-      member('a', true, true),
-      member('b', false, false),
-      member('c', false, true),
-      member('d', true, true),
-    ];
-    expect(presentIds(members)).toEqual(new Set(['a', 'd']));
-    expect(attendanceBody(members, new Set(['a', 'b']))).toEqual({
-      present: ['a', 'b'],
-      absent: ['c', 'd'],
+describe('changedServiceFields', () => {
+  const stored = {
+    date: '2026-10-04',
+    type: 'sunday_service' as const,
+    title: 'Harvest',
+    notes: null,
+  };
+  it('keeps only the changed fields, a cleared one as null', () => {
+    expect(changedServiceFields(stored, { ...stored })).toEqual({});
+    expect(changedServiceFields(stored, { ...stored, title: null, notes: 'Bring food' })).toEqual({
+      title: null,
+      notes: 'Bring food',
     });
-    expect(attendanceBody(members, new Set())).toEqual({ present: [], absent: ['a', 'c', 'd'] });
+    expect(
+      changedServiceFields(stored, { date: '2026-10-11', type: 'bible_study', title: 'Harvest' }),
+    ).toEqual({ date: '2026-10-11', type: 'bible_study' });
+  });
+});
+
+describe('attendance draft', () => {
+  const members = [
+    member('a', true, true),
+    member('b', false, false),
+    member('c', false, true),
+    member('d', true, true),
+  ];
+
+  it('sends only marks that differ from the server sheet', () => {
+    expect(attendanceBody(members, new Map())).toEqual({ present: [], absent: [] });
+    const draft = markDraft(new Map(), ['a', 'b', 'c', 'd'], true);
+    expect(attendanceBody(members, draft)).toEqual({ present: ['b', 'c'], absent: [] });
+    const cleared = markDraft(draft, ['a', 'b'], false);
+    // b was never recorded and is unticked again: not sent, so no absence row appears.
+    expect(attendanceBody(members, cleared)).toEqual({ present: ['c'], absent: ['a'] });
+    expect(hasUnsavedMarks(members, cleared)).toBe(true);
+    expect(hasUnsavedMarks(members, markDraft(new Map(), ['a'], true))).toBe(false);
+    // A mark for someone no longer on the sheet is ignored.
+    expect(attendanceBody(members, markDraft(new Map(), ['zz'], true)).present).toEqual([]);
+  });
+
+  it('drops the saved marks and keeps the ones made during the save', () => {
+    const submitted = markDraft(new Map(), ['b', 'c'], true);
+    const during = markDraft(markDraft(submitted, ['c'], false), ['d'], false);
+    expect([...withoutSaved(during, submitted)]).toEqual([
+      ['c', false],
+      ['d', false],
+    ]);
+    expect(withoutSaved(submitted, submitted).size).toBe(0);
+  });
+
+  it('finds names held by more than one member, ignoring case', () => {
+    const same = [member('x', true, true), member('y', true, true)];
+    same[1]!.user.name = ' X ';
+    expect(sharedNames(same)).toEqual(new Set(['x']));
+    expect(sharedNames(members).size).toBe(0);
   });
 });

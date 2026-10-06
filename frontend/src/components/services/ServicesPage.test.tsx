@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ServicesPage from '@/components/services/ServicesPage';
 import { ApiError } from '@/lib/api/client';
 import { AuthProvider } from '@/lib/auth/AuthProvider';
-import { currentMonth, monthBounds } from '@/lib/services/services';
+import { currentMonth, monthBounds, monthTitle, shiftMonth } from '@/lib/services/services';
 import { makeUser } from '@/test/fixtures';
 import { render, settle } from '@/test/render';
 
@@ -97,6 +97,8 @@ describe('ServicesPage', () => {
     expect(await within(dialog).findByRole('alert')).toHaveTextContent(
       'A service of this type already exists on that date',
     );
+    // No field is at fault, so focus moves to the message.
+    await waitFor(() => expect(within(dialog).getByRole('alert')).toHaveFocus());
 
     servicesApi.createService.mockResolvedValueOnce({ ...service, id: 's2', type: 'bible_study' });
     fireEvent.change(within(dialog).getByLabelText('Type *'), {
@@ -121,7 +123,59 @@ describe('ServicesPage', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Create Service' }));
     expect(await within(dialog).findByText('Enter a valid date')).toBeTruthy();
     expect(within(dialog).getByLabelText('Date *')).toHaveAttribute('aria-invalid', 'true');
+    expect(within(dialog).getByLabelText('Date *')).toHaveAccessibleDescription(
+      'Enter a valid date',
+    );
+    await waitFor(() => expect(within(dialog).getByLabelText('Date *')).toHaveFocus());
     expect(servicesApi.createService).not.toHaveBeenCalled();
+  });
+
+  it('switches to the month of a service created in another month', async () => {
+    const next = shiftMonth(month, 1);
+    const nextFrom = monthBounds(next).from;
+    servicesApi.createService.mockResolvedValueOnce({ ...service, id: 's2', date: nextFrom });
+    await renderAs(['leader']);
+    fireEvent.click(await screen.findByRole('button', { name: 'New Service' }));
+    const dialog = screen.getByRole('dialog', { name: 'New Service' });
+    fireEvent.change(within(dialog).getByLabelText('Date *'), { target: { value: nextFrom } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create Service' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.getByRole('heading', { level: 2, name: monthTitle(next) })).toBeTruthy();
+    await waitFor(() =>
+      expect(servicesApi.listServices.mock.calls.at(-1)![0]).toEqual({
+        ...monthBounds(next),
+        pageSize: 100,
+      }),
+    );
+  });
+
+  it("shows loading, not the previous month's rows, while another month loads", async () => {
+    await renderAs(['leader']);
+    await screen.findByRole('cell', { name: 'Harvest' });
+    let resolve: (value: unknown) => void = () => {};
+    servicesApi.listServices.mockReturnValueOnce(
+      new Promise((r) => {
+        resolve = r;
+      }),
+    );
+    fireEvent.click(screen.getByRole('button', { name: /^Next month/ }));
+    expect(
+      screen.getByRole('heading', { level: 2, name: monthTitle(shiftMonth(month, 1)) }),
+    ).toBeTruthy();
+    expect(await screen.findByRole('status', { name: 'Loading services' })).toBeTruthy();
+    expect(screen.queryByRole('cell', { name: 'Harvest' })).toBeNull();
+    resolve(page([]));
+    expect(await screen.findByText(/^No services in/)).toBeTruthy();
+  });
+
+  it('says which services a capped month leaves out', async () => {
+    servicesApi.listServices.mockResolvedValue({ ...page([service]), total: 120 });
+    await renderAs(['leader']);
+    expect(
+      await screen.findByText(
+        'Showing the latest 1 of 120 services this month; the earliest are not listed.',
+      ),
+    ).toBeTruthy();
   });
 
   it('edits a service', async () => {
@@ -135,12 +189,25 @@ describe('ServicesPage', () => {
     });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save Changes' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    expect(servicesApi.updateService).toHaveBeenCalledWith('s1', {
-      date: from,
-      type: 'sunday_service',
-      title: 'Harvest Sunday',
-      notes: null,
-    });
+    // Only the changed field is sent.
+    expect(servicesApi.updateService).toHaveBeenCalledWith('s1', { title: 'Harvest Sunday' });
+  });
+
+  it('clears a field on edit, and saving without changes sends nothing', async () => {
+    servicesApi.updateService.mockResolvedValue({ ...service, title: null });
+    await renderAs(['leader']);
+    fireEvent.click(await screen.findByRole('button', { name: /^Edit Harvest/ }));
+    let dialog = screen.getByRole('dialog', { name: 'Edit Service' });
+    fireEvent.change(within(dialog).getByLabelText('Title'), { target: { value: '' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save Changes' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(servicesApi.updateService).toHaveBeenCalledWith('s1', { title: null });
+
+    fireEvent.click(await screen.findByRole('button', { name: /^Edit Harvest/ }));
+    dialog = screen.getByRole('dialog', { name: 'Edit Service' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save Changes' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(servicesApi.updateService).toHaveBeenCalledTimes(1);
   });
 
   it('lets an admin delete a service after confirming', async () => {

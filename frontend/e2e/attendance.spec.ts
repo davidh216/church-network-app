@@ -66,7 +66,7 @@ test('staff record attendance, both profiles show it and the refreshed analytics
 
   // Mark the member and the admin present, with the keyboard, then save.
   await page.getByRole('button', { name: new RegExp(`^Attendance for ${SERVICE_TITLE}`) }).click();
-  const sheet = page.getByRole('dialog', { name: 'Attendance' });
+  const sheet = page.getByRole('dialog', { name: new RegExp(`^Attendance: ${SERVICE_TITLE}`) });
   const filter = sheet.getByLabel('Filter members');
   await expect(filter).toBeVisible();
   await expect(sheet.getByRole('checkbox').first()).toBeVisible();

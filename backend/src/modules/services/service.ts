@@ -138,14 +138,15 @@ export async function deleteService(id: string): Promise<void> {
 }
 
 // The attendance sheet: every active member, plus anyone already recorded for this service (so a
-// row is never hidden after an account is deactivated), by name.
+// row is never hidden after an account is deactivated), by name. The email (staff only, like this
+// route) tells members with the same name apart.
 export async function getServiceAttendance(id: string): Promise<ServiceAttendance> {
   const service = await getService(id);
   const [users, rows] = await Promise.all([
     prisma.user.findMany({
       where: { OR: [{ isActive: true }, { attendances: { some: { serviceId: id } } }] },
       orderBy: [{ name: 'asc' }, { id: 'asc' }],
-      select: { id: true, name: true, avatar: true },
+      select: { id: true, name: true, email: true, avatar: true },
     }),
     prisma.attendance.findMany({
       where: { serviceId: id },

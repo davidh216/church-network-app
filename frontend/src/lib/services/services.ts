@@ -1,5 +1,11 @@
 /** Helpers for the `/services` page: month navigation, service names and the attendance save. */
-import type { MarkAttendanceInput, Service, ServiceAttendanceMember } from '@embrace/shared';
+import type {
+  CreateServiceInput,
+  MarkAttendanceInput,
+  Service,
+  ServiceAttendanceMember,
+  UpdateServiceInput,
+} from '@embrace/shared';
 import { formatCalendarDate, localIsoDay } from '@/lib/format/date';
 import { stageLabel } from '@/lib/members/display';
 
@@ -54,23 +60,84 @@ export function serviceName(service: Pick<Service, 'title' | 'type' | 'date'>): 
 }
 
 /**
- * The body of the attendance save: every member checked is present, and a member unchecked is
- * absent only when something was recorded for them before, so saving an untouched sheet adds no
- * absence rows for members nobody marked.
+ * The edit body: only the fields the form changed, so a save does not write back a value someone
+ * else changed meanwhile. A cleared title or notes is sent as null, which clears it.
+ */
+export function changedServiceFields(
+  service: Pick<Service, 'date' | 'type' | 'title' | 'notes'>,
+  values: CreateServiceInput,
+): UpdateServiceInput {
+  const input: UpdateServiceInput = {};
+  if (values.date !== service.date) input.date = values.date;
+  if (values.type !== undefined && values.type !== service.type) input.type = values.type;
+  const title = values.title ?? null;
+  if (title !== service.title) input.title = title;
+  const notes = values.notes ?? null;
+  if (notes !== service.notes) input.notes = notes;
+  return input;
+}
+
+/** The user's own unsaved marks on an attendance sheet: member id -> present. */
+export type AttendanceDraft = ReadonlyMap<string, boolean>;
+
+/** What a member's checkbox shows: the user's own mark, else what the server recorded. */
+export function isMarkedPresent(member: ServiceAttendanceMember, draft: AttendanceDraft): boolean {
+  return draft.get(member.user.id) ?? member.present;
+}
+
+/** The draft with `ids` marked present (`value` true) or not. */
+export function markDraft(draft: AttendanceDraft, ids: readonly string[], value: boolean) {
+  const next = new Map(draft);
+  for (const id of ids) next.set(id, value);
+  return next;
+}
+
+/**
+ * The body of the attendance save: only the user's marks that differ from the sheet the server
+ * sent last (present = ticked, absent = unticked). Members nobody touched are never sent, so a
+ * mark another staff member saved meanwhile is kept, and an untouched member never gains an
+ * absence row.
  */
 export function attendanceBody(
   members: readonly ServiceAttendanceMember[],
-  present: ReadonlySet<string>,
+  draft: AttendanceDraft,
 ): Required<MarkAttendanceInput> {
   const body: Required<MarkAttendanceInput> = { present: [], absent: [] };
-  for (const { user, recorded } of members) {
-    if (present.has(user.id)) body.present.push(user.id);
-    else if (recorded) body.absent.push(user.id);
+  for (const { user, present } of members) {
+    const mark = draft.get(user.id);
+    if (mark === undefined || mark === present) continue;
+    (mark ? body.present : body.absent).push(user.id);
   }
   return body;
 }
 
-/** The members recorded present, as a set of ids (the sheet's starting state). */
-export function presentIds(members: readonly ServiceAttendanceMember[]): Set<string> {
-  return new Set(members.filter((m) => m.present).map((m) => m.user.id));
+/** True when the draft holds a mark the server does not have yet. */
+export function hasUnsavedMarks(
+  members: readonly ServiceAttendanceMember[],
+  draft: AttendanceDraft,
+): boolean {
+  const body = attendanceBody(members, draft);
+  return body.present.length + body.absent.length > 0;
+}
+
+/**
+ * The draft after a save that started from `submitted`: marks still as they were submitted are
+ * dropped (the refetched sheet now shows them), marks changed while the save was in flight stay.
+ */
+export function withoutSaved(draft: AttendanceDraft, submitted: AttendanceDraft) {
+  const next = new Map(draft);
+  for (const [id, value] of submitted) if (next.get(id) === value) next.delete(id);
+  return next;
+}
+
+/** Lower-cased names held by more than one member of the sheet. */
+export function sharedNames(members: readonly ServiceAttendanceMember[]): Set<string> {
+  const seen = new Set<string>();
+  const shared = new Set<string>();
+  for (const { user } of members) {
+    const key = user.name.trim().toLowerCase();
+    if (seen.has(key)) shared.add(key);
+    seen.add(key);
+  }
+  return shared;
 }

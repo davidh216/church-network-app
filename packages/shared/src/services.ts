@@ -119,7 +119,8 @@ export interface Service {
 }
 
 export interface ServiceAttendanceMember {
-  user: { id: string; name: string; avatar: string | null };
+  /** The email tells members with the same name apart (the sheet is staff only). */
+  user: { id: string; name: string; email: string; avatar: string | null };
   present: boolean;
   /** False when nothing was recorded for this member yet (shown as not present). */
   recorded: boolean;

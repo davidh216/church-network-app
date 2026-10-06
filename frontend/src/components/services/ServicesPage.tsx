@@ -46,7 +46,8 @@ export default function ServicesPage() {
         onRetry={() => void refetch()}
       />
     );
-  } else if (isPending || !data) {
+  } else if (isPending || !data || isPlaceholderData) {
+    // While another month loads, its heading is already shown: never the previous month's rows.
     body = <Skeleton rows={3} label="Loading services" />;
   } else if (data.services.length === 0) {
     body = <p className="px-4 py-6 text-sm text-gray-600">No services in {title}.</p>;
@@ -62,7 +63,8 @@ export default function ServicesPage() {
         />
         {data.total > data.services.length && (
           <p className="px-4 py-3 text-sm text-gray-600">
-            Showing the first {data.services.length} of {data.total} services this month.
+            Showing the latest {data.services.length} of {data.total} services this month; the
+            earliest are not listed.
           </p>
         )}
       </>
