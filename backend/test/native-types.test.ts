@@ -235,4 +235,66 @@ describe('input the database cannot store', () => {
         .send(veryDeep),
     );
   });
+
+  // A lone UTF-16 surrogate (JSON "\ud800") cannot be encoded as UTF-8, so the database driver
+  // would fail with a 500; the shared text primitives reject it like U+0000.
+  it('anyone gets 400 for a lone surrogate in text, list entries, search values and metadata', async () => {
+    const LONE = '\ud800';
+    const query = {
+      conditions: [{ field: 'name', operator: 'contains', value: LONE }],
+      logic: 'AND',
+    };
+    expectValidation(
+      await request(app)
+        .post('/api/users/saved-searches')
+        .set(bearer(member))
+        .send({ name: 'Bad', query }),
+    );
+    expectValidation(
+      await request(app)
+        .post('/api/users/saved-searches')
+        .set(bearer(member))
+        .send({
+          name: `x${LONE}`,
+          query: { ...query, conditions: [{ ...query.conditions[0], value: 'a' }] },
+        }),
+    );
+    for (const body of [{ volunteerSkills: [LONE] }, { interests: [`a${LONE}`] }, { bio: LONE }])
+      expectValidation(
+        await request(app).put(`/api/users/${memberId}`).set(bearer(member)).send(body),
+      );
+    expectValidation(
+      await request(app)
+        .post(`/api/analytics/members/${memberId}/activities`)
+        .set(bearer(admin))
+        .send({ activityType: 'other', metadata: { a: LONE } }),
+    );
+    expectValidation(
+      await request(app)
+        .post(`/api/analytics/members/${memberId}/interactions`)
+        .set(bearer(admin))
+        .send({ interactionType: 'call_made', channel: 'phone', metadata: { [LONE]: 1 } }),
+    );
+    expectValidation(
+      await request(app)
+        .post('/api/services')
+        .set(bearer(admin))
+        .send({ date: '2026-10-04', type: 'sunday_service', title: LONE }),
+    );
+    expectValidation(
+      await request(app)
+        .post(`/api/member-details/${memberId}/notes`)
+        .set(bearer(admin))
+        .send({ content: LONE }),
+    );
+    expect(await prisma.service.count()).toBe(0);
+    expect(await prisma.memberNote.count()).toBe(0);
+    // A valid surrogate pair (an emoji) is ordinary text and is stored.
+    const ok = await request(app)
+      .put(`/api/users/${memberId}`)
+      .set(bearer(member))
+      .send({ interests: ['music \u{1F3B5}'] });
+    expect(ok.status).toBe(200);
+    expect(ok.body.user.interests).toEqual(['music \u{1F3B5}']);
+  });
 });

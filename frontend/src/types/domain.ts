@@ -130,7 +130,7 @@ interface SavedSearchBase {
   isPublic: boolean;
   usageCount?: number;
   lastUsed?: string | null;
-  /** Who saved it (list responses only). */
+  /** Who saved it (list responses to staff only; members never get it). */
   createdBy?: { id: string; name: string };
 }
 

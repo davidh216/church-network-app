@@ -192,6 +192,43 @@ describe('authorization', () => {
       expect(upd.body.user.phone).toBeNull();
     });
 
+    it('never sees their own engagement, stage or risk; staff do', async () => {
+      await prisma.memberEngagement.upsert({
+        where: { userId: memberId },
+        create: { userId: memberId, membershipStage: 'at_risk', riskLevel: 'high' },
+        update: { membershipStage: 'at_risk', riskLevel: 'high' },
+      });
+      const crmKeys = ['engagement', 'membershipStage', 'riskLevel', 'notes', 'password'];
+      const self = await request(app).get(`/api/users/${memberId}`).set(bearer(memberToken));
+      expect(self.status).toBe(200);
+      const upd = await request(app)
+        .put(`/api/users/${memberId}`)
+        .set(bearer(memberToken))
+        .send({ interests: ['music'] });
+      expect(upd.status).toBe(200);
+      expect(upd.body.user.interests).toEqual(['music']);
+      const me = await request(app).get('/api/auth/me').set(bearer(memberToken));
+      for (const body of [self.body.user, upd.body.user]) {
+        for (const key of crmKeys) expect(body).not.toHaveProperty(key);
+        expect(Object.keys(body).sort()).toEqual(Object.keys(me.body.user).sort());
+      }
+      expect(JSON.stringify([self.body, upd.body])).not.toMatch(/at_risk|"high"/);
+
+      const asLeader = await request(app).get(`/api/users/${memberId}`).set(bearer(leaderToken));
+      expect(asLeader.body.user.engagement).toMatchObject({
+        membershipStage: 'at_risk',
+        riskLevel: 'high',
+      });
+      const leaderSelf = await request(app)
+        .put(`/api/users/${leaderId}`)
+        .set(bearer(leaderToken))
+        .send({ interests: ['music'] });
+      expect(leaderSelf.status).toBe(200);
+      expect(leaderSelf.body.user).toHaveProperty('engagement');
+      const leaderOwn = await request(app).get(`/api/users/${leaderId}`).set(bearer(leaderToken));
+      expect(leaderOwn.body.user).toHaveProperty('engagement');
+    });
+
     it('stores a whitespace-only phone or bio as null', async () => {
       await prisma.user.update({
         where: { id: memberId },

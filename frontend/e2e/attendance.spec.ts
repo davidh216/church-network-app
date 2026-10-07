@@ -12,9 +12,11 @@ import { expectNoSeriousA11yViolations } from './axe';
 
 // The attendance flow (PHASE3_SPECS.md D8): staff create a service and mark two members present,
 // both profiles show it, and the engagement refresh job brings it into the analytics. The admin
-// then deletes the service (with its attendance) in the UI, and the scores are refreshed again, so
-// church_dev ends as it started. Service dates are calendar days and the API counts UTC days, so
-// the browser runs in UTC too.
+// then deletes the service (with its attendance) in the UI and the scores are refreshed again, so
+// no services or attendance are left behind. church_dev does not end as it started: each refresh
+// recalculates every account's stored engagement row and creates or updates this month's
+// engagement snapshot for every account. Service dates are calendar days and the API counts UTC
+// days, so the browser runs in UTC too.
 test.use({ timezoneId: 'UTC' });
 // Two sign-ins, a refresh job and a delete on dev servers that compile each route on first use.
 test.setTimeout(120_000);

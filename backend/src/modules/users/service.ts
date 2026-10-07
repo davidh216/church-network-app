@@ -10,10 +10,10 @@ import type {
 import { prisma } from '../../lib/prisma';
 import { HttpError } from '../../lib/http-error';
 import { assertPasswordNotEmail } from '../../lib/password-policy';
-import { isAdmin, STAFF } from '../../middleware/auth';
+import { isAdmin, isStaff, STAFF } from '../../middleware/auth';
 import type { AuthenticatedUser } from '../../types/auth';
 import { listWhere, orderBy, paging, searchWhere } from './search';
-import { directorySelect, staffSelect } from './selects';
+import { directorySelect, selfSelect, staffSelect } from './selects';
 
 const STAFF_ROLE_NAMES: readonly string[] = STAFF;
 
@@ -200,14 +200,25 @@ export async function createUser(
   });
 }
 
-// `full` (staff or the user themself) returns the staff projection; others get the
-// directory projection, and inactive accounts are hidden from them.
-export async function getUser(id: string, full: boolean) {
+// Who is reading a user: staff get the staff projection (engagement included) for every
+// account, themselves too; a non-staff user reading their own record gets the self
+// projection (what /api/auth/me returns, no CRM data); everyone else gets the directory
+// projection, and inactive accounts are hidden from them.
+export type UserAudience = 'staff' | 'self' | 'directory';
+
+const audienceSelect = {
+  staff: staffSelect,
+  self: selfSelect,
+  directory: directorySelect,
+} as const;
+
+export async function getUser(id: string, audience: UserAudience) {
   const user = await prisma.user.findUnique({
     where: { id },
-    select: full ? staffSelect : directorySelect,
+    select: audienceSelect[audience],
   });
-  if (!user || (!full && !user.isActive)) throw new HttpError(404, 'User not found');
+  if (!user || (audience === 'directory' && !user.isActive))
+    throw new HttpError(404, 'User not found');
   return user;
 }
 
@@ -261,7 +272,8 @@ export async function updateUser(
         ? { deleteMany: {}, create: roleIds.map((roleId) => ({ roleId })) }
         : undefined,
     },
-    select: staffSelect,
+    // A non-staff requester can only update themself and gets the self projection back.
+    select: isStaff(requester) ? staffSelect : selfSelect,
   });
 }
 

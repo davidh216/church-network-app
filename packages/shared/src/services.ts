@@ -12,8 +12,24 @@ import {
 // Services and attendance (PHASE3_SPECS.md 1.4). A service is held once per date and type;
 // attendance rows name a service and a member.
 
-// A calendar date as `YYYY-MM-DD` (services are dated by day, with no time or time zone).
-export const serviceDate = z.iso.date({ error: DATE_MESSAGE });
+// A calendar date as `YYYY-MM-DD` (services are dated by day, with no time or time zone), in
+// the years MIN_SERVICE_YEAR to MAX_SERVICE_YEAR inclusive, so a half-typed year such as 0026
+// cannot create a service nobody will find.
+export const MIN_SERVICE_YEAR = 1900;
+export const MAX_SERVICE_YEAR = 2100;
+export const SERVICE_DATE_RANGE_MESSAGE = `Enter a date between ${MIN_SERVICE_YEAR} and ${MAX_SERVICE_YEAR}`;
+const YEAR = /^(\d{4})-/;
+
+export const serviceDate = z.iso.date({ error: DATE_MESSAGE }).refine(
+  (day) => {
+    // A string that is not a date at all already fails with DATE_MESSAGE alone.
+    const year = YEAR.exec(day)?.[1];
+    return (
+      year === undefined || (Number(year) >= MIN_SERVICE_YEAR && Number(year) <= MAX_SERVICE_YEAR)
+    );
+  },
+  { error: SERVICE_DATE_RANGE_MESSAGE },
+);
 
 // POST /api/services (staff)
 export const createServiceInput = z.object({

@@ -62,8 +62,12 @@ router.post('/', requireRole(...STAFF), validate({ body: createUserInput }), asy
 
 router.get('/:id', validate({ params: idParams }), async (req, res) => {
   const requester = req.user!;
-  const full = isStaff(requester) || requester.id === req.params.id;
-  res.json({ success: true, user: await users.getUser(req.params.id, full) });
+  const audience = isStaff(requester)
+    ? 'staff'
+    : requester.id === req.params.id
+      ? 'self'
+      : 'directory';
+  res.json({ success: true, user: await users.getUser(req.params.id, audience) });
 });
 
 // Members edit their own name/phone/bio, skills and interests. Staff may also activate/deactivate members.

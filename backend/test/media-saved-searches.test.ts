@@ -231,5 +231,44 @@ describe('media and saved searches (S3)', () => {
         (await prisma.savedSearch.findUniqueOrThrow({ where: { id: stale.id } })).usageCount,
       ).toBe(1);
     });
+
+    it('names the author of each listed search to staff only, deactivated authors included', async () => {
+      const gone = await createUser({
+        email: 's3-gone@s3.test.local',
+        role: 'leader',
+        name: 'Deactivated Leader',
+        isActive: false,
+      });
+      const shared = await prisma.savedSearch.create({
+        data: { name: 'Shared by gone', query, isPublic: true, createdById: gone.id },
+      });
+      const own = await save({ name: 'Mine for authors', query });
+      expect(own.body.search).not.toHaveProperty('createdBy');
+
+      const asMember = await request(app).get('/api/users/saved-searches').set(bearer(member));
+      expect(asMember.status).toBe(200);
+      const memberIds = (asMember.body.searches as { id: string }[]).map((s) => s.id);
+      expect(memberIds).toEqual(expect.arrayContaining([shared.id, own.body.search.id]));
+      for (const search of asMember.body.searches) expect(search).not.toHaveProperty('createdBy');
+      expect(JSON.stringify(asMember.body)).not.toContain('Deactivated Leader');
+
+      const asStaff = await request(app).get('/api/users/saved-searches').set(bearer(staff));
+      const byId = new Map(
+        (asStaff.body.searches as { id: string }[]).map((s) => [s.id, s] as const),
+      );
+      expect(byId.get(shared.id)).toMatchObject({
+        createdBy: { id: gone.id, name: 'Deactivated Leader' },
+      });
+      await prisma.savedSearch.update({
+        where: { id: own.body.search.id },
+        data: { isPublic: true },
+      });
+      const again = await request(app).get('/api/users/saved-searches').set(bearer(staff));
+      expect(
+        (again.body.searches as { id: string; createdBy?: { id: string } }[]).find(
+          (s) => s.id === own.body.search.id,
+        )?.createdBy,
+      ).toEqual({ id: memberId, name: 's3-member' });
+    });
   });
 });

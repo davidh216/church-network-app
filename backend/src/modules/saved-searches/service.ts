@@ -3,7 +3,7 @@ import type { z } from 'zod';
 import { searchQuery, type createSavedSearchInput } from '@embrace/shared';
 import { prisma } from '../../lib/prisma';
 import { HttpError } from '../../lib/http-error';
-import { isAdmin } from '../../middleware/auth';
+import { isAdmin, isStaff } from '../../middleware/auth';
 import type { AuthenticatedUser } from '../../types/auth';
 
 // Stored queries are validated again on load: one that no longer matches `searchQuery` (written
@@ -14,7 +14,8 @@ function loadQuery(stored: Prisma.JsonValue) {
   return parsed.success ? { query: parsed.data, invalid: false } : { query: stored, invalid: true };
 }
 
-// Who saved a search (public searches are shared, so the list names their author).
+// Who saved a search: staff see the author of each listed search; members never do (the list
+// would otherwise name the authors of public searches, deactivated accounts included).
 const withCreator = {
   createdBy: { select: { id: true, name: true } },
 } satisfies Prisma.SavedSearchInclude;
@@ -33,12 +34,13 @@ function format(s: SavedSearch & { createdBy?: { id: string; name: string } }) {
   };
 }
 
-// The caller's own searches plus every public one, most recently used first.
-export async function listSavedSearches(userId: string) {
+// The caller's own searches plus every public one, most recently used first. `createdBy` is
+// included only for a staff caller.
+export async function listSavedSearches(viewer: AuthenticatedUser) {
   const searches = await prisma.savedSearch.findMany({
-    where: { OR: [{ createdById: userId }, { isPublic: true }] },
+    where: { OR: [{ createdById: viewer.id }, { isPublic: true }] },
     orderBy: [{ lastUsed: 'desc' }, { createdAt: 'desc' }],
-    include: withCreator,
+    ...(isStaff(viewer) ? { include: withCreator } : {}),
   });
   return searches.map(format);
 }

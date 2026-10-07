@@ -100,3 +100,42 @@ describe('metadata', () => {
     ).toBe(true);
   });
 });
+
+describe('lone UTF-16 surrogates in free text', () => {
+  const HIGH = '\ud800';
+  const LOW = '\udc00';
+  const EMOJI = '\u{1F600}'; // a valid surrogate pair
+
+  it('are rejected in required and optional text fields like U+0000', () => {
+    expect(messages(updateUserInput.safeParse({ name: `A${HIGH}` }))).toEqual([
+      'Name contains an invalid character',
+    ]);
+    expect(updateUserInput.safeParse({ bio: LOW }).success).toBe(false);
+    expect(updateUserInput.safeParse({ bio: `${LOW}${HIGH}` }).success).toBe(false);
+    expect(updateUserInput.safeParse({ name: `Ann ${EMOJI}`, bio: EMOJI }).success).toBe(true);
+  });
+
+  it('are rejected in list entries', () => {
+    expect(updateUserInput.safeParse({ volunteerSkills: [HIGH] }).success).toBe(false);
+    expect(updateUserInput.safeParse({ interests: [`a${LOW}`] }).success).toBe(false);
+    expect(updateUserInput.safeParse({ interests: [`a${EMOJI}`] }).success).toBe(true);
+  });
+
+  it('are rejected in saved-search names and condition values', () => {
+    const condition = { field: 'name', operator: 'contains', value: 'a' };
+    const ok = { name: 'Mine', query: { conditions: [condition], logic: 'AND' } };
+    expect(createSavedSearchInput.safeParse({ ...ok, name: `M${HIGH}` }).success).toBe(false);
+    const bad = createSavedSearchInput.safeParse({
+      ...ok,
+      query: { ...ok.query, conditions: [{ ...condition, value: HIGH }] },
+    });
+    expect(messages(bad)).toEqual(['The value contains an invalid character']);
+  });
+
+  it('are rejected in metadata keys and string values at any level', () => {
+    expect(metadataProblem({ a: HIGH })).toBe(METADATA_INVALID_CHARACTER);
+    expect(metadataProblem({ [HIGH]: 1 })).toBe(METADATA_INVALID_CHARACTER);
+    expect(metadataProblem({ a: [{ b: ['ok', `x${LOW}`] }] })).toBe(METADATA_INVALID_CHARACTER);
+    expect(metadataProblem({ [EMOJI]: EMOJI })).toBeNull();
+  });
+});
