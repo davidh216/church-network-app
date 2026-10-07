@@ -85,7 +85,7 @@ Engagement tiles and profile show three components; stage and risk labels from s
 
 ## 3. Verification by the planner
 1. After D1 to D6: root checks, drift check, migration test against a Phase 2 database, adversarial review (data integrity, security, contract), fixes, push.
-2. After D7 to D8: root checks plus Playwright with axe, review (accessibility, regressions, spec compliance), fixes, gameplan update, push, PR #4 into `main`.
+2. After D7 to D8: root checks plus Playwright with axe, review (accessibility, regressions, spec compliance), fixes, gameplan update, push, PR into `main` (opened as #9).
 
 ## 4. Decisions (taken 2026-10-05: all recommendations accepted)
 | Id | Decision | Options | Recommendation |
@@ -117,7 +117,7 @@ D1 to D6 were implemented on `modernize/phase-3` and verified by the planner (ro
   - Components are whole numbers, and `engagementScore` is computed from them.
   - The job refreshes every account, inactive ones included, and keeps the status of the last 20 jobs in memory.
   - A member deleted during a run counts as skipped.
-  - The API waits for a running job on shutdown.
+  - On shutdown the API waits up to 8 seconds for a running job.
   - `atRiskMembers` counts high-risk active accounts.
 - **Timeline and member details (D1, D5).**
   - Timeline items carry `dateOnly`, and calendar dates render in UTC.
@@ -164,7 +164,7 @@ D7 ran as two items: D7a covered the engagement, profile, edit form and dashboar
   - The attendance tab shows a busy state while it reloads.
   - The services tile offers Retry when its request fails.
 - **E2E.**
-  - The attendance flow picks a free Sunday within the last 14 days. It checks the refreshed scores on the member's Church Info tab against the trends snapshot.
+  - The attendance flow picks the most recent day within the last 14 days that has no Sunday service. It checks the refreshed scores on the member's Church Info tab against the trends snapshot.
   - It runs axe on Church Info and on the delete dialog, and deletes the service through the UI.
   - The suite passes twice in a row and leaves no services or attendance behind.
 - **Migration test.** The whole-chain test pins the checksums of the two Phase 2 migrations and compares the enum labels.
@@ -173,3 +173,32 @@ D7 ran as two items: D7a covered the engagement, profile, edit form and dashboar
 - **Month in component state.** The month shown on `/services` is not in the URL.
 - **100 services per month.** A month lists at most 100 services, with a note saying so.
 - **2000 members per save.** Marking more than 2000 never-recorded members present in one save is refused by the API's batch limit.
+
+## 8. Final pre-merge review (2026-10-07)
+A last five-lens review of the whole PR on its final head covered deploy and operations, security, migrations, docs accuracy and Phase 1 and 2 regressions, with a verifier per finding. It confirmed 44 findings and refuted 2, none blocking.
+
+### 8.1 Rulings applied in code
+- **H1 No-admin stop.** The relations migration still stops when notes point at a deleted author and there is no admin, and its message now gives the full recovery: an admin, `prisma migrate resolve --rolled-back`, deploy again.
+- **H2 to H7 Migrations.**
+  - List values that do not convert are recorded in `phase3_archive.value_changes`.
+  - The family pair collapse prefers an active row and never revives an inactive relationship.
+  - Enum normalisation trims every whitespace character.
+  - Engagement archive rows carry the userId.
+  - Legacy media tags are normalised to the tag form.
+  - The original values of every merged row are archived.
+- **H8 Self projection.** Members reading or updating their own record get the self projection, without engagement, stage or risk.
+- **H9 Unicode.** Text inputs reject lone UTF-16 surrogates like U+0000.
+- **H10 Saved searches.** The saved-search list shows its creator to staff only.
+- **H11 Service dates.** Service dates are limited to the years 1900 to 2100.
+- **H12 CI naming.** The CI end-to-end job and the attendance spec comments describe what they really do.
+
+### 8.2 Accepted and recorded
+- **Active accounts only.** `GET /api/analytics/members` counts active accounts only for every figure: the totals, the distributions, the averages and the top-engaged list.
+- **Month definitions.** "New this month" uses the UTC month, from the server. "Services this month" uses the viewer's local month, which matches the services page.
+- **Free-text meeting day.** `Group.meetingDay` stays free text.
+- **Tag search.** Media tag search collects matching ids in SQL first. This is fine at a church library's size.
+- **Refresh CLI configuration.** The CLI loads the full API configuration, `JWT_SECRET` included, so it behaves like the server.
+- **Docker images.** CI does not build the images. That belongs to Phase 4, the platform upgrades.
+- **Single API instance.** The refresh job status is kept in memory, so the API runs as one instance. The README says so.
+- **Groups and interactions.** Group memberships and interactions cannot be recorded in the app yet. Until those Phase 5 features arrive, the community score is 0 and communication is 50 for most members. The README says so.
+
