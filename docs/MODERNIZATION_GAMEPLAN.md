@@ -246,11 +246,11 @@ Goal: a schema that means what the UI says and analytics computed from real data
 
 Exit criteria: migrations apply on a database holding Phase 2 data and on Postgres in CI with no drift; every stage and risk rule has a test that triggers it; analytics tests assert scores from seeded services and attendance; no JSON-string column or stringly-typed enum column remains; all root checks and Playwright with axe green; Phase 3 PR into `main`.
 
-Verified 2026-10-06 on `modernize/phase-3`. From the root, these all pass:
+Verified 2026-10-07 (after the final review fixes) on `modernize/phase-3`. From the root, these all pass:
 - `npm run typecheck`
 - `npm run lint`, with jsx-a11y and max-lines as errors and zero warnings
 - `npm run format:check`
-- `npm test`: 132 shared, 627 backend against PostgreSQL (including per-migration fixtures and a whole-chain test through `prisma migrate deploy`), and 462 frontend tests run in the America/Los_Angeles time zone
+- `npm test`: 137 shared, 634 backend against PostgreSQL (including per-migration fixtures and a whole-chain test through `prisma migrate deploy`), and 462 frontend tests run in the America/Los_Angeles time zone
 - `npm run build`
 - `prisma migrate diff --exit-code`, which finds no drift
 - `docker compose config` and actionlint
