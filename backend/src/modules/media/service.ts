@@ -24,8 +24,12 @@ function withVideoId<T extends { url: string }>(media: T): T & { videoId: string
 // normalised on create, legacy ones by the 20261006030000 migration), so the query is put in that
 // form too and either spelling matches: 'Youth Night' and 'youth-night' find 'youth-night'.
 async function mediaIdsWithTag(tag: string): Promise<string[]> {
+  // Stored tags are in the tag form; the case-insensitive comparison also finds a legacy tag the
+  // migration could not normalise exactly as JavaScript does (some Unicode case rules).
   const rows = await prisma.$queryRaw<{ id: string }[]>`
-    SELECT "id" FROM "media" WHERE ${normalizeMediaTag(tag)} = ANY ("tags")`;
+    SELECT "id" FROM "media"
+     WHERE ${normalizeMediaTag(tag)} = ANY ("tags")
+        OR EXISTS (SELECT 1 FROM unnest("tags") AS t WHERE lower(t) = lower(${tag.trim()}))`;
   return rows.map((row) => row.id);
 }
 

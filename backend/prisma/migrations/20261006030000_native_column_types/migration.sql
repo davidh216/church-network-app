@@ -101,8 +101,13 @@ LANGUAGE sql IMMUTABLE AS $$
   FROM (
     SELECT t.tag, min(t.ordinality) AS first_at
     FROM (
-      SELECT regexp_replace(lower(regexp_replace(e.value, '^[[:space:]]+|[[:space:]]+$', '', 'g')),
-                            '[[:space:]-]+', '-', 'g') AS tag, e.ordinality
+      -- The whitespace class matches JavaScript's \s (no-break and other Unicode spaces), like
+      -- normalizeMediaTag in @embrace/shared.
+      SELECT regexp_replace(
+               lower(regexp_replace(e.value,
+                 E'^[[:space:]\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF]+|[[:space:]\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF]+$',
+                 '', 'g')),
+               E'[[:space:]\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF-]+', '-', 'g') AS tag, e.ordinality
       FROM unnest(phase3_text_array(raw)) WITH ORDINALITY AS e(value, ordinality)
     ) AS t
     WHERE t.tag <> ''

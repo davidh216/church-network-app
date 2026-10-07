@@ -763,8 +763,10 @@ describe('20261006020000_relations_keys_indexes (D3) without an admin', () => {
 /** JSON text nested `depth` objects deep: {"a":{"a":...1...}}. */
 const nestedJson = (depth: number) => `${'{"a":'.repeat(depth)}1${'}'.repeat(depth)}`;
 
-/** Free-text tags a Phase 2 API client could store: case, padding, a tab, runs of spaces. */
-const LEGACY_TAGS = '["Special Event","  YOUTH ","special-event","Youth\\tNight","youth  -night"]';
+/** Free-text tags a Phase 2 API client could store: case, padding, a tab, runs of spaces, and
+ *  Unicode spaces (no-break, narrow no-break, a byte-order mark) that JavaScript's \\s also trims. */
+const LEGACY_TAGS =
+  '["Special Event","  YOUTH ","special-event","Youth\\tNight","youth  -night","\\u00a0Choir\\u202fNight\\ufeff"]';
 
 describe('20261006030000_native_column_types (D4)', () => {
   const schema = 'fixture_d4_native_types';
@@ -868,14 +870,14 @@ describe('20261006030000_native_column_types (D4)', () => {
       m1: ['worship', 'youth'],
       m2: [],
       m3: [],
-      m4: ['special-event', 'youth', 'youth-night'],
+      m4: ['special-event', 'youth', 'youth-night', 'choir-night'],
     });
   });
 
   it('records every list value the conversion did not carry over whole, and every normalised tag list', async () => {
     expect(await valueChanges(schema)).toEqual([
       'media.tags:m2 [worship -> {}',
-      `media.tags:m4 ${LEGACY_TAGS} -> {special-event,youth,youth-night}`,
+      `media.tags:m4 ${LEGACY_TAGS} -> {special-event,youth,youth-night,choir-night}`,
       'roles.permissions:r2 ["members:read", " media:write ", 7, null, "", {"a": 1}] -> {members:read,media:write,7}',
       'roles.permissions:r3 not json -> {}',
       'roles.permissions:r4 {"read": true} -> {}',

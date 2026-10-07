@@ -77,6 +77,24 @@ describe('media search (postgres, case-insensitive)', () => {
     expect(await titles('tag=YOUTH')).toEqual(['Youth night']);
   });
 
+  it('still finds a legacy tag stored outside the tag form, ignoring case', async () => {
+    const legacy = await prisma.media.create({
+      data: {
+        title: 'Legacy tagged',
+        type: 'YOUTUBE_VIDEO',
+        url: 'https://youtu.be/legacy00001',
+        tags: ['ΣΑΣ Night'],
+        isPublic: true,
+        isApproved: true,
+      },
+    });
+    try {
+      expect(await titles('tag=%CE%A3%CE%91%CE%A3%20night')).toEqual(['Legacy tagged']);
+    } finally {
+      await prisma.media.delete({ where: { id: legacy.id } });
+    }
+  });
+
   it('returns everything without filters', async () => {
     expect(await titles('')).toEqual(['Sunday Worship Service', 'Youth night']);
   });
