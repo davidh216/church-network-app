@@ -14,7 +14,9 @@
 --   one: the oldest row (by createdAt, then id) is kept, it is present if any collapsed row was,
 --   and its notes become the distinct non-blank notes of the collapsed rows, oldest first, joined
 --   by a newline. Every deleted duplicate is first copied whole (as JSON) into
---   phase3_archive.attendance and its id is listed by RAISE NOTICE. No other row is deleted.
+--   phase3_archive.attendance and its id is listed by RAISE NOTICE, and where the merge changes
+--   the kept row's present or notes, its original value is recorded in
+--   phase3_archive.value_changes ('kept row before merge ...'). No other row is deleted.
 --   recordedById starts NULL for every legacy row.
 --
 -- Audit trail: the schema phase3_archive is outside Prisma's "public" schema (no drift) and can be
@@ -61,6 +63,17 @@ CREATE TABLE IF NOT EXISTS "phase3_archive"."attendance" (
   "reason" TEXT NOT NULL,
   "archivedAt" TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+CREATE TABLE IF NOT EXISTS "phase3_archive"."value_changes" (
+  "sourceSchema" TEXT NOT NULL,
+  "tableName" TEXT NOT NULL,
+  "rowId" TEXT NOT NULL,
+  "columnName" TEXT NOT NULL,
+  "oldValue" TEXT,
+  "newValue" TEXT,
+  "migration" TEXT NOT NULL,
+  "reason" TEXT NOT NULL,
+  "archivedAt" TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 
 DO $$
 DECLARE
@@ -84,6 +97,15 @@ BEGIN
              'collapsed into attendance row ' || r.kept_id || ' (same member and service day)'
       FROM "attendance" AS a JOIN "phase3_attendance_ranked" AS r ON r."id" = a."id" AND r.rn > 1;
 
+    -- The kept rows of a collapse as they were, to record what the merge below changes.
+    CREATE TEMP TABLE "phase3_attendance_kept" ON COMMIT DROP AS
+    SELECT a."id", a."present", a."notes"
+    FROM "attendance" AS a JOIN "phase3_attendance_ranked" AS r ON r."id" = a."id" AND r.rn = 1
+    WHERE EXISTS (
+      SELECT 1 FROM "phase3_attendance_ranked" AS dup
+      WHERE dup."userId" = r."userId" AND dup."serviceId" = r."serviceId" AND dup.rn > 1
+    );
+
     UPDATE "attendance" AS a
     SET "present" = r.any_present,
         "notes" = (
@@ -103,8 +125,20 @@ BEGIN
         WHERE dup."userId" = r."userId" AND dup."serviceId" = r."serviceId" AND dup.rn > 1
       );
 
+    INSERT INTO "phase3_archive"."value_changes"
+        ("sourceSchema", "tableName", "rowId", "columnName", "oldValue", "newValue", "migration", "reason")
+      SELECT current_schema(), 'attendance', k."id", c.col, c.old_value, c.new_value,
+             '20261006040000_services_and_attendance',
+             'kept row before merge (collapsed rows of the same member and service day)'
+      FROM "phase3_attendance_kept" AS k JOIN "attendance" AS a ON a."id" = k."id"
+      CROSS JOIN LATERAL (VALUES
+        ('present', k."present"::text, a."present"::text),
+        ('notes', k."notes", a."notes")) AS c(col, old_value, new_value)
+      WHERE c.old_value IS DISTINCT FROM c.new_value;
+
     DELETE FROM "attendance" AS a USING "phase3_attendance_ranked" AS r
     WHERE a."id" = r."id" AND r.rn > 1;
+    DROP TABLE "phase3_attendance_kept";
   END IF;
 END $$;
 

@@ -66,6 +66,9 @@ describe('media search (postgres, case-insensitive)', () => {
     expect(await titles('search=%25')).toEqual([]);
     expect(await titles('tag=special-event')).toEqual(['Holiday special']);
     expect(await titles('tag=Special%20Event')).toEqual(['Holiday special']);
+    // The stored tag form is compared with the query in that form, whatever its spelling.
+    expect(await titles('tag=%20SPECIAL%20%20-%20event%20')).toEqual(['Holiday special']);
+    expect(await titles('tag=special')).toEqual([]);
     await prisma.media.delete({ where: { id: created.body.media.id } });
   });
 

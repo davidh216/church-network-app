@@ -1,8 +1,10 @@
 -- D2 (PHASE3_SPECS.md 1.1): the stringly-typed CRM columns become Postgres enums.
 --
 -- Values keep the lowercase snake_case strings already stored, so valid rows cast unchanged.
--- Every other stored value is first normalised (trimmed, lower-cased, runs of spaces and hyphens
--- turned into one underscore: 'co-leader' -> 'co_leader', 'Sunday Service' -> 'sunday_service').
+-- Every other stored value is first normalised (leading and trailing whitespace removed: spaces,
+-- tabs, CR, LF, form feeds and vertical tabs; lower-cased; runs of whitespace and hyphens turned
+-- into one underscore: 'co-leader' -> 'co_leader', 'Sunday Service' -> 'sunday_service',
+-- E'leader\t' -> 'leader').
 -- A value that is still outside the list is mapped as below; no row is deleted for it.
 --
 --   column                                   unknown value becomes
@@ -30,7 +32,8 @@
 --
 -- Every stored value that is not a known spelling of a listed value (blank values excepted) is
 -- recorded before it is mapped, in phase3_archive.value_changes (table, row id, column, old
--- value, new value). An attendance row whose serviceType was unknown also gets
+-- value, new value; for member_engagement the row id is the userId, because the surrogate id is
+-- dropped by 20261006020000). An attendance row whose serviceType was unknown also gets
 -- 'Legacy service type: <original>' appended to its notes, so the label is not lost.
 --
 -- Two unique indexes include an enum column. Where normalising makes two rows identical under
@@ -40,7 +43,9 @@
 -- collapsed rows had it and its notes become the distinct non-blank notes of the collapsed rows
 -- (trimmed, oldest first, joined by a newline), and a relationship stays active if any of them
 -- was. Each deleted row is copied whole (as JSON) into phase3_archive.attendance or
--- phase3_archive.family_relationships first, and its id is listed by RAISE NOTICE.
+-- phase3_archive.family_relationships first, and its id is listed by RAISE NOTICE. Where the
+-- merge changes the kept row (present, notes or isActive), the kept row's original value is
+-- recorded in phase3_archive.value_changes with the reason 'kept row before merge ...'.
 --
 -- Audit trail: the schema "phase3_archive" is not managed by Prisma (it is outside "public", so
 -- it causes no drift). Every row this and the later Phase 3 migrations delete, repoint or remap
@@ -50,7 +55,7 @@
 -- Normalisation helper, dropped at the end of this migration.
 CREATE FUNCTION "phase3_enum_norm"(value TEXT) RETURNS TEXT
   LANGUAGE sql IMMUTABLE
-  AS $$ SELECT NULLIF(lower(regexp_replace(btrim(value), '[[:space:]-]+', '_', 'g')), '') $$;
+  AS $$ SELECT NULLIF(lower(regexp_replace(btrim(value, E' \t\r\n\f\x0B'), '[[:space:]-]+', '_', 'g')), '') $$;
 
 -- CreateEnum
 CREATE TYPE "MembershipStage" AS ENUM ('visitor', 'new_member', 'active_member', 'core_member', 'leader', 'at_risk', 'inactive');
@@ -146,17 +151,22 @@ CREATE TABLE IF NOT EXISTS "phase3_archive"."family_relationships" (
 );
 
 -- Records the rows of tbl whose col holds a non-blank value that does not normalise to one of
--- allowed (normalised spellings); they are about to be mapped to fallback. Dropped at the end.
-CREATE FUNCTION "phase3_record_enum_fallback"(tbl TEXT, col TEXT, allowed TEXT[], fallback TEXT)
+-- allowed (normalised spellings); they are about to be mapped to fallback. The row is named by
+-- key_col (member_engagement passes "userId": its surrogate id is dropped by the next migration).
+-- Dropped at the end.
+CREATE FUNCTION "phase3_record_enum_fallback"(tbl TEXT, col TEXT, allowed TEXT[], fallback TEXT,
+                                              key_col TEXT DEFAULT 'id')
   RETURNS VOID LANGUAGE plpgsql AS $$
 BEGIN
   EXECUTE format(
     'INSERT INTO "phase3_archive"."value_changes"
        ("sourceSchema", "tableName", "rowId", "columnName", "oldValue", "newValue", "migration", "reason")
-     SELECT current_schema(), %L, "id", %L, %I, %L, %L, %L FROM %I
+     SELECT current_schema(), %L, %I, %L, %I, %L, %L, %L FROM %I
      WHERE "phase3_enum_norm"(%I) IS NOT NULL AND "phase3_enum_norm"(%I) <> ALL (%L::TEXT[])',
-    tbl, col, col, fallback, '20261006010000_enum_columns',
-    'unknown ' || col || ' value mapped to the fallback', tbl, col, col, allowed);
+    tbl, key_col, col, col, fallback, '20261006010000_enum_columns',
+    'unknown ' || col || ' value mapped to the fallback'
+      || CASE WHEN key_col = 'id' THEN '' ELSE ' (rowId is the ' || key_col || ')' END,
+    tbl, col, col, allowed);
 END;
 $$;
 
@@ -189,6 +199,11 @@ BEGIN
            'collapsed into attendance row ' || r.kept_id || ' (same member, time and service type)'
     FROM "attendance" a JOIN "phase3_attendance_rank" r ON r."id" = a."id" AND r.rn > 1;
 
+  -- The kept rows of a collapse as they were, to record what the merge below changes.
+  CREATE TEMP TABLE "phase3_attendance_kept" ON COMMIT DROP AS
+    SELECT a."id", a."present", a."notes" FROM "attendance" a
+    JOIN "phase3_attendance_rank" r ON r."id" = a."id" AND r.rn = 1 AND r.group_size > 1;
+
   -- Keep the legacy label of an unknown service type before it becomes 'other'.
   UPDATE "attendance" SET "notes" =
       CASE WHEN "notes" IS NULL OR btrim("notes") = '' THEN '' ELSE btrim("notes") || E'\n' END
@@ -216,9 +231,21 @@ BEGIN
   FROM "phase3_attendance_rank" AS r
   WHERE a."id" = r."id" AND r.rn = 1;
 
+  INSERT INTO "phase3_archive"."value_changes"
+      ("sourceSchema", "tableName", "rowId", "columnName", "oldValue", "newValue", "migration", "reason")
+    SELECT current_schema(), 'attendance', k."id", c.col, c.old_value, c.new_value,
+           '20261006010000_enum_columns',
+           'kept row before merge (collapsed rows of the same member, time and service type)'
+    FROM "phase3_attendance_kept" k JOIN "attendance" a ON a."id" = k."id"
+    CROSS JOIN LATERAL (VALUES
+      ('present', k."present"::text, a."present"::text),
+      ('notes', k."notes", a."notes")) AS c(col, old_value, new_value)
+    WHERE c.old_value IS DISTINCT FROM c.new_value;
+
   DELETE FROM "attendance" AS a USING "phase3_attendance_rank" AS r
     WHERE a."id" = r."id" AND r.rn > 1;
 
+  DROP TABLE "phase3_attendance_kept";
   DROP TABLE "phase3_attendance_rank";
 
   CREATE TEMP TABLE "phase3_relationship_rank" ON COMMIT DROP AS
@@ -243,6 +270,14 @@ BEGIN
   IF ids IS NOT NULL THEN
     RAISE NOTICE 'family_relationships rows collapsed (deleted, copied to phase3_archive.family_relationships): %', ids;
   END IF;
+
+  INSERT INTO "phase3_archive"."value_changes"
+      ("sourceSchema", "tableName", "rowId", "columnName", "oldValue", "newValue", "migration", "reason")
+    SELECT current_schema(), 'family_relationships', f."id", 'isActive', f."isActive"::text,
+           r.any_active::text, '20261006010000_enum_columns',
+           'kept row before merge (collapsed rows of the same pair and type)'
+    FROM "family_relationships" AS f JOIN "phase3_relationship_rank" AS r ON f."id" = r."id"
+    WHERE r.rn = 1 AND f."isActive" IS DISTINCT FROM r.any_active;
 
   UPDATE "family_relationships" AS f SET "isActive" = r.any_active
     FROM "phase3_relationship_rank" AS r WHERE f."id" = r."id" AND r.rn = 1;
@@ -303,7 +338,7 @@ ALTER TABLE "attendance" ALTER COLUMN "serviceType" TYPE "ServiceType" USING ("s
 ALTER TABLE "attendance" ALTER COLUMN "serviceType" SET DEFAULT 'sunday_service';
 
 -- member_engagement.membershipStage -> MembershipStage
-SELECT "phase3_record_enum_fallback"('member_engagement', 'membershipStage', ARRAY['visitor', 'new_member', 'active_member', 'core_member', 'leader', 'at_risk', 'inactive'], 'visitor');
+SELECT "phase3_record_enum_fallback"('member_engagement', 'membershipStage', ARRAY['visitor', 'new_member', 'active_member', 'core_member', 'leader', 'at_risk', 'inactive'], 'visitor', 'userId');
 UPDATE "member_engagement" SET "membershipStage" = COALESCE("phase3_enum_norm"("membershipStage"), 'visitor') WHERE "membershipStage" IS DISTINCT FROM COALESCE("phase3_enum_norm"("membershipStage"), 'visitor');
 UPDATE "member_engagement" SET "membershipStage" = 'visitor' WHERE "membershipStage" NOT IN ('visitor', 'new_member', 'active_member', 'core_member', 'leader', 'at_risk', 'inactive');
 ALTER TABLE "member_engagement" ALTER COLUMN "membershipStage" DROP DEFAULT;
@@ -311,7 +346,7 @@ ALTER TABLE "member_engagement" ALTER COLUMN "membershipStage" TYPE "MembershipS
 ALTER TABLE "member_engagement" ALTER COLUMN "membershipStage" SET DEFAULT 'visitor';
 
 -- member_engagement.riskLevel -> RiskLevel
-SELECT "phase3_record_enum_fallback"('member_engagement', 'riskLevel', ARRAY['low', 'medium', 'high'], 'low');
+SELECT "phase3_record_enum_fallback"('member_engagement', 'riskLevel', ARRAY['low', 'medium', 'high'], 'low', 'userId');
 UPDATE "member_engagement" SET "riskLevel" = COALESCE("phase3_enum_norm"("riskLevel"), 'low') WHERE "riskLevel" IS DISTINCT FROM COALESCE("phase3_enum_norm"("riskLevel"), 'low');
 UPDATE "member_engagement" SET "riskLevel" = 'low' WHERE "riskLevel" NOT IN ('low', 'medium', 'high');
 ALTER TABLE "member_engagement" ALTER COLUMN "riskLevel" DROP DEFAULT;
@@ -396,5 +431,5 @@ ALTER TABLE "member_tags" ALTER COLUMN "category" DROP DEFAULT;
 ALTER TABLE "member_tags" ALTER COLUMN "category" TYPE "TagCategory" USING ("category"::"TagCategory");
 ALTER TABLE "member_tags" ALTER COLUMN "category" SET DEFAULT 'general';
 
-DROP FUNCTION "phase3_record_enum_fallback"(TEXT, TEXT, TEXT[], TEXT);
+DROP FUNCTION "phase3_record_enum_fallback"(TEXT, TEXT, TEXT[], TEXT, TEXT);
 DROP FUNCTION "phase3_enum_norm"(TEXT);

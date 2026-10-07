@@ -9,9 +9,12 @@
 --   families.headOfFamilyId, groups.leaderId, member_interactions.staffMemberId and
 --   user_tags.addedById are set to NULL (their new delete rule is SET NULL);
 --   member_notes.authorId is repointed to the oldest admin, because notes keep a required author
---   (RESTRICT); when such notes exist and there is no admin the migration stops with an error
---   (create an admin and rerun it: the failed migration is rolled back), because repointing to
---   another account would show it private notes it never wrote;
+--   (RESTRICT); when such notes exist and there is no admin the migration stops with an error,
+--   because repointing to another account would show it private notes it never wrote. Its SQL is
+--   rolled back, but Prisma records the migration as failed and refuses to deploy again until
+--   told otherwise. Recovery: create an admin account (or give an existing account the admin
+--   role), run `npx prisma migrate resolve --rolled-back 20261006020000_relations_keys_indexes`,
+--   then deploy again;
 --   saved_searches whose createdById names no user are deleted (their delete rule is CASCADE:
 --   the owner is gone and nobody else can manage a private search).
 -- Every changed reference is recorded (table, row id, column, old value, new value) in
@@ -31,8 +34,10 @@
 -- stored (head of family, their child, 'child')), so every legacy row is first translated by
 -- inverting its type (parent <-> child, grandparent <-> grandchild; spouse, sibling and other are
 -- symmetric). Then rows stored the other way round are swapped and their type inverted again.
--- Mirrored rows that then name the same pair are collapsed: the row already stored in canonical
--- order wins, else the oldest; the kept row stays active if any collapsed row was active.
+-- Mirrored rows that then name the same pair are collapsed: an active row wins, then the row
+-- already stored in canonical order, then the oldest. The kept row keeps its own type and its own
+-- isActive, so it is active exactly when some collapsed row was, and a type stated only by an
+-- inactive row is never made active.
 
 -- 1. Renames
 ALTER TABLE "families" RENAME COLUMN "headOfFamily" TO "headOfFamilyId";
@@ -121,7 +126,7 @@ BEGIN
   SELECT count(*) INTO dangling_notes FROM "member_notes"
     WHERE NOT EXISTS (SELECT 1 FROM "users" u WHERE u."id" = "member_notes"."authorId");
   IF dangling_notes > 0 AND fallback IS NULL THEN
-    RAISE EXCEPTION 'member_notes: % note(s) reference a missing author and there is no admin account to own them; create an admin and rerun the migration', dangling_notes;
+    RAISE EXCEPTION 'member_notes: % note(s) reference a missing author and there is no admin account to own them; create an admin account (or give an existing account the admin role), then run npx prisma migrate resolve --rolled-back 20261006020000_relations_keys_indexes and deploy again', dangling_notes;
   END IF;
   PERFORM "phase3_repoint_dangling"('member_notes', 'authorId', fallback, 'repointed to the oldest admin (author missing)');
 END $$;
@@ -165,13 +170,11 @@ BEGIN
   CREATE TEMP TABLE "phase3_pair_rank" ON COMMIT DROP AS
     SELECT "id",
       row_number() OVER pair AS rn,
-      first_value("id") OVER pair AS kept_id,
-      bool_or("isActive") OVER (PARTITION BY LEAST("primaryUserId", "relatedUserId"),
-                                             GREATEST("primaryUserId", "relatedUserId")) AS any_active
+      first_value("id") OVER pair AS kept_id
     FROM "family_relationships"
     WINDOW pair AS (
       PARTITION BY LEAST("primaryUserId", "relatedUserId"), GREATEST("primaryUserId", "relatedUserId")
-      ORDER BY ("primaryUserId" <= "relatedUserId") DESC, "createdAt", "id"
+      ORDER BY "isActive" DESC, ("primaryUserId" <= "relatedUserId") DESC, "createdAt", "id"
     );
 
   SELECT string_agg(r."id", ', ' ORDER BY r."id") INTO ids FROM "phase3_pair_rank" r WHERE r.rn > 1;
@@ -183,8 +186,6 @@ BEGIN
            'collapsed into family_relationships row ' || r.kept_id || ' (same pair; type already in the new meaning)'
     FROM "family_relationships" fr JOIN "phase3_pair_rank" r ON r."id" = fr."id" AND r.rn > 1;
 
-  UPDATE "family_relationships" fr SET "isActive" = r.any_active
-    FROM "phase3_pair_rank" r WHERE r."id" = fr."id" AND r.rn = 1 AND fr."isActive" <> r.any_active;
   DELETE FROM "family_relationships" fr
     USING "phase3_pair_rank" r WHERE r."id" = fr."id" AND r.rn > 1;
 

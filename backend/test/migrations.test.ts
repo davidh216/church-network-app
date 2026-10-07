@@ -117,10 +117,15 @@ describe('20261006010000_enum_columns (D2)', () => {
         ('u1', 'u1@example.org', 'x', 'U1', now(), 'Female', 'married', 'Regular Attendee'),
         ('u2', 'u2@example.org', 'x', 'U2', now(), 'M', 'complicated', 'guest'),
         ('u3', 'u3@example.org', 'x', 'U3', now(), '  ', NULL, NULL);
+      -- Values padded with tabs, CR and LF (as CSV imports leave them) are trimmed, not remapped.
+      INSERT INTO "users" ("id", "email", "password", "name", "updatedAt", "gender", "maritalStatus", "membershipType") VALUES
+        ('u4', 'u4@example.org', 'x', 'U4', now(), E'female\t', E'single\n', E'\tRegular Attendee\r\n'),
+        ('u5', 'u5@example.org', 'x', 'U5', now(), E'\t\r\n', E'\f\x0B', NULL);
       INSERT INTO "member_engagement" ("id", "userId", "updatedAt", "membershipStage", "riskLevel") VALUES
         ('e1', 'u1', now(), 'Core Member', 'HIGH'),
         ('e2', 'u2', now(), 'champion', 'severe'),
-        ('e3', 'u3', now(), 'new-member', 'low');
+        ('e3', 'u3', now(), 'new-member', 'low'),
+        ('e4', 'u4', now(), E'leader\n', E'medium\r');
       INSERT INTO "media" ("id", "title", "type", "url", "tags", "uploadedById", "updatedAt") VALUES
         ('m1', 'Old', 'VIDEO', 'https://example.org/v', '[]', 'u1', now()),
         ('m2', 'New', 'YOUTUBE_VIDEO', 'https://www.youtube.com/watch?v=abcdefghijk', '[]', 'u1', now());
@@ -130,7 +135,8 @@ describe('20261006010000_enum_columns (D2)', () => {
       INSERT INTO "group_members" ("id", "userId", "groupId", "role") VALUES
         ('gm1', 'u1', 'g1', 'co-leader'),
         ('gm2', 'u2', 'g1', 'Leader'),
-        ('gm3', 'u3', 'g1', 'captain');
+        ('gm3', 'u3', 'g1', 'captain'),
+        ('gm4', 'u4', 'g1', E'leader\t');
       INSERT INTO "attendance" ("id", "userId", "serviceDate", "serviceType", "present", "createdAt") VALUES
         ('a3', 'u1', '2026-01-07', 'youth night', true, '2026-01-07 19:00'),
         ('a4', 'u2', '2026-01-04', 'bible-study', false, '2026-01-04 09:00');
@@ -210,27 +216,55 @@ describe('20261006010000_enum_columns (D2)', () => {
       gm1: 'co_leader',
       gm2: 'leader',
       gm3: 'member',
+      gm4: 'leader',
     });
     expect(await column('groups', 'type')).toEqual({ g1: 'small_group', g2: 'ministry' });
     expect(await column('member_engagement', 'membershipStage')).toEqual({
       e1: 'core_member',
       e2: 'visitor',
       e3: 'new_member',
+      e4: 'leader',
     });
     expect(await column('member_engagement', 'riskLevel')).toEqual({
       e1: 'high',
       e2: 'low',
       e3: 'low',
+      e4: 'medium',
     });
   });
 
+  it('trims tabs, CR, LF, form feeds and vertical tabs like spaces', async () => {
+    // A trailing tab or newline no longer demotes a group leader or remaps a profile field, and a
+    // value that is only such whitespace is blank (NULL), not an unknown value.
+    expect(await column('group_members', 'role')).toMatchObject({ gm4: 'leader' });
+    expect(await column('users', 'gender')).toMatchObject({ u4: 'female', u5: null });
+    expect(await column('users', 'maritalStatus')).toMatchObject({ u4: 'single', u5: null });
+    expect(await column('users', 'membershipType')).toMatchObject({ u4: 'regular_attendee' });
+    expect(await column('member_engagement', 'membershipStage')).toMatchObject({ e4: 'leader' });
+    expect(await column('member_engagement', 'riskLevel')).toMatchObject({ e4: 'medium' });
+  });
+
   it('maps unknown values to the safest member, or NULL for optional profile fields', async () => {
-    expect(await column('users', 'gender')).toEqual({ u1: 'female', u2: 'other', u3: null });
-    expect(await column('users', 'maritalStatus')).toEqual({ u1: 'married', u2: null, u3: null });
+    expect(await column('users', 'gender')).toEqual({
+      u1: 'female',
+      u2: 'other',
+      u3: null,
+      u4: 'female',
+      u5: null,
+    });
+    expect(await column('users', 'maritalStatus')).toEqual({
+      u1: 'married',
+      u2: null,
+      u3: null,
+      u4: 'single',
+      u5: null,
+    });
     expect(await column('users', 'membershipType')).toEqual({
       u1: 'regular_attendee',
       u2: null,
       u3: null,
+      u4: 'regular_attendee',
+      u5: null,
     });
     expect(await column('media', 'type')).toEqual({ m1: 'YOUTUBE_VIDEO', m2: 'YOUTUBE_VIDEO' });
     expect(await column('member_activities', 'activityType')).toEqual({
@@ -340,18 +374,25 @@ describe('20261006010000_enum_columns (D2)', () => {
     ]);
   });
 
-  it('records every value that was mapped to a fallback, and only those', async () => {
+  it('records every value that was mapped to a fallback or merged into a kept row, and only those', async () => {
     expect(await valueChanges(schema)).toEqual([
+      // The kept rows of the collapses, as they were before the merge.
+      'attendance.notes:a2 brought a guest -> arrived late\nbrought a guest',
+      'attendance.notes:a5 youth A -> youth A\nLegacy service type: Youth Night\nchoir B\nLegacy service type: choir',
+      'attendance.present:a2 false -> true',
+      'attendance.present:a5 false -> true',
       'attendance.serviceType:a3 youth night -> other',
       'attendance.serviceType:a5 Youth Night -> other',
       'attendance.serviceType:a6 choir -> other',
+      'family_relationships.isActive:r2 false -> true',
       'family_relationships.relationshipType:r3 cousin -> other',
       'group_members.role:gm3 captain -> member',
       'groups.type:g2 book club -> ministry',
       'media.type:m1 VIDEO -> YOUTUBE_VIDEO',
       'member_activities.activityType:act1 group_participation -> other',
-      'member_engagement.membershipStage:e2 champion -> visitor',
-      'member_engagement.riskLevel:e2 severe -> low',
+      // member_engagement rows are named by userId: the next migration drops the surrogate id.
+      'member_engagement.membershipStage:u2 champion -> visitor',
+      'member_engagement.riskLevel:u2 severe -> low',
       'member_interactions.category:i1 random -> null',
       'member_interactions.channel:i1 Fax -> in_person',
       'member_interactions.interactionType:i1 letter -> note_added',
@@ -365,6 +406,43 @@ describe('20261006010000_enum_columns (D2)', () => {
       'users.gender:u2 M -> other',
       'users.maritalStatus:u2 complicated -> null',
       'users.membershipType:u2 guest -> null',
+    ]);
+    const reasons = await rows<{ key: string; reason: string }>(
+      `SELECT "tableName" || '.' || "columnName" || ':' || "rowId" AS key, "reason"
+       FROM "phase3_archive"."value_changes"
+       WHERE "sourceSchema" = '$s' AND ("tableName" IN ('attendance', 'member_engagement')
+         OR "columnName" = 'isActive') AND "columnName" <> 'serviceType'
+       ORDER BY 1`,
+    );
+    expect(reasons).toEqual([
+      {
+        key: 'attendance.notes:a2',
+        reason: 'kept row before merge (collapsed rows of the same member, time and service type)',
+      },
+      {
+        key: 'attendance.notes:a5',
+        reason: 'kept row before merge (collapsed rows of the same member, time and service type)',
+      },
+      {
+        key: 'attendance.present:a2',
+        reason: 'kept row before merge (collapsed rows of the same member, time and service type)',
+      },
+      {
+        key: 'attendance.present:a5',
+        reason: 'kept row before merge (collapsed rows of the same member, time and service type)',
+      },
+      {
+        key: 'family_relationships.isActive:r2',
+        reason: 'kept row before merge (collapsed rows of the same pair and type)',
+      },
+      {
+        key: 'member_engagement.membershipStage:u2',
+        reason: 'unknown membershipStage value mapped to the fallback (rowId is the userId)',
+      },
+      {
+        key: 'member_engagement.riskLevel:u2',
+        reason: 'unknown riskLevel value mapped to the fallback (rowId is the userId)',
+      },
     ]);
   });
 
@@ -476,7 +554,10 @@ describe('20261006020000_relations_keys_indexes (D3)', () => {
         ('fr3', 'u3', 'u1', 'grandparent', true, 'f1', '2026-01-01', now()),
         ('fr4', 'u4', 'u2', 'sibling', true, 'f1', '2026-01-02', now()),
         ('fr5', 'u4', 'u2', 'spouse', false, 'f1', '2026-01-01', now()),
-        ('fr6', 'u1', 'u4', 'spouse', true, 'f1', '2026-01-01', now());
+        ('fr6', 'u1', 'u4', 'spouse', true, 'f1', '2026-01-01', now()),
+        ('fr7', 'u3', 'u4', 'spouse', false, 'f2', '2026-01-01', now()),
+        ('fr8', 'u3', 'u4', 'sibling', false, 'f2', '2026-01-02', now()),
+        ('fr9', 'u4', 'u3', 'parent', true, 'f2', '2026-01-03', now());
       `,
     );
   }, 60_000);
@@ -558,19 +639,15 @@ describe('20261006020000_relations_keys_indexes (D3)', () => {
       })),
     ).toEqual([{ id: 's2', name: 'Orphan', owner: 'ghost', reason: 'owner missing' }]);
     const pairs = await archivedRows(schema, 'family_relationships');
+    const collapsedInto = (kept: string) => ({
+      migration: '20261006020000_relations_keys_indexes',
+      reason: `collapsed into family_relationships row ${kept} (same pair; type already in the new meaning)`,
+    });
     expect(pairs.map(({ id, migration, reason }) => ({ id, migration, reason }))).toEqual([
-      {
-        id: 'fr1',
-        migration: '20261006020000_relations_keys_indexes',
-        reason:
-          'collapsed into family_relationships row fr2 (same pair; type already in the new meaning)',
-      },
-      {
-        id: 'fr4',
-        migration: '20261006020000_relations_keys_indexes',
-        reason:
-          'collapsed into family_relationships row fr5 (same pair; type already in the new meaning)',
-      },
+      { id: 'fr2', ...collapsedInto('fr1') },
+      { id: 'fr5', ...collapsedInto('fr4') },
+      { id: 'fr7', ...collapsedInto('fr9') },
+      { id: 'fr8', ...collapsedInto('fr9') },
     ]);
   });
 
@@ -589,10 +666,10 @@ describe('20261006020000_relations_keys_indexes (D3)', () => {
     ).toEqual([
       // Legacy rows meant "related is the primary's <type>": fr1 (u2, u1, 'parent') says u1 is
       // u2's parent and its mirror fr2 (u1, u2, 'child') says u2 is u1's child. In the new meaning
-      // (the primary's relation to the related user) that is (u1, u2, 'parent'); the canonical fr2
-      // is kept, active because fr1 was.
+      // (the primary's relation to the related user) that is (u1, u2, 'parent'); the active fr1
+      // wins over the inactive canonical fr2 and is swapped into canonical order.
       {
-        id: 'fr2',
+        id: 'fr1',
         primaryUserId: 'u1',
         relatedUserId: 'u2',
         relationshipType: 'parent',
@@ -606,12 +683,13 @@ describe('20261006020000_relations_keys_indexes (D3)', () => {
         relationshipType: 'grandparent',
         isActive: true,
       },
-      // fr4 and fr5 name the same pair the other way round: the older fr5 wins and is swapped.
+      // fr4 (active 'sibling') and the older fr5 (inactive 'spouse') name the same pair: the
+      // active row wins and keeps its own type, so the inactive 'spouse' never becomes live.
       {
-        id: 'fr5',
+        id: 'fr4',
         primaryUserId: 'u2',
         relatedUserId: 'u4',
-        relationshipType: 'spouse',
+        relationshipType: 'sibling',
         isActive: true,
       },
       {
@@ -619,6 +697,15 @@ describe('20261006020000_relations_keys_indexes (D3)', () => {
         primaryUserId: 'u1',
         relatedUserId: 'u4',
         relationshipType: 'spouse',
+        isActive: true,
+      },
+      // fr7 (inactive 'spouse', canonical and oldest), fr8 (inactive 'sibling') and fr9 (active,
+      // u3 is u4's parent) name one pair: the only active row fr9 is kept, as (u3, u4, 'parent').
+      {
+        id: 'fr9',
+        primaryUserId: 'u3',
+        relatedUserId: 'u4',
+        relationshipType: 'parent',
         isActive: true,
       },
     ]);
@@ -668,13 +755,16 @@ describe('20261006020000_relations_keys_indexes (D3) without an admin', () => {
         `,
       ),
     ).toThrow(
-      /1 note\(s\) reference a missing author and there is no admin account to own them; create an admin and rerun the migration/,
+      /1 note\(s\) reference a missing author and there is no admin account to own them; create an admin account \(or give an existing account the admin role\), then run npx prisma migrate resolve --rolled-back 20261006020000_relations_keys_indexes and deploy again/,
     );
   }, 60_000);
 });
 
 /** JSON text nested `depth` objects deep: {"a":{"a":...1...}}. */
 const nestedJson = (depth: number) => `${'{"a":'.repeat(depth)}1${'}'.repeat(depth)}`;
+
+/** Free-text tags a Phase 2 API client could store: case, padding, a tab, runs of spaces. */
+const LEGACY_TAGS = '["Special Event","  YOUTH ","special-event","Youth\\tNight","youth  -night"]';
 
 describe('20261006030000_native_column_types (D4)', () => {
   const schema = 'fixture_d4_native_types';
@@ -698,7 +788,8 @@ describe('20261006030000_native_column_types (D4)', () => {
       INSERT INTO "media" ("id", "title", "type", "url", "tags", "uploadedById", "updatedAt") VALUES
         ('m1', 'Kept', 'YOUTUBE_VIDEO', 'https://www.youtube.com/watch?v=abcdefghijk', '["worship","youth"]', 'u1', now()),
         ('m2', 'Broken', 'YOUTUBE_VIDEO', 'https://www.youtube.com/watch?v=abcdefghijk', '[worship', 'u1', now()),
-        ('m3', 'Blank', 'YOUTUBE_VIDEO', 'https://www.youtube.com/watch?v=abcdefghijk', '', 'u1', now());
+        ('m3', 'Blank', 'YOUTUBE_VIDEO', 'https://www.youtube.com/watch?v=abcdefghijk', '', 'u1', now()),
+        ('m4', 'Free text', 'YOUTUBE_VIDEO', 'https://www.youtube.com/watch?v=abcdefghijk', '${LEGACY_TAGS}', 'u1', now());
       INSERT INTO "member_activities" ("id", "userId", "activityType", "metadata") VALUES
         ('a1', 'u1', 'volunteer', '{"hours": 3}'),
         ('a2', 'u1', 'volunteer', '{hours: 3}'),
@@ -777,7 +868,34 @@ describe('20261006030000_native_column_types (D4)', () => {
       m1: ['worship', 'youth'],
       m2: [],
       m3: [],
+      m4: ['special-event', 'youth', 'youth-night'],
     });
+  });
+
+  it('records every list value the conversion did not carry over whole, and every normalised tag list', async () => {
+    expect(await valueChanges(schema)).toEqual([
+      'media.tags:m2 [worship -> {}',
+      `media.tags:m4 ${LEGACY_TAGS} -> {special-event,youth,youth-night}`,
+      'roles.permissions:r2 ["members:read", " media:write ", 7, null, "", {"a": 1}] -> {members:read,media:write,7}',
+      'roles.permissions:r3 not json -> {}',
+      'roles.permissions:r4 {"read": true} -> {}',
+      'users.interests:u3 "Hiking" -> {}',
+      'users.interests:u4 null -> {}',
+      'users.volunteerSkills:u2 Music, Teaching -> {}',
+    ]);
+    const lossy =
+      'list text not fully convertible (not a JSON array of non-blank strings, numbers or booleans)';
+    expect(
+      await rows<{ key: string; reason: string }>(
+        `SELECT "tableName" || '.' || "columnName" || ':' || "rowId" AS key, "reason"
+         FROM "phase3_archive"."value_changes" WHERE "sourceSchema" = '$s'
+           AND "rowId" IN ('m2', 'm4', 'u2') ORDER BY 1`,
+      ),
+    ).toEqual([
+      { key: 'media.tags:m2', reason: lossy },
+      { key: 'media.tags:m4', reason: 'media tags normalised to the tag form' },
+      { key: 'users.volunteerSkills:u2', reason: lossy },
+    ]);
   });
 
   it('parses metadata; blank and JSON null become NULL, unparsable or too deep text is kept as a string', async () => {
@@ -1035,6 +1153,23 @@ describe('20261006040000_services_and_attendance (D5)', () => {
     ]);
   });
 
+  it('records the kept row of a collapse as it was before the merge', async () => {
+    expect(await valueChanges(schema)).toEqual([
+      'attendance.notes:a1 early -> early\nevening',
+      'attendance.present:a1 false -> true',
+    ]);
+    const reasons = await rows<{ reason: string; migration: string }>(
+      `SELECT DISTINCT "reason", "migration" FROM "phase3_archive"."value_changes"
+       WHERE "sourceSchema" = '$s'`,
+    );
+    expect(reasons).toEqual([
+      {
+        reason: 'kept row before merge (collapsed rows of the same member and service day)',
+        migration: '20261006040000_services_and_attendance',
+      },
+    ]);
+  });
+
   it('drops the legacy columns and enforces the new keys and delete rules', async () => {
     const columns = await rows<{ column_name: string }>(
       `SELECT column_name FROM information_schema.columns
@@ -1226,12 +1361,14 @@ describe('a Phase 2 database upgraded by prisma migrate deploy (whole chain)', (
           ('e3', 'u3', now(), 0, 0, 0, 0, 0, 50, 'new-member', 'low', NULL, false);
         INSERT INTO "media" ("id", "title", "type", "url", "tags", "uploadedById", "updatedAt") VALUES
           ('m1', 'Sermon', 'VIDEO', 'https://www.youtube.com/watch?v=abcdefghijk', '["worship","youth"]', 'u1', now()),
-          ('m2', 'Broken tags', 'YOUTUBE_VIDEO', 'https://www.youtube.com/watch?v=abcdefghijk', '[worship', 'u2', now());
+          ('m2', 'Broken tags', 'YOUTUBE_VIDEO', 'https://www.youtube.com/watch?v=abcdefghijk', '[worship', 'u2', now()),
+          ('m3', 'Free tags', 'YOUTUBE_VIDEO', 'https://www.youtube.com/watch?v=abcdefghijk', '["Special Event", "special-event"]', 'u2', now());
         INSERT INTO "groups" ("id", "name", "type", "leaderId", "updatedAt") VALUES
           ('g1', 'Choir', 'Small Group', 'u1', now()),
           ('g2', 'Gone', 'book club', 'ghost', now());
         INSERT INTO "group_members" ("id", "userId", "groupId", "role") VALUES
-          ('gm1', 'u1', 'g1', 'co-leader'), ('gm2', 'u2', 'g1', 'Leader'), ('gm3', 'u3', 'g1', 'captain');
+          ('gm1', 'u1', 'g1', 'co-leader'), ('gm2', 'u2', 'g1', 'Leader'), ('gm3', 'u3', 'g1', 'captain'),
+          ('gm4', 'admin', 'g1', E'leader\t');
         -- a1/a2: one member twice on the same Sunday, both with notes; a4: an unknown type.
         INSERT INTO "attendance" ("id", "userId", "serviceDate", "serviceType", "present", "notes", "createdAt") VALUES
           ('a1', 'u1', '2026-01-04 10:00', 'Sunday Service', false, 'arrived late', '2026-01-04 10:05'),
@@ -1383,9 +1520,14 @@ describe('a Phase 2 database upgraded by prisma migrate deploy (whole chain)', (
       gm1: 'co_leader',
       gm2: 'leader',
       gm3: 'member',
+      gm4: 'leader',
     });
     expect(await column('groups', 'type')).toEqual({ g1: 'small_group', g2: 'ministry' });
-    expect(await column('media', 'type')).toEqual({ m1: 'YOUTUBE_VIDEO', m2: 'YOUTUBE_VIDEO' });
+    expect(await column('media', 'type')).toEqual({
+      m1: 'YOUTUBE_VIDEO',
+      m2: 'YOUTUBE_VIDEO',
+      m3: 'YOUTUBE_VIDEO',
+    });
     expect(await column('member_milestones', 'milestoneType')).toEqual({
       ms1: 'baptism',
       ms2: 'other',
@@ -1424,7 +1566,11 @@ describe('a Phase 2 database upgraded by prisma migrate deploy (whole chain)', (
       role_leader: ['members:read', 'media:write', '7'],
       role_member: [],
     });
-    expect(await values('media', 'tags')).toEqual({ m1: ['worship', 'youth'], m2: [] });
+    expect(await values('media', 'tags')).toEqual({
+      m1: ['worship', 'youth'],
+      m2: [],
+      m3: ['special-event'],
+    });
     expect(await values('member_interactions', 'metadata')).toEqual({
       i1: { duration: 12 },
       i2: 'oops',
@@ -1464,7 +1610,8 @@ describe('a Phase 2 database upgraded by prisma migrate deploy (whole chain)', (
     ).toEqual([
       // u1 is u2's child: the legacy rows said u2 is u1's parent (fr1) and u1 is u2's child (fr2).
       { id: 'fr1', primaryUserId: 'u1', relatedUserId: 'u2', type: 'child', isActive: true },
-      { id: 'fr4', primaryUserId: 'u1', relatedUserId: 'u3', type: 'spouse', isActive: true },
+      // The active fr3 wins over the inactive canonical fr4 and is swapped into canonical order.
+      { id: 'fr3', primaryUserId: 'u1', relatedUserId: 'u3', type: 'spouse', isActive: true },
     ]);
   });
 
@@ -1542,9 +1689,9 @@ describe('a Phase 2 database upgraded by prisma migrate deploy (whole chain)', (
         row: expect.objectContaining({ primaryUserId: 'u2', relatedUserId: 'u1' }),
       },
       {
-        id: 'fr3',
+        id: 'fr4',
         migration: '20261006020000_relations_keys_indexes',
-        row: expect.objectContaining({ primaryUserId: 'u3', relatedUserId: 'u1' }),
+        row: expect.objectContaining({ primaryUserId: 'u1', relatedUserId: 'u3', isActive: false }),
       },
     ]);
     expect(await archived('saved_searches')).toEqual([
@@ -1565,15 +1712,19 @@ describe('a Phase 2 database upgraded by prisma migrate deploy (whole chain)', (
       },
     ]);
     expect(await valueChanges(schema)).toEqual([
+      'attendance.notes:a1 arrived late -> arrived late\nevening',
+      'attendance.present:a1 false -> true',
       'attendance.serviceType:a4 youth night -> other',
       'families.headOfFamilyId:f2 ghost -> null',
       'group_members.role:gm3 captain -> member',
       'groups.leaderId:g2 ghost -> null',
       'groups.type:g2 book club -> ministry',
+      'media.tags:m2 [worship -> {}',
+      'media.tags:m3 ["Special Event", "special-event"] -> {special-event}',
       'media.type:m1 VIDEO -> YOUTUBE_VIDEO',
       'member_activities.activityType:act2 group_participation -> other',
-      'member_engagement.membershipStage:e2 champion -> visitor',
-      'member_engagement.riskLevel:e2 severe -> low',
+      'member_engagement.membershipStage:u2 champion -> visitor',
+      'member_engagement.riskLevel:u2 severe -> low',
       'member_interactions.category:i2 random -> null',
       'member_interactions.channel:i2 Fax -> in_person',
       'member_interactions.interactionType:i2 letter -> note_added',
@@ -1586,10 +1737,13 @@ describe('a Phase 2 database upgraded by prisma migrate deploy (whole chain)', (
       'member_notes.authorId:n2 ghost -> admin',
       'member_notes.noteType:n2 random -> general',
       'member_tags.category:t2 mystery -> general',
+      'roles.permissions:role_member not json -> {}',
       'user_tags.addedById:ut2 ghost -> null',
       'users.gender:u2 M -> other',
+      'users.interests:u3 null -> {}',
       'users.maritalStatus:u2 complicated -> null',
       'users.membershipType:u2 guest -> null',
+      'users.volunteerSkills:u2 Music, Teaching -> {}',
     ]);
   });
 

@@ -20,14 +20,12 @@ function withVideoId<T extends { url: string }>(media: T): T & { videoId: string
   return { ...media, videoId: youtubeVideoId(media.url) };
 }
 
-// Ids of the media whose tag list holds `tag`, ignoring case (its tag form also counts, so
-// 'youth night' finds the stored 'youth-night'). Prisma's list filters (`has`) are case-sensitive,
-// so the element comparison is done in SQL.
+// Ids of the media whose tag list holds `tag`. Every stored tag is in the tag form (new tags are
+// normalised on create, legacy ones by the 20261006030000 migration), so the query is put in that
+// form too and either spelling matches: 'Youth Night' and 'youth-night' find 'youth-night'.
 async function mediaIdsWithTag(tag: string): Promise<string[]> {
   const rows = await prisma.$queryRaw<{ id: string }[]>`
-    SELECT "id" FROM "media"
-     WHERE EXISTS (SELECT 1 FROM unnest("tags") AS t
-                    WHERE lower(t) = lower(${tag}) OR lower(t) = ${normalizeMediaTag(tag)})`;
+    SELECT "id" FROM "media" WHERE ${normalizeMediaTag(tag)} = ANY ("tags")`;
   return rows.map((row) => row.id);
 }
 
