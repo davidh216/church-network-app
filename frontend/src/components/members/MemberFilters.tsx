@@ -1,5 +1,6 @@
 import { useRef, type ReactNode } from 'react';
-import { MAX_QUERY_TEXT, type SearchQuery } from '@embrace/shared';
+import { MAX_QUERY_TEXT, MEMBERSHIP_STAGES, RISK_LEVELS, type SearchQuery } from '@embrace/shared';
+import { enumOptions, riskLabel } from '@/lib/members/display';
 import {
   activeFilterChips,
   EMPTY_FILTERS,
@@ -45,26 +46,12 @@ const SELECTS: { key: keyof Filters; label: string; options: [string, string][] 
   {
     key: 'stage',
     label: 'Membership stage',
-    options: [
-      ['all', 'All Stages'],
-      ['leader', 'Leader'],
-      ['core_member', 'Core Member'],
-      ['active_member', 'Active Member'],
-      ['new_member', 'New Member'],
-      ['visitor', 'Visitor'],
-      ['at_risk', 'At Risk'],
-      ['inactive', 'Inactive'],
-    ],
+    options: [['all', 'All Stages'], ...enumOptions(MEMBERSHIP_STAGES)],
   },
   {
     key: 'risk',
     label: 'Risk level',
-    options: [
-      ['all', 'All Risk Levels'],
-      ['low', 'Low Risk'],
-      ['medium', 'Medium Risk'],
-      ['high', 'High Risk'],
-    ],
+    options: [['all', 'All Risk Levels'], ...enumOptions(RISK_LEVELS, riskLabel)],
   },
   {
     key: 'status',

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { embedUrl, mediaVideoId, thumbnailUrl } from './youtube';
-import { formatMediaDate, parseTags, tagLabel } from './format';
+import { formatMediaDate, tagLabel } from './format';
 
 const ID = 'dQw4w9WgXcQ';
 
@@ -52,13 +52,6 @@ describe('embedUrl', () => {
 });
 
 describe('media formatting', () => {
-  it('parses tags and falls back to an empty list', () => {
-    expect(parseTags('["worship","youth"]')).toEqual(['worship', 'youth']);
-    expect(parseTags('')).toEqual([]);
-    expect(parseTags('{')).toEqual([]);
-    expect(parseTags('"x"')).toEqual([]);
-  });
-
   it('labels tags and formats dates', () => {
     expect(tagLabel('special-event')).toBe('Special event');
     expect(tagLabel('worship')).toBe('Worship');

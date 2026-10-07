@@ -1,18 +1,18 @@
 'use client';
 
-import { useAnalytics, useRefreshAllEngagement } from '@/lib/queries/analytics';
+import { useAnalytics } from '@/lib/queries/analytics';
 import { riskClass, riskLabel, stageClass, stageLabel } from '@/lib/members/display';
 import InlineError from '@/components/ui/InlineError';
 import Skeleton from '@/components/ui/Skeleton';
 import DistributionList from './DistributionList';
+import EngagementComponents from './EngagementComponents';
+import RefreshEngagementControl from './RefreshEngagementControl';
 import StatTiles from './StatTiles';
 import TopEngagedMembers from './TopEngagedMembers';
 
 /** The `/analytics` route body (staff only; the page wraps it in RequireStaff). */
 export default function MemberAnalyticsDashboard() {
   const { data: analytics, isPending, error, refetch } = useAnalytics();
-  const refresh = useRefreshAllEngagement();
-  const refreshing = refresh.isPending;
 
   if (isPending) {
     return (
@@ -43,40 +43,17 @@ export default function MemberAnalyticsDashboard() {
             <h1 className="text-2xl font-bold text-gray-900">Member Analytics Dashboard</h1>
             <p className="text-gray-600">Comprehensive insights into your church community</p>
           </div>
-          <div className="flex items-center space-x-3">
-            <button
-              type="button"
-              onClick={() => refresh.mutate()}
-              disabled={refreshing}
-              className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-hidden focus:ring-2 focus:ring-blue-500 disabled:opacity-50 flex items-center space-x-2"
-            >
-              <svg
-                aria-hidden="true"
-                className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                />
-              </svg>
-              <span>{refreshing ? 'Refreshing...' : 'Refresh Scores'}</span>
-            </button>
-          </div>
+          <RefreshEngagementControl />
         </div>
-        {refresh.error && (
-          <InlineError
-            error={refresh.error}
-            fallback="Failed to refresh engagement scores"
-            className="mb-6"
-          />
-        )}
 
         <StatTiles analytics={analytics} />
+
+        <div className="mb-8">
+          <EngagementComponents
+            scores={analytics.averageScores}
+            title="Average engagement components (active members)"
+          />
+        </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2">

@@ -1,5 +1,12 @@
 /** Formatting helpers for the member profile at `/members/[id]`. */
-import { formatLocalDate, formatLocalDateTime, parseDate } from '@/lib/format/date';
+import type { Impact, InteractionType, MilestoneType, Priority } from '@embrace/shared';
+import {
+  formatCalendarDate,
+  formatLocalDate,
+  formatLocalDateTime,
+  isUtcMidnight,
+  parseDate,
+} from '@/lib/format/date';
 
 /** A long date in the viewer's locale ("January 5, 2024" in en-US), or null without a real date. */
 export function profileDate(dateString?: string | null): string | null {
@@ -9,6 +16,24 @@ export function profileDate(dateString?: string | null): string | null {
 /** A long date in the viewer's locale, or "Not set" for a field the profile always lists. */
 export function formatDate(dateString?: string | null): string {
   return profileDate(dateString) ?? 'Not set';
+}
+
+/**
+ * A long calendar date (a service date, an all-day timeline item) as its UTC day, so it shows the
+ * same day in every time zone, or "Not set".
+ */
+export function formatDay(dateString?: string | null): string {
+  return (
+    formatCalendarDate(dateString, { year: 'numeric', month: 'long', day: 'numeric' }) ?? 'Not set'
+  );
+}
+
+/**
+ * A value that is either a calendar date (UTC midnight: a service date, a milestone's achievedDate)
+ * or a timestamp: the former as its UTC day, the latter in the viewer's time zone.
+ */
+export function formatDayOrDate(dateString?: string | null): string {
+  return isUtcMidnight(dateString) ? formatDay(dateString) : formatDate(dateString);
 }
 
 /** Date and time in the viewer's locale ("Jan 5, 2024, 09:30 AM" in en-US), or "Not set". */
@@ -22,16 +47,6 @@ export function formatDateTime(dateString?: string | null): string {
       minute: '2-digit',
     }) ?? 'Not set'
   );
-}
-
-/** A JSON-encoded string array (skills, interests); anything unparsable or non-array is []. */
-export function parseJsonList(value?: string | null): string[] {
-  try {
-    const parsed: unknown = JSON.parse(value || '[]');
-    return Array.isArray(parsed) ? parsed.map(String) : [];
-  } catch {
-    return [];
-  }
 }
 
 /** Whole years since the date of birth, or null without one. */
@@ -66,7 +81,7 @@ export function membershipDuration(membershipDate?: string | null, now: Date = n
   return parts.length ? parts.join(', ') : 'Less than a month';
 }
 
-const INTERACTION_ICONS: Record<string, string> = {
+const INTERACTION_ICONS: Record<InteractionType, string> = {
   email_sent: '📧',
   email_opened: '📬',
   sms_sent: '📱',
@@ -76,9 +91,10 @@ const INTERACTION_ICONS: Record<string, string> = {
   note_added: '📝',
 };
 
-export const interactionIcon = (type: string): string => INTERACTION_ICONS[type] ?? '📋';
+export const interactionIcon = (type: string): string =>
+  INTERACTION_ICONS[type as InteractionType] ?? '📋';
 
-const MILESTONE_ICONS: Record<string, string> = {
+const MILESTONE_ICONS: Partial<Record<MilestoneType, string>> = {
   baptism: '✝️',
   confirmation: '🙏',
   wedding: '💒',
@@ -87,28 +103,22 @@ const MILESTONE_ICONS: Record<string, string> = {
   anniversary: '🎉',
 };
 
-export const milestoneIcon = (type: string): string => MILESTONE_ICONS[type] ?? '🏆';
+export const milestoneIcon = (type: string): string =>
+  MILESTONE_ICONS[type as MilestoneType] ?? '🏆';
 
-const PRIORITY_CLASSES: Record<string, string> = {
+const PRIORITY_CLASSES: Partial<Record<Priority, string>> = {
   urgent: 'bg-red-100 text-red-800',
   high: 'bg-orange-100 text-orange-800',
   normal: 'bg-blue-100 text-blue-800',
 };
 
 export const priorityClass = (priority: string): string =>
-  PRIORITY_CLASSES[priority] ?? 'bg-gray-100 text-gray-800';
+  PRIORITY_CLASSES[priority as Priority] ?? 'bg-gray-100 text-gray-800';
 
-const IMPACT_CLASSES: Record<string, string> = {
+const IMPACT_CLASSES: Partial<Record<Impact, string>> = {
   high: 'bg-purple-100 text-purple-800',
   medium: 'bg-blue-100 text-blue-800',
 };
 
 export const impactClass = (impact: string): string =>
-  IMPACT_CLASSES[impact] ?? 'bg-gray-100 text-gray-800';
-
-/** Risk badge colours: high red, medium yellow, otherwise green. */
-export function riskBadgeClass(risk: string): string {
-  if (risk === 'high') return 'bg-red-100 text-red-800';
-  if (risk === 'medium') return 'bg-yellow-100 text-yellow-800';
-  return 'bg-green-100 text-green-800';
-}
+  IMPACT_CLASSES[impact as Impact] ?? 'bg-gray-100 text-gray-800';

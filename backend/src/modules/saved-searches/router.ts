@@ -8,7 +8,7 @@ import * as savedSearches from './service';
 const router = express.Router();
 
 router.get('/', validate({ query: listSavedSearchesQuery }), async (req, res) => {
-  res.json({ success: true, searches: await savedSearches.listSavedSearches(req.user!.id) });
+  res.json({ success: true, searches: await savedSearches.listSavedSearches(req.user!) });
 });
 
 router.post('/', validate({ body: createSavedSearchInput }), async (req, res) => {

@@ -1,4 +1,5 @@
 import { act } from 'react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Dashboard from '@/components/dashboard/Dashboard';
 import { summaryTiles } from '@/components/dashboard/SummaryTiles';
@@ -28,6 +29,9 @@ vi.mock('@/lib/api/auth', () => authApi);
 
 const usersApi = vi.hoisted(() => ({ getUserSummary: vi.fn() }));
 vi.mock('@/lib/api/users', () => usersApi);
+
+const servicesApi = vi.hoisted(() => ({ listServices: vi.fn() }));
+vi.mock('@/lib/api/services', () => servicesApi);
 
 const staffSummary = { total: 12, active: 10, pendingApproval: 2, newThisMonth: 3 };
 
@@ -60,6 +64,7 @@ beforeEach(() => {
   nav.pathname = '/';
   nav.search = '';
   usersApi.getUserSummary.mockResolvedValue({ total: 7 });
+  servicesApi.listServices.mockResolvedValue({ services: [], total: 4, page: 1, pageSize: 1 });
 });
 
 describe('app shell', () => {
@@ -69,17 +74,26 @@ describe('app shell', () => {
     expect(container.textContent).toContain('Your Profile');
     expect(linkTexts(container, 'nav a')).toEqual(['Dashboard', 'Members', 'Media', 'My Profile']);
     expect(linkTexts(container)).not.toContain('Member Analytics');
+    expect(linkTexts(container)).not.toContain('Services and Attendance');
     expect(container.querySelector('nav a[aria-current="page"]')?.textContent).toBe('Dashboard');
   });
 
-  it('links staff to Analytics from the navigation and the quick links', async () => {
+  it('links staff to Services and Analytics from the navigation and the quick links', async () => {
     usersApi.getUserSummary.mockResolvedValue(staffSummary);
     const container = await renderDashboard(['admin']);
-    expect(linkTexts(container, 'nav a')).toContain('Analytics');
+    expect(linkTexts(container, 'nav a')).toEqual([
+      'Dashboard',
+      'Members',
+      'Media',
+      'Services',
+      'Analytics',
+      'My Profile',
+    ]);
     expect(links(container)).toEqual(
       expect.arrayContaining([
         ['View Members', '/members'],
         ['Media Library', '/media'],
+        ['Services and Attendance', '/services'],
         ['Member Analytics', '/analytics'],
         ['My Profile', '/members/cluser0000000000000000001'],
       ]),
@@ -159,15 +173,62 @@ describe('app shell', () => {
 describe('dashboard', () => {
   it('shows the staff counts from /api/users/summary', async () => {
     usersApi.getUserSummary.mockResolvedValue(staffSummary);
-    const container = await renderDashboard(['leader']);
-    const tiles = Array.from(container.querySelectorAll('dl > div')).map((d) => d.textContent);
-    expect(tiles).toEqual(['Total members12', 'Active10', 'Pending approval2', 'New this month3']);
+    await renderDashboard(['leader']);
+    const tiles = () =>
+      screen
+        .getAllByRole('term')
+        .map((term, i) => [term.textContent, screen.getAllByRole('definition')[i]?.textContent]);
+    await waitFor(() =>
+      expect(tiles()).toEqual([
+        ['Total members', '12'],
+        ['Active', '10'],
+        ['Pending approval', '2'],
+        ['New this month', '3'],
+        ['Services this month', '4'],
+      ]),
+    );
+    // The current calendar month, one row: only `total` is read.
+    const [params] = servicesApi.listServices.mock.calls[0]!;
+    expect(params).toMatchObject({ pageSize: 1 });
+    expect(params.from).toMatch(/^\d{4}-\d{2}-01$/);
+    expect(params.to.slice(0, 7)).toBe(params.from.slice(0, 7));
+  });
+
+  /** The value (<dd>) of the dashboard tile whose label (<dt>) is `label`. */
+  const tileValue = (label: string) => {
+    const index = screen.getAllByRole('term').findIndex((term) => term.textContent === label);
+    return screen.getAllByRole('definition')[index]!;
+  };
+
+  it('says the services count is unavailable when it fails, with a Retry that recovers', async () => {
+    usersApi.getUserSummary.mockResolvedValue(staffSummary);
+    servicesApi.listServices.mockRejectedValueOnce(new ApiError(500, 'Boom'));
+    servicesApi.listServices.mockResolvedValue({ services: [], total: 4, page: 1, pageSize: 1 });
+    await renderDashboard(['admin']);
+    await waitFor(() => expect(tileValue('Services this month')).toHaveTextContent('Unavailable'));
+    expect(tileValue('Total members')).toHaveTextContent('12');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(tileValue('Services this month')).toHaveTextContent(/^4$/));
+    expect(servicesApi.listServices).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+  });
+
+  it('says "Loading" in the services tile while the count loads', async () => {
+    usersApi.getUserSummary.mockResolvedValue(staffSummary);
+    servicesApi.listServices.mockReturnValue(new Promise(() => {}));
+    await renderDashboard(['admin']);
+    await waitFor(() => expect(tileValue('Total members')).toHaveTextContent('12'));
+    const value = tileValue('Services this month');
+    expect(value).toHaveTextContent(/^Loading$/);
+    expect(value).toHaveAttribute('aria-busy', 'true');
   });
 
   it('shows a member a single Members tile', async () => {
     const container = await renderDashboard(['member']);
     const tiles = Array.from(container.querySelectorAll('dl > div')).map((d) => d.textContent);
     expect(tiles).toEqual(['Members7']);
+    expect(servicesApi.listServices).not.toHaveBeenCalled();
   });
 
   it('reports a failed summary with a retry', async () => {
@@ -234,14 +295,21 @@ describe('navigation helpers', () => {
     expect(isCurrent('/', '/')).toBe(true);
   });
 
-  it('lists Analytics for staff only', () => {
+  it('lists Services and Analytics for staff only', () => {
     expect(navItems(false, 'u1').map((i) => i.href)).toEqual([
       '/',
       '/members',
       '/media',
       '/members/u1',
     ]);
-    expect(navItems(true, 'u1').map((i) => i.href)).toContain('/analytics');
+    expect(navItems(true, 'u1').map((i) => i.href)).toEqual([
+      '/',
+      '/members',
+      '/media',
+      '/services',
+      '/analytics',
+      '/members/u1',
+    ]);
   });
 
   it('turns a member summary into one tile and a staff summary into four', () => {

@@ -85,7 +85,7 @@ jobs:
       - run: npm run -w frontend build
 
   e2e:
-    name: E2E smoke
+    name: E2E
     needs: [backend, frontend]
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -128,7 +128,8 @@ jobs:
           } >> "$GITHUB_ENV"
       - run: npx -w frontend playwright install --with-deps chromium
       - run: npm run -w backend db:migrate
-      # Seeds the admin (global setup), starts both dev servers and runs e2e/smoke.spec.ts.
+      # Seeds the admin (global setup), starts both dev servers and runs every spec in
+      # frontend/e2e (smoke, attendance flow).
       - run: npm run -w frontend test:e2e
       - uses: actions/upload-artifact@v7
         if: failure()

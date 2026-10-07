@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import type { MemberDetails } from '@/types/domain';
-import { initials, stageLabel } from '@/lib/members/display';
-import { calculateAge, profileDate, riskBadgeClass } from '@/lib/members/profile';
+import { initials, riskClass, riskLabel, stageLabel } from '@/lib/members/display';
+import { calculateAge, profileDate } from '@/lib/members/profile';
 import AvatarImage from '@/components/ui/AvatarImage';
 
 export const backLinkClass = 'text-sm font-medium text-blue-600 hover:text-blue-800';
@@ -28,7 +28,7 @@ export default function ProfileHeader({
               className="w-16 h-16 rounded-full object-cover"
             />
           ) : (
-            <span className="text-2xl text-gray-600">{initials(member.name)}</span>
+            <span className="text-2xl text-gray-600">{initials(member)}</span>
           )}
         </div>
         <div>
@@ -46,8 +46,8 @@ export default function ProfileHeader({
               <span className="text-sm text-gray-500">Age {calculateAge(member.dateOfBirth)}</span>
             )}
             {member.engagement && (
-              <span className={`${badge} ${riskBadgeClass(member.engagement.riskLevel)}`}>
-                {member.engagement.riskLevel} risk
+              <span className={`${badge} ${riskClass(member.engagement.riskLevel)}`}>
+                {riskLabel(member.engagement.riskLevel)}
               </span>
             )}
           </div>

@@ -1,5 +1,5 @@
 import type { MediaItem } from '@/types/domain';
-import { formatMediaDate, parseTags } from '@/lib/media/format';
+import { formatMediaDate } from '@/lib/media/format';
 import { mediaVideoId } from '@/lib/media/youtube';
 import VideoThumbnail from './VideoThumbnail';
 
@@ -16,7 +16,7 @@ export default function MediaGrid({ media, onPlay }: MediaGridProps) {
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 p-6">
       {media.map((item) => {
         const videoId = mediaVideoId(item);
-        const tags = parseTags(item.tags);
+        const tags = item.tags;
         return (
           <div
             key={item.id}
@@ -72,8 +72,10 @@ export default function MediaGrid({ media, onPlay }: MediaGridProps) {
                 )}
               </div>
               <div className="flex justify-between items-center text-sm text-gray-500">
-                <span className="truncate mr-2">By {item.uploadedBy?.name}</span>
-                <span className="whitespace-nowrap">{formatMediaDate(item.createdAt)}</span>
+                {item.uploadedBy && (
+                  <span className="truncate mr-2">By {item.uploadedBy.name}</span>
+                )}
+                <span className="whitespace-nowrap ml-auto">{formatMediaDate(item.createdAt)}</span>
               </div>
             </div>
           </div>

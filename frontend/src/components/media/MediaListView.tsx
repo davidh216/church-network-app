@@ -1,5 +1,5 @@
 import type { MediaItem } from '@/types/domain';
-import { formatMediaDate, parseTags } from '@/lib/media/format';
+import { formatMediaDate } from '@/lib/media/format';
 import { canonicalYouTubeUrl } from '@embrace/shared';
 import { mediaVideoId } from '@/lib/media/youtube';
 import VideoThumbnail from './VideoThumbnail';
@@ -55,15 +55,19 @@ export default function MediaListView({ media, onPlay }: MediaListViewProps) {
                       {item.title}
                     </h2>
                     <div className="flex items-center space-x-3 text-sm text-gray-500 mb-2">
-                      <span>By {item.uploadedBy?.name}</span>
-                      <span>•</span>
+                      {item.uploadedBy && (
+                        <>
+                          <span>By {item.uploadedBy.name}</span>
+                          <span aria-hidden="true">•</span>
+                        </>
+                      )}
                       <span>{formatMediaDate(item.createdAt)}</span>
                     </div>
                     {item.description && (
                       <p className="text-sm text-gray-600 mb-3 line-clamp-2">{item.description}</p>
                     )}
                     <div className="flex flex-wrap gap-1">
-                      {parseTags(item.tags).map((tag, index) => (
+                      {item.tags.map((tag, index) => (
                         <span
                           key={index}
                           className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800"

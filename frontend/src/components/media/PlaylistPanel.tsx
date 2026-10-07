@@ -1,5 +1,4 @@
 import type { MediaItem } from '@/types/domain';
-import { parseTags } from '@/lib/media/format';
 
 interface PlaylistPanelProps {
   playlist: MediaItem[];
@@ -84,18 +83,16 @@ export default function PlaylistPanel({
                   {item.uploadedBy && (
                     <p className="text-xs text-gray-400 mt-1">{item.uploadedBy.name}</p>
                   )}
-                  {item.tags && (
+                  {item.tags.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-2">
-                      {parseTags(item.tags)
-                        .slice(0, 2)
-                        .map((tag, tagIndex) => (
-                          <span
-                            key={tagIndex}
-                            className="text-xs bg-gray-700 text-gray-300 px-2 py-1 rounded-sm"
-                          >
-                            {tag}
-                          </span>
-                        ))}
+                      {item.tags.slice(0, 2).map((tag, tagIndex) => (
+                        <span
+                          key={tagIndex}
+                          className="text-xs bg-gray-700 text-gray-300 px-2 py-1 rounded-sm"
+                        >
+                          {tag}
+                        </span>
+                      ))}
                     </div>
                   )}
                 </div>

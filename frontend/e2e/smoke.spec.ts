@@ -105,6 +105,21 @@ test('admin navigates the dashboard, members, a profile, media and analytics, th
   await expect(page.getByRole('button', { name: /^Play / }).first()).toBeAttached();
   await expectNoSeriousA11yViolations(page, '/media');
 
+  // Services (staff): the month list, and the New Service dialog passes axe while open.
+  await nav.getByRole('link', { name: 'Services' }).click();
+  await expect(page).toHaveURL(/\/services$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'Services' })).toBeVisible();
+  await expect(page.getByRole('status', { name: 'Loading services' })).toHaveCount(0);
+  await expectNoSeriousA11yViolations(page, '/services');
+  const newService = page.getByRole('button', { name: 'New Service' });
+  await newService.click();
+  const serviceDialog = page.getByRole('dialog', { name: 'New Service' });
+  await expect(serviceDialog.getByLabel('Date *')).toBeFocused();
+  await expectNoSeriousA11yViolations(page, '/services with the New Service dialog');
+  await page.keyboard.press('Escape');
+  await expect(serviceDialog).toHaveCount(0);
+  await expect(newService).toBeFocused();
+
   // Analytics (staff).
   await nav.getByRole('link', { name: 'Analytics' }).click();
   await expect(page).toHaveURL(/\/analytics$/);
@@ -124,7 +139,9 @@ test('admin navigates the dashboard, members, a profile, media and analytics, th
   await expect(page).toHaveURL(/\/login/);
 });
 
-test('a member visiting /analytics lands on the dashboard with a notice', async ({ page }) => {
+test('a member visiting /analytics or /services lands on the dashboard with a notice', async ({
+  page,
+}) => {
   // The one reusable member account (no staff role), created only if it cannot sign in.
   const admin = await adminRequest();
   const user = await ensureE2eMember(admin);
@@ -143,6 +160,16 @@ test('a member visiting /analytics lands on the dashboard with a notice', async 
   ).toBeVisible();
   // A member's dashboard has the single Members tile.
   await expect(page.locator('section[aria-label="Member counts"] dt')).toHaveText(['Members']);
+
+  // The staff-only services route: no nav link, and a visit redirects with the same notice.
+  await expect(
+    page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Services' }),
+  ).toHaveCount(0);
+  await page.goto('/services');
+  await expect(page).toHaveURL(/\/\?notice=staff-only$/);
+  await expect(
+    page.getByRole('status').filter({ hasText: 'That page is only available to staff.' }),
+  ).toBeVisible();
 
   // Members may open their own profile, but not anyone else's.
   await page.goto(`/members/${user.id}`);

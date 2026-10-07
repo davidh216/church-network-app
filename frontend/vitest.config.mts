@@ -13,5 +13,7 @@ export default defineConfig({
     setupFiles: ['src/test/setup.ts'],
     restoreMocks: true,
     unstubGlobals: true,
+    // A zone west of UTC, so a calendar date shown in local time (the day before) fails a test.
+    env: { TZ: 'America/Los_Angeles' },
   },
 });

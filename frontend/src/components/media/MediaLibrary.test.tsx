@@ -29,7 +29,7 @@ function video(n: number): MediaItem {
     type: 'YOUTUBE_VIDEO',
     url: `https://www.youtube.com/watch?v=abcdefghij${n}`,
     videoId: `abcdefghij${n}`,
-    tags: '[]',
+    tags: [],
     createdAt: '2026-01-01T00:00:00.000Z',
   };
 }
@@ -165,6 +165,22 @@ describe('MediaLibrary', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'List View' }));
     expect(screen.queryByRole('link', { name: /Open Sermon 1 on YouTube/ })).toBeNull();
     expect(screen.getByRole('link', { name: /Open Sermon 2 on YouTube/ })).toBeInTheDocument();
+  });
+
+  it('shows no "By" line for a video whose uploader was deleted, in both views', async () => {
+    mediaApi.listMedia.mockResolvedValue(
+      mediaPage([
+        { ...video(1), uploadedBy: null },
+        { ...video(2), uploadedBy: { id: 'u2', name: 'Grace Hopper' } },
+      ]),
+    );
+    await renderAs(['member']);
+    expect(await screen.findByText('By Grace Hopper')).toBeInTheDocument();
+    expect(screen.getAllByText(/^By\b/)).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: 'List View' }));
+    expect(screen.getByText('By Grace Hopper')).toBeInTheDocument();
+    expect(screen.getAllByText(/^By\b/)).toHaveLength(1);
+    expect(screen.getAllByText('•')).toHaveLength(1);
   });
 
   it('requests hqdefault thumbnails for the grid', async () => {

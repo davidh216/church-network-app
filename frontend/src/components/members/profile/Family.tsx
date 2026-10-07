@@ -35,7 +35,7 @@ export default function Family({ member }: { member: MemberDetails }) {
                         className="w-8 h-8 rounded-full object-cover"
                       />
                     ) : (
-                      <span className="text-xs text-gray-600">{initials(relative.name)}</span>
+                      <span className="text-xs text-gray-600">{initials(relative)}</span>
                     )}
                   </div>
                   <div className="flex-1">

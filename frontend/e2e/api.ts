@@ -26,10 +26,11 @@ export async function adminRequest(): Promise<APIRequestContext> {
 /**
  * The one member account the suite uses (no staff role). Every run reuses it, so church_dev does
  * not grow: it is created only when it cannot sign in, and an existing row that cannot (for
- * example deactivated, or with another password) is reactivated with the known password.
+ * example deactivated, or with another password) is reactivated with the known password. Its
+ * name is distinctive so the attendance sheet, which lists members by name, can find it.
  */
 export const E2E_MEMBER = {
-  name: 'E2E Member',
+  name: 'E2E Fixed Member',
   email: 'e2e-member@example.test',
   password: 'E2e-member-fixed-password',
 };
@@ -44,7 +45,8 @@ export async function ensureE2eMember(admin: APIRequestContext): Promise<{ id: s
     }
     // The account exists but cannot sign in: reset it rather than make another.
     const id = await memberId(admin);
-    expect((await admin.put(`/api/users/${id}`, { data: { isActive: true } })).ok()).toBe(true);
+    const data = { isActive: true, name: E2E_MEMBER.name };
+    expect((await admin.put(`/api/users/${id}`, { data })).ok()).toBe(true);
     const reset = await admin.post(`/api/users/${id}/reset-password`, {
       data: { newPassword: E2E_MEMBER.password },
     });
@@ -52,7 +54,12 @@ export async function ensureE2eMember(admin: APIRequestContext): Promise<{ id: s
     return { id };
   }
   await signedIn.dispose();
-  return { id: await memberId(admin) };
+  const id = await memberId(admin);
+  // Accounts made by earlier runs may carry an older name.
+  expect((await admin.put(`/api/users/${id}`, { data: { name: E2E_MEMBER.name } })).ok()).toBe(
+    true,
+  );
+  return { id };
 }
 
 async function memberId(admin: APIRequestContext): Promise<string> {
@@ -88,4 +95,66 @@ export async function ensureOneVideo(admin: APIRequestContext) {
     },
   });
   expect(created.status()).toBe(201);
+}
+
+/** Deletes every service whose title starts with `prefix` (a year either side of today). */
+export async function deleteServices(admin: APIRequestContext, prefix: string) {
+  const day = (offset: number) =>
+    new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
+  const ids: string[] = [];
+  for (let page = 1; ; page += 1) {
+    const list = await admin.get('/api/services', {
+      params: { from: day(-366), to: day(366), page, pageSize: 100 },
+    });
+    expect(list.ok()).toBe(true);
+    const { services, total } = (await list.json()) as {
+      services: { id: string; title: string | null }[];
+      total: number;
+    };
+    ids.push(...services.filter((s) => s.title?.startsWith(prefix)).map((s) => s.id));
+    if (page * 100 >= total) break;
+  }
+  for (const id of ids) expect((await admin.delete(`/api/services/${id}`)).ok()).toBe(true);
+}
+
+/**
+ * The most recent UTC day in the last `days` days (today first) with no service of `type`, so the
+ * suite can create one there even when church_dev already holds services (they are unique per day
+ * and type). Fails with a clear message when every day is taken.
+ */
+export async function freeServiceDate(
+  admin: APIRequestContext,
+  type: string,
+  days = 14,
+): Promise<string> {
+  const day = (offset: number) =>
+    new Date(Date.now() - offset * 86_400_000).toISOString().slice(0, 10);
+  const list = await admin.get('/api/services', {
+    params: { from: day(days - 1), to: day(0), type, pageSize: 100 },
+  });
+  expect(list.ok()).toBe(true);
+  const { services } = (await list.json()) as { services: { date: string }[] };
+  const taken = new Set(services.map((s) => s.date));
+  for (let offset = 0; offset < days; offset += 1) {
+    if (!taken.has(day(offset))) return day(offset);
+  }
+  throw new Error(
+    `Every day in the last ${days} days already has a ${type}; the e2e needs one free`,
+  );
+}
+
+/** Runs the engagement refresh-all job, waits for it and asserts every member was refreshed. */
+export async function refreshEngagement(admin: APIRequestContext): Promise<string> {
+  const started = await admin.post('/api/analytics/members/engagement/refresh-all');
+  expect(started.status()).toBe(202);
+  const { jobId } = (await started.json()) as { jobId: string };
+  await expect
+    .poll(async () => (await (await admin.get(`/api/analytics/jobs/${jobId}`)).json()).status, {
+      timeout: 60_000,
+    })
+    .not.toBe('running');
+  const final = await admin.get(`/api/analytics/jobs/${jobId}`);
+  expect(final.ok()).toBe(true);
+  expect(await final.json()).toMatchObject({ status: 'completed', failed: 0 });
+  return jobId;
 }

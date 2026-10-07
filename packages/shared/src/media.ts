@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { mediaType } from './enums.js';
 import {
   boundedText,
   MAX_PAGE,
@@ -8,9 +9,6 @@ import {
   requiredText,
   type WithNumericPaging,
 } from './primitives.js';
-
-// Only YouTube videos can be added today; the column also names IMAGE, VIDEO, AUDIO and DOCUMENT.
-export const mediaType = z.enum(['YOUTUBE_VIDEO'], { error: 'Only YouTube videos can be added' });
 
 export const YOUTUBE_VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
 const WATCH_HOSTS = new Set(['youtube.com', 'www.youtube.com', 'm.youtube.com']);
@@ -55,6 +53,19 @@ export const youtubeUrl = z
   })
   .transform((url) => canonicalYouTubeUrl(youtubeVideoId(url)!));
 
+// The canonical form of a media tag, as the fixed categories are written ('special-event'):
+// trimmed, lower-case, each run of spaces or hyphens a single hyphen. Free-text tags are allowed
+// and stored in this form, so "Special event" and 'special-event' are the same tag.
+export function normalizeMediaTag(raw: string): string {
+  return raw
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '-');
+}
+
+// The most tags one video may carry.
+export const MAX_MEDIA_TAGS = 20;
+
 // POST /api/media (staff)
 export const createMediaInput = z.object({
   title: requiredText('Title', 200, 'Please enter a title'),
@@ -63,8 +74,10 @@ export const createMediaInput = z.object({
   url: youtubeUrl,
   tags: z
     .array(requiredText('Each tag', 50, 'Tags cannot be blank'))
-    .max(20, 'Add at most 20 tags')
-    .default([]),
+    .max(MAX_MEDIA_TAGS, `Add at most ${MAX_MEDIA_TAGS} tags`)
+    .default([])
+    // Normalised, then duplicates (same canonical form) dropped, first one kept.
+    .transform((tags) => [...new Set(tags.map(normalizeMediaTag))]),
 });
 
 export const DEFAULT_MEDIA_PAGE_SIZE = 24;
@@ -78,7 +91,6 @@ export const listMediaQuery = z.object({
   pageSize: z.coerce.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_MEDIA_PAGE_SIZE),
 });
 
-export type MediaType = z.infer<typeof mediaType>;
 export type CreateMediaInput = z.input<typeof createMediaInput>;
 export type ListMediaQuery = z.input<typeof listMediaQuery>;
 // GET /api/media parameters as the web app passes them.

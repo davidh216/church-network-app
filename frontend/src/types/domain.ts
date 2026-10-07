@@ -2,7 +2,26 @@
 // @embrace/shared schemas the API validates with; response shapes stay local because the
 // shared package only describes inputs.
 
-import type { SearchQuery } from '@embrace/shared';
+import type {
+  Channel,
+  EngagementComponents,
+  Gender,
+  Impact,
+  InteractionCategory,
+  InteractionStatus,
+  InteractionType,
+  MaritalStatus,
+  MediaType,
+  MembershipStage,
+  MembershipType,
+  MilestoneCategory,
+  MilestoneType,
+  NoteType,
+  Priority,
+  RelationshipType,
+  RiskLevel,
+  SearchQuery,
+} from '@embrace/shared';
 
 export type {
   CreateMediaInput,
@@ -18,7 +37,7 @@ export interface Role {
   id: string;
   name: string;
   description?: string | null;
-  permissions?: string;
+  permissions?: string[];
 }
 
 interface UserRole {
@@ -27,12 +46,10 @@ interface UserRole {
 
 export interface Engagement {
   engagementScore: number;
-  membershipStage: string;
-  riskLevel: string;
+  membershipStage: MembershipStage;
+  riskLevel: RiskLevel;
   lastActivity?: string | null;
   attendanceScore?: number;
-  givingScore?: number;
-  volunteerScore?: number;
   communityScore?: number;
   communicationScore?: number;
 }
@@ -42,6 +59,8 @@ export interface User {
   id: string;
   email: string;
   name: string;
+  firstName?: string | null;
+  lastName?: string | null;
   phone?: string | null;
   avatar?: string | null;
   bio?: string | null;
@@ -50,6 +69,8 @@ export interface User {
   updatedAt: string;
   lastLoginAt?: string | null;
   membershipDate?: string | null;
+  volunteerSkills?: string[];
+  interests?: string[];
   roles: UserRole[];
 }
 
@@ -60,6 +81,9 @@ export interface User {
 export interface Member {
   id: string;
   name: string;
+  /** Staff projections only. */
+  firstName?: string | null;
+  lastName?: string | null;
   email?: string;
   phone?: string | null;
   bio?: string | null;
@@ -69,6 +93,9 @@ export interface Member {
   updatedAt?: string;
   membershipDate?: string | null;
   lastLoginAt?: string | null;
+  /** Staff projections only. */
+  volunteerSkills?: string[];
+  interests?: string[];
   roles: UserRole[];
   engagement?: Engagement | null;
 }
@@ -77,18 +104,18 @@ export interface MediaItem {
   id: string;
   title: string;
   description?: string | null;
-  type: string;
+  type: MediaType;
   url: string;
   /** The YouTube video id, or null when the stored URL cannot be embedded. */
   videoId?: string | null;
   thumbnailUrl?: string | null;
-  /** JSON-encoded string array. */
-  tags: string;
+  tags: string[];
   createdAt: string;
+  /** Null once the uploader's account has been deleted (the media is kept). */
   uploadedBy?: {
     id: string;
     name: string;
-  };
+  } | null;
 }
 
 /**
@@ -103,6 +130,8 @@ interface SavedSearchBase {
   isPublic: boolean;
   usageCount?: number;
   lastUsed?: string | null;
+  /** Who saved it (list responses to staff only; members never get it). */
+  createdBy?: { id: string; name: string };
 }
 
 export type SavedSearch = SavedSearchBase &
@@ -122,8 +151,8 @@ export interface MemberDetails {
 
   // Enhanced member information
   dateOfBirth?: string;
-  gender?: string;
-  maritalStatus?: string;
+  gender?: Gender;
+  maritalStatus?: MaritalStatus;
   occupation?: string;
   emergencyContact?: string;
   emergencyPhone?: string;
@@ -132,7 +161,7 @@ export interface MemberDetails {
   membershipDate?: string;
   baptismDate?: string;
   confirmationDate?: string;
-  membershipType?: string;
+  membershipType?: MembershipType;
   previousChurch?: string;
   howHeardAboutUs?: string;
 
@@ -150,13 +179,15 @@ export interface MemberDetails {
 
   // Family information
   familyId?: string;
+  /** Derived on the server from the family's headOfFamilyId. */
   isHeadOfFamily: boolean;
 
   // Notes and tracking
   notes?: string;
-  lastAttended?: string;
-  volunteerSkills?: string;
-  interests?: string;
+  /** Date of the latest attended service (UTC midnight), derived on the server. */
+  lastAttended?: string | null;
+  volunteerSkills?: string[];
+  interests?: string[];
 
   createdAt: string;
   updatedAt: string;
@@ -171,12 +202,10 @@ export interface MemberDetails {
   // Phase 3: Enhanced data
   engagement?: {
     engagementScore: number;
-    membershipStage: string;
-    riskLevel: string;
+    membershipStage: MembershipStage;
+    riskLevel: RiskLevel;
     lastActivity?: string;
     attendanceScore: number;
-    givingScore: number;
-    volunteerScore: number;
     communityScore: number;
     communicationScore: number;
   };
@@ -187,31 +216,33 @@ export interface MemberDetails {
     lastName?: string;
     avatar?: string;
     isActive: boolean;
-    relationshipType: string;
+    relationshipType: RelationshipType;
     isPrimary: boolean;
   }>;
   interactions?: Array<{
     id: string;
-    interactionType: string;
+    interactionType: InteractionType;
     subject?: string;
     content?: string;
-    channel: string;
-    status: string;
-    category?: string;
-    priority: string;
+    channel: Channel;
+    status: InteractionStatus;
+    category?: InteractionCategory;
+    priority: Priority;
     responseRequired: boolean;
     responseReceived: boolean;
     createdAt: string;
     completedAt?: string;
+    /** The staff member who recorded it, when known. */
+    staffMember?: { id: string; name: string } | null;
   }>;
   milestones?: Array<{
     id: string;
-    milestoneType: string;
+    milestoneType: MilestoneType;
     title: string;
     description?: string;
     achievedDate: string;
-    category: string;
-    impact: string;
+    category: MilestoneCategory;
+    impact: Impact;
     isPublic: boolean;
     celebrated: boolean;
   }>;
@@ -219,20 +250,12 @@ export interface MemberDetails {
     id: string;
     title?: string;
     content: string;
-    noteType: string;
+    noteType: NoteType;
     isPrivate: boolean;
     isFollowUp: boolean;
     followUpDate?: string;
     createdAt: string;
-  }>;
-  timelineActivities?: Array<{
-    id: string;
-    activityDate: string;
-    activityType: string;
-    title: string;
-    description?: string;
-    category: string;
-    impact: string;
+    author?: { id: string; name: string };
   }>;
 }
 
@@ -241,8 +264,11 @@ export interface MemberAnalytics {
   totalMembers: number;
   activeMembers: number;
   newMembersThisMonth: number;
+  /** Active accounts whose riskLevel is 'high' (stage at_risk or inactive); not medium risk. */
   atRiskMembers: number;
   averageEngagementScore: number;
+  /** Averages of the stored engagement rows of active accounts. */
+  averageScores: EngagementComponents;
   topEngagedMembers: Array<{
     user: {
       id: string;
@@ -251,10 +277,10 @@ export interface MemberAnalytics {
       avatar?: string;
     };
     engagementScore: number;
-    membershipStage: string;
+    membershipStage: MembershipStage;
   }>;
-  membershipStageDistribution: Record<string, number>;
-  riskLevelDistribution: Record<string, number>;
+  membershipStageDistribution: Partial<Record<MembershipStage, number>>;
+  riskLevelDistribution: Partial<Record<RiskLevel, number>>;
 }
 
 /** Success envelope shared by every API response (`{ success: true, ...payload }`). */

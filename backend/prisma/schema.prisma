@@ -21,8 +21,8 @@ model User {
   firstName        String?
   lastName         String?
   dateOfBirth      DateTime?
-  gender           String?    // "male", "female", "other", "prefer_not_to_say"
-  maritalStatus    String?    // "single", "married", "divorced", "widowed", "separated"
+  gender           Gender?
+  maritalStatus    MaritalStatus?
   occupation       String?
   emergencyContact String?
   emergencyPhone   String?
@@ -31,7 +31,7 @@ model User {
   membershipDate   DateTime?
   baptismDate      DateTime?
   confirmationDate DateTime?
-  membershipType   String?    // "member", "visitor", "regular_attendee", "inactive"
+  membershipType   MembershipType?
   previousChurch   String?
   howHeardAboutUs  String?
   
@@ -49,14 +49,13 @@ model User {
   
   // Family information
   familyId         String?
-  isHeadOfFamily   Boolean  @default(false)
   
   // Notes and tracking
   notes            String?
   lastAttended     DateTime?
   lastLoginAt      DateTime?   // Track when user last logged in
-  volunteerSkills  String?    // JSON array as string
-  interests        String?    // JSON array as string
+  volunteerSkills  String[]   @default([])
+  interests        String[]   @default([])
   
   // Timestamps
   createdAt DateTime @default(now())
@@ -71,17 +70,32 @@ model User {
   
   // CRM Relations
   engagement     MemberEngagement?
+  engagementSnapshots EngagementSnapshot[]
   activities     MemberActivity[]
   interactions   MemberInteraction[]
   milestones     MemberMilestone[]
   memberNotes    MemberNote[]
   memberTags     UserTag[]
-  timelineActivities TimelineActivity[]
   
   // Phase 3: Family Relationships
   familyRelationships     FamilyRelationship[] @relation("UserAsPrimary")
   relatedFamilyMembers    FamilyRelationship[] @relation("UserAsRelated")
+
+  // Rows this user authored, owns or leads (PHASE3_SPECS.md 1.2)
+  authoredNotes     MemberNote[]        @relation("NoteAuthor")
+  staffInteractions MemberInteraction[] @relation("InteractionStaff")
+  savedSearches     SavedSearch[]
+  tagsAdded         UserTag[]           @relation("TagAddedBy")
+  ledGroups         Group[]
+  headedFamilies    Family[]            @relation("FamilyHead")
+  servicesCreated   Service[]           @relation("ServiceCreatedBy")
+  attendanceRecorded Attendance[]       @relation("AttendanceRecordedBy")
   
+  @@index([familyId])
+  @@index([isActive])
+  @@index([createdAt])
+  @@index([lastLoginAt])
+  @@index([membershipDate])
   @@map("users")
 }
 
@@ -89,7 +103,7 @@ model Role {
   id          String @id @default(cuid())
   name        String @unique // "admin", "leader", "member"
   description String?
-  permissions String // JSON string for now
+  permissions String[] @default([])
   
   // Relations
   users UserRole[]
@@ -107,6 +121,7 @@ model UserRole {
   role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
   
   @@unique([userId, roleId])
+  @@index([roleId])
   @@map("user_roles")
 }
 
@@ -114,43 +129,40 @@ model Media {
   id          String    @id @default(cuid())
   title       String
   description String?
-  type        String    // IMAGE, VIDEO, AUDIO, DOCUMENT, YOUTUBE_VIDEO
+  type        MediaType
   url         String
   thumbnailUrl String?
   fileSize    Int?
   mimeType    String?
   
   // Content organization
-  tags        String    // JSON array as string
+  tags        String[]  @default([])
   isApproved  Boolean   @default(false)
   isPublic    Boolean   @default(true)
   
   // Upload info
-  uploadedById String
-  uploadedBy   User      @relation(fields: [uploadedById], references: [id])
+  uploadedById String?
+  uploadedBy   User?     @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
   
   // Timestamps
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   
+  @@index([uploadedById])
+  @@index([createdAt])
   @@map("media")
 }
 
 model Family {
   id          String @id @default(cuid())
   familyName  String
-  headOfFamily String?
+  headOfFamilyId String?
+  headOfFamily   User?   @relation("FamilyHead", fields: [headOfFamilyId], references: [id], onDelete: SetNull)
   address     String?
   city        String?
   state       String?
   zipCode     String?
   country     String?
-  
-  // Phase 3: Enhanced family analytics
-  familyEngagementScore Float @default(0)
-  lastCalculated       DateTime @default(now())
-  totalMembers         Int @default(0)
-  activeMembers        Int @default(0)
   
   // Timestamps
   createdAt   DateTime @default(now())
@@ -160,6 +172,7 @@ model Family {
   members     User[]
   relationships FamilyRelationship[]
   
+  @@index([headOfFamilyId])
   @@map("families")
 }
 
@@ -168,7 +181,7 @@ model FamilyRelationship {
   id              String @id @default(cuid())
   primaryUserId   String
   relatedUserId   String
-  relationshipType String // "spouse", "parent", "child", "sibling", "grandparent", "grandchild", "other"
+  relationshipType RelationshipType
   isActive        Boolean @default(true)
   
   // Timestamps
@@ -181,7 +194,11 @@ model FamilyRelationship {
   family          Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
   familyId        String
   
-  @@unique([primaryUserId, relatedUserId, relationshipType])
+  // One row per pair, stored with primaryUserId < relatedUserId; relationshipType is the
+  // primary's relation to the related user (PHASE3_SPECS.md 1.2).
+  @@unique([primaryUserId, relatedUserId])
+  @@index([relatedUserId])
+  @@index([familyId])
   @@map("family_relationships")
 }
 
@@ -189,7 +206,7 @@ model Group {
   id          String @id @default(cuid())
   name        String
   description String?
-  type        String  // "ministry", "small_group", "committee", "service_team"
+  type        GroupType
   isActive    Boolean @default(true)
   meetingDay  String? // "monday", "tuesday", etc.
   meetingTime String?
@@ -197,6 +214,7 @@ model Group {
   
   // Leadership
   leaderId    String?
+  leader      User?   @relation(fields: [leaderId], references: [id], onDelete: SetNull)
   
   // Timestamps
   createdAt   DateTime @default(now())
@@ -205,6 +223,7 @@ model Group {
   // Relations
   members     GroupMember[]
   
+  @@index([leaderId])
   @@map("groups")
 }
 
@@ -212,7 +231,7 @@ model GroupMember {
   id       String @id @default(cuid())
   userId   String
   groupId  String
-  role     String @default("member") // "leader", "co-leader", "member"
+  role     GroupMemberRole @default(member)
   joinDate DateTime @default(now())
   isActive Boolean @default(true)
   
@@ -221,58 +240,73 @@ model GroupMember {
   group    Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
   
   @@unique([userId, groupId])
+  @@index([groupId])
   @@map("group_members")
+}
+
+// A held service (PHASE3_SPECS.md 1.4): one per date and type. Attendance rows point at it, and
+// attendance scores count services in a window by `date`.
+model Service {
+  id          String      @id @default(cuid())
+  date        DateTime    @db.Date
+  type        ServiceType @default(sunday_service)
+  title       String?
+  notes       String?
+  createdById String?
+  createdBy   User?       @relation("ServiceCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime    @default(now())
+
+  // Relations
+  attendance  Attendance[]
+
+  @@unique([date, type])
+  @@index([date])
+  @@index([createdById])
+  @@map("services")
 }
 
 model Attendance {
   id           String   @id @default(cuid())
   userId       String
-  serviceDate  DateTime
-  serviceType  String   @default("sunday_service") // "sunday_service", "bible_study", "prayer_meeting", etc.
+  serviceId    String
   present      Boolean  @default(true)
   notes        String?
+  recordedById String?  // Staff member who last recorded this row
   
   // Timestamps
   createdAt    DateTime @default(now())
   
   // Relations
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  service      Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  recordedBy   User?    @relation("AttendanceRecordedBy", fields: [recordedById], references: [id], onDelete: SetNull)
   
-  @@unique([userId, serviceDate, serviceType])
+  @@unique([userId, serviceId])
+  @@index([userId])
+  @@index([serviceId])
+  @@index([recordedById])
   @@map("attendance")
 }
 
 model MemberEngagement {
-  id                 String   @id @default(cuid())
-  userId             String
+  userId             String   @id
   engagementScore    Float    @default(0)    // 0-100 engagement score
   lastCalculated     DateTime @default(now())
   
-  // Engagement metrics
-  attendanceScore    Float    @default(0)    // Based on service attendance
-  givingScore        Float    @default(0)    // Based on giving consistency
-  volunteerScore     Float    @default(0)    // Based on volunteer participation
-  communityScore     Float    @default(0)    // Based on group participation
-  communicationScore Float    @default(0)    // Based on email/sms engagement
-  
+  // Engagement components (PHASE3_SPECS.md 1.5), each 0-100. engagementScore weighs them
+  // 0.6 / 0.2 / 0.2. Giving and volunteer scores were removed in P3-D3 (no data source).
+  attendanceScore    Float    @default(0)    // Attended / scoring services, last 12 weeks
+  communityScore     Float    @default(0)    // Active group memberships: 0, 60 or 100
+  communicationScore Float    @default(0)    // Response rate on two-way interactions, 12 months
+
   // Activity counters (rolling 12 months)
   servicesAttended   Int      @default(0)
   eventsAttended     Int      @default(0)
-  volunteerHours     Float    @default(0)
-  donationCount      Int      @default(0)
-  groupMeetings      Int      @default(0)
-  
+
   // Lifecycle indicators
-  membershipStage    String   @default("visitor") // "visitor", "new_member", "active_member", "core_member", "leader", "at_risk", "inactive"
-  riskLevel          String   @default("low")     // "low", "medium", "high"
+  membershipStage    MembershipStage @default(visitor)
+  riskLevel          RiskLevel       @default(low)
   lastActivity       DateTime?
-  
-  // Phase 3: Lifecycle automation fields
-  stageTransitionDate DateTime?
-  nextReviewDate     DateTime?
-  automationTriggers String?  // JSON array of active automation triggers
-  followUpRequired   Boolean  @default(false)
-  followUpDate       DateTime?
   
   // Timestamps
   createdAt          DateTime @default(now())
@@ -281,57 +315,39 @@ model MemberEngagement {
   // Relations
   user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
-  @@unique([userId])
+  @@index([engagementScore])
+  @@index([membershipStage])
+  @@index([riskLevel])
   @@map("member_engagement")
 }
 
-// Phase 3: New model for lifecycle automation rules
-model LifecycleRule {
-  id              String @id @default(cuid())
-  name            String
-  description     String?
-  triggerCondition String // JSON string defining when rule triggers
-  actionType      String  // "stage_transition", "send_communication", "create_follow_up", "assign_tag"
-  actionData      String  // JSON string with action parameters
-  isActive        Boolean @default(true)
-  priority        Int     @default(0)
-  
-  // Timestamps
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
-  @@map("lifecycle_rules")
-}
+// The engagement row as it stood in a month (PHASE3_SPECS.md 1.5): every refresh upserts the row
+// of the current month, so the last refresh of a month is what that month keeps.
+model EngagementSnapshot {
+  id                 String          @id @default(cuid())
+  userId             String
+  month              DateTime        @db.Date // First day of the month (UTC)
+  engagementScore    Float
+  attendanceScore    Float
+  communityScore     Float
+  communicationScore Float
+  membershipStage    MembershipStage
+  riskLevel          RiskLevel
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
 
-// Phase 3: New model for timeline activity aggregation
-model TimelineActivity {
-  id              String @id @default(cuid())
-  userId          String
-  activityDate    DateTime
-  activityType    String  // "interaction", "milestone", "note", "attendance", "engagement_update"
-  title           String
-  description     String?
-  category        String  // "spiritual", "service", "family", "personal", "ministry"
-  impact          String  @default("medium") // "low", "medium", "high"
-  
-  // Metadata for different activity types
-  metadata        String? // JSON string with activity-specific data
-  
-  // Timestamps
-  createdAt       DateTime @default(now())
-  
-  // Relations
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  @@map("timeline_activities")
+  user               User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, month])
+  @@map("engagement_snapshots")
 }
 
 model MemberActivity {
   id          String   @id @default(cuid())
   userId      String
-  activityType String  // "service_attendance", "event_attendance", "donation", "volunteer", "communication_open", "profile_update", etc.
+  activityType ActivityType
   description String?
-  metadata    String?  // JSON string for additional data
+  metadata    Json?    // Additional data: an object (legacy text that did not parse is kept as a JSON string)
   points      Int      @default(0) // Points awarded for this activity
   
   // Timestamps
@@ -340,27 +356,29 @@ model MemberActivity {
   // Relations
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
+  @@index([userId, createdAt])
   @@map("member_activities")
 }
 
 model MemberInteraction {
   id             String   @id @default(cuid())
   userId         String
-  interactionType String  // "email_sent", "email_opened", "sms_sent", "sms_replied", "call_made", "visit_logged", "note_added"
+  interactionType InteractionType
   subject        String?
   content        String?
   staffMemberId  String?  // Who initiated the interaction
-  channel        String   // "email", "sms", "phone", "in_person", "social_media"
-  status         String   @default("completed") // "scheduled", "completed", "failed"
+  staffMember    User?    @relation("InteractionStaff", fields: [staffMemberId], references: [id], onDelete: SetNull)
+  channel        Channel
+  status         InteractionStatus @default(completed)
   
   // Phase 3: Enhanced interaction tracking
-  category       String?  // "welcome", "follow_up", "pastoral_care", "event_invitation", "giving_reminder", "volunteer_request"
-  priority       String   @default("normal") // "low", "normal", "high", "urgent"
+  category       InteractionCategory?
+  priority       Priority @default(normal)
   responseRequired Boolean @default(false)
   responseReceived Boolean @default(false)
   
   // Metadata
-  metadata       String?  // JSON for additional data
+  metadata       Json?    // Additional data: an object (legacy text that did not parse is kept as a JSON string)
   responseTime   Int?     // Minutes to respond (for two-way communications)
   
   // Timestamps
@@ -371,13 +389,15 @@ model MemberInteraction {
   // Relations
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
+  @@index([userId, createdAt])
+  @@index([staffMemberId])
   @@map("member_interactions")
 }
 
 model MemberMilestone {
   id            String   @id @default(cuid())
   userId        String
-  milestoneType String   // "first_visit", "baptism", "confirmation", "wedding", "first_volunteer", "leadership_role", "anniversary"
+  milestoneType MilestoneType
   title         String
   description   String?
   achievedDate  DateTime
@@ -385,8 +405,8 @@ model MemberMilestone {
   celebrated    Boolean  @default(false)
   
   // Phase 3: Enhanced milestone categorization
-  category      String   @default("general") // "spiritual", "service", "family", "personal", "ministry"
-  impact        String   @default("medium")  // "low", "medium", "high"
+  category      MilestoneCategory @default(general)
+  impact        Impact   @default(medium)
   autoGenerated Boolean  @default(false)     // Whether milestone was auto-detected
   
   // Timestamps
@@ -395,6 +415,7 @@ model MemberMilestone {
   // Relations
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
+  @@index([userId, achievedDate])
   @@map("member_milestones")
 }
 
@@ -402,9 +423,10 @@ model MemberNote {
   id           String   @id @default(cuid())
   userId       String
   authorId     String   // Staff member who wrote the note
+  author       User     @relation("NoteAuthor", fields: [authorId], references: [id], onDelete: Restrict)
   title        String?
   content      String
-  noteType     String   @default("general") // "general", "pastoral_care", "follow_up", "prayer_request", "concern"
+  noteType     NoteType @default(general)
   isPrivate    Boolean  @default(false)
   isFollowUp   Boolean  @default(false)
   followUpDate DateTime?
@@ -416,6 +438,8 @@ model MemberNote {
   // Relations
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
+  @@index([userId, createdAt])
+  @@index([authorId])
   @@map("member_notes")
 }
 
@@ -423,7 +447,7 @@ model MemberTag {
   id        String   @id @default(cuid())
   name      String   @unique
   color     String   @default("#3B82F6") // Hex color for UI display
-  category  String   @default("general") // "ministry", "demographic", "interest", "status", "general"
+  category  TagCategory @default(general)
   isActive  Boolean  @default(true)
   
   // Timestamps
@@ -439,7 +463,8 @@ model UserTag {
   id       String @id @default(cuid())
   userId   String
   tagId    String
-  addedBy  String? // Staff member who added the tag
+  addedById String? // Staff member who added the tag
+  addedBy   User?   @relation("TagAddedBy", fields: [addedById], references: [id], onDelete: SetNull)
   addedAt  DateTime @default(now())
   
   // Relations
@@ -447,6 +472,8 @@ model UserTag {
   tag      MemberTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
   
   @@unique([userId, tagId])
+  @@index([tagId])
+  @@index([addedById])
   @@map("user_tags")
 }
 
@@ -454,9 +481,10 @@ model SavedSearch {
   id          String   @id @default(cuid())
   name        String
   description String?
-  query       String   // JSON string containing the search query
+  query       Json     // A searchQuery (validated on save and on load)
   isPublic    Boolean  @default(false)
-  createdBy   String   // User who created the search
+  createdById String   // User who created the search
+  createdBy   User     @relation(fields: [createdById], references: [id], onDelete: Cascade)
   usageCount  Int      @default(0)
   
   // Timestamps
@@ -464,5 +492,175 @@ model SavedSearch {
   updatedAt   DateTime @updatedAt
   lastUsed    DateTime?
   
+  @@index([createdById])
   @@map("saved_searches")
+}
+
+// Enums (PHASE3_SPECS.md 1.1). The value lists mirror packages/shared/src/enums.ts in the same
+// order; backend/test/enums.test.ts keeps them equal.
+
+enum MembershipStage {
+  visitor
+  new_member
+  active_member
+  core_member
+  leader
+  at_risk
+  inactive
+}
+
+enum RiskLevel {
+  low
+  medium
+  high
+}
+
+enum Gender {
+  male
+  female
+  other
+  prefer_not_to_say
+}
+
+enum MaritalStatus {
+  single
+  married
+  divorced
+  widowed
+  separated
+}
+
+enum MembershipType {
+  member
+  visitor
+  regular_attendee
+  inactive
+}
+
+enum MediaType {
+  YOUTUBE_VIDEO
+}
+
+enum RelationshipType {
+  spouse
+  parent
+  child
+  sibling
+  grandparent
+  grandchild
+  other
+}
+
+enum GroupType {
+  ministry
+  small_group
+  committee
+  service_team
+}
+
+enum GroupMemberRole {
+  leader
+  co_leader
+  member
+}
+
+enum ServiceType {
+  sunday_service
+  bible_study
+  prayer_meeting
+  special_event
+  other
+}
+
+enum InteractionType {
+  email_sent
+  email_opened
+  sms_sent
+  sms_replied
+  call_made
+  visit_logged
+  note_added
+}
+
+enum Channel {
+  email
+  sms
+  phone
+  in_person
+  social_media
+}
+
+enum InteractionStatus {
+  scheduled
+  completed
+  failed
+}
+
+enum InteractionCategory {
+  welcome
+  follow_up
+  pastoral_care
+  event_invitation
+  giving_reminder
+  volunteer_request
+}
+
+enum Priority {
+  low
+  normal
+  high
+  urgent
+}
+
+enum MilestoneType {
+  first_visit
+  baptism
+  confirmation
+  wedding
+  first_volunteer
+  leadership_role
+  anniversary
+  other
+}
+
+enum MilestoneCategory {
+  spiritual
+  service
+  family
+  personal
+  ministry
+  general
+}
+
+enum Impact {
+  low
+  medium
+  high
+}
+
+enum NoteType {
+  general
+  pastoral_care
+  follow_up
+  prayer_request
+  concern
+}
+
+enum TagCategory {
+  ministry
+  demographic
+  interest
+  status
+  general
+}
+
+enum ActivityType {
+  service_attendance
+  event_attendance
+  donation
+  volunteer
+  ministry_participation
+  communication_open
+  profile_update
+  other
 }

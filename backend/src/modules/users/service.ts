@@ -10,10 +10,10 @@ import type {
 import { prisma } from '../../lib/prisma';
 import { HttpError } from '../../lib/http-error';
 import { assertPasswordNotEmail } from '../../lib/password-policy';
-import { isAdmin, STAFF } from '../../middleware/auth';
+import { isAdmin, isStaff, STAFF } from '../../middleware/auth';
 import type { AuthenticatedUser } from '../../types/auth';
 import { listWhere, orderBy, paging, searchWhere } from './search';
-import { directorySelect, staffSelect } from './selects';
+import { directorySelect, selfSelect, staffSelect } from './selects';
 
 const STAFF_ROLE_NAMES: readonly string[] = STAFF;
 
@@ -101,8 +101,6 @@ export const EXPORT_COLUMNS = [
   'Membership Stage',
   'Risk Level',
   'Attendance Score',
-  'Giving Score',
-  'Volunteer Score',
   'Community Score',
   'Communication Score',
   'Join Date',
@@ -133,8 +131,6 @@ export async function exportRows(memberIds: string[] | undefined): Promise<Expor
     'Membership Stage': u.engagement?.membershipStage ?? 'Unknown',
     'Risk Level': u.engagement?.riskLevel ?? 'Unknown',
     'Attendance Score': u.engagement?.attendanceScore ?? 0,
-    'Giving Score': u.engagement?.givingScore ?? 0,
-    'Volunteer Score': u.engagement?.volunteerScore ?? 0,
     'Community Score': u.engagement?.communityScore ?? 0,
     'Communication Score': u.engagement?.communicationScore ?? 0,
     'Join Date': day(u.createdAt),
@@ -187,10 +183,14 @@ export async function createUser(
   return prisma.user.create({
     data: {
       name: body.name,
+      firstName: body.firstName ?? null,
+      lastName: body.lastName ?? null,
       email,
       password: await bcrypt.hash(body.password, 10),
       phone: body.phone ?? null,
       bio: body.bio ?? null,
+      volunteerSkills: body.volunteerSkills ?? [],
+      interests: body.interests ?? [],
       isActive: body.isActive ?? true,
       roles: { create: roleIds.map((roleId) => ({ roleId })) },
       // Every account has an engagement row (defaults: score 0, visitor, low risk).
@@ -200,14 +200,25 @@ export async function createUser(
   });
 }
 
-// `full` (staff or the user themself) returns the staff projection; others get the
-// directory projection, and inactive accounts are hidden from them.
-export async function getUser(id: string, full: boolean) {
+// Who is reading a user: staff get the staff projection (engagement included) for every
+// account, themselves too; a non-staff user reading their own record gets the self
+// projection (what /api/auth/me returns, no CRM data); everyone else gets the directory
+// projection, and inactive accounts are hidden from them.
+export type UserAudience = 'staff' | 'self' | 'directory';
+
+const audienceSelect = {
+  staff: staffSelect,
+  self: selfSelect,
+  directory: directorySelect,
+} as const;
+
+export async function getUser(id: string, audience: UserAudience) {
   const user = await prisma.user.findUnique({
     where: { id },
-    select: full ? staffSelect : directorySelect,
+    select: audienceSelect[audience],
   });
-  if (!user || (!full && !user.isActive)) throw new HttpError(404, 'User not found');
+  if (!user || (audience === 'directory' && !user.isActive))
+    throw new HttpError(404, 'User not found');
   return user;
 }
 
@@ -250,14 +261,19 @@ export async function updateUser(
     where: { id },
     data: {
       name: body.name,
+      firstName: body.firstName,
+      lastName: body.lastName,
       phone: body.phone,
       bio: body.bio,
+      volunteerSkills: body.volunteerSkills,
+      interests: body.interests,
       isActive: body.isActive,
       roles: roleIds
         ? { deleteMany: {}, create: roleIds.map((roleId) => ({ roleId })) }
         : undefined,
     },
-    select: staffSelect,
+    // A non-staff requester can only update themself and gets the self projection back.
+    select: isStaff(requester) ? staffSelect : selfSelect,
   });
 }
 

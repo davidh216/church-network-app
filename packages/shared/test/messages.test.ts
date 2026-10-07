@@ -66,6 +66,10 @@ describe('human validation messages', () => {
       'roleIds.0': 'Must be a valid id',
     });
     expect(messages(updateUserInput, { name: ' ' })).toEqual({ name: 'Name is required' });
+    expect(messages(updateUserInput, { volunteerSkills: ['ok', ' '], interests: 'x' })).toEqual({
+      'volunteerSkills.1': 'Skills cannot be blank',
+      interests: 'Interests must be a list',
+    });
   });
 
   it('media form', () => {
@@ -121,11 +125,12 @@ describe('human validation messages', () => {
     expect(
       messages(addMilestoneInput, { milestoneType: '', title: '', achievedDate: 'x' }),
     ).toEqual({
-      milestoneType: 'Milestone type is required',
+      milestoneType: 'Choose a milestone type',
       title: 'Please enter a title',
       achievedDate: 'Enter a valid date',
     });
     expect(messages(recordActivityInput, { activityType: 'x', points: 1.5 })).toEqual({
+      activityType: 'Choose an activity type',
       points: 'Points must be a whole number from -1000 to 1000',
     });
   });

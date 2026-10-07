@@ -14,7 +14,7 @@ export default function TopEngagedMembers({
   return (
     <div className="bg-white rounded-lg border border-gray-200 shadow-xs">
       <div className="px-6 py-4 border-b border-gray-200">
-        <h3 className="text-lg font-medium text-gray-900">Most Engaged Members</h3>
+        <h2 className="text-lg font-medium text-gray-900">Most Engaged Members</h2>
       </div>
       <div className="p-6">
         <div className="space-y-4">
@@ -36,7 +36,7 @@ export default function TopEngagedMembers({
                     />
                   ) : (
                     <span className="text-sm font-medium text-gray-600">
-                      {initials(member.user.name)}
+                      {initials(member.user)}
                     </span>
                   )}
                 </div>

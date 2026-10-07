@@ -15,7 +15,10 @@ import usersRoutes from './modules/users/router';
 import rolesRoutes from './modules/roles/router';
 import mediaRoutes from './modules/media/router';
 import analyticsRoutes from './modules/analytics/router';
-import memberDetailsRoutes from './modules/member-details/router';
+import memberDetailsRoutes, {
+  selfRouter as memberSelfRoutes,
+} from './modules/member-details/router';
+import servicesRoutes from './modules/services/router';
 
 // package.json sits one level above both src/ (tsx) and dist/ (node).
 const { version } = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8')) as {
@@ -57,7 +60,15 @@ export function createApp() {
   app.use('/api/media', authenticate, mediaRoutes);
   // CRM data (notes, interactions, milestones, engagement) is staff-only.
   app.use('/api/analytics', authenticate, requireRole(...STAFF), analyticsRoutes);
-  app.use('/api/member-details', authenticate, requireRole(...STAFF), memberDetailsRoutes);
+  // GET /api/member-details/me/attendance is the one member-details route open to members.
+  app.use(
+    '/api/member-details',
+    authenticate,
+    memberSelfRoutes,
+    requireRole(...STAFF),
+    memberDetailsRoutes,
+  );
+  app.use('/api/services', authenticate, requireRole(...STAFF), servicesRoutes);
 
   app.use(notFound);
   app.use(errorHandler);

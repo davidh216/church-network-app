@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import express from 'express';
 import type { Express } from 'express';
 import request from 'supertest';
@@ -60,7 +60,15 @@ type Route = {
 const PASSWORD = 'correct-horse-battery';
 const tokens = {} as Record<RoleName, string>;
 const ids = {} as Record<
-  'member' | 'other' | 'resetTarget' | 'media' | 'search' | 'searchToDelete',
+  | 'member'
+  | 'other'
+  | 'resetTarget'
+  | 'media'
+  | 'search'
+  | 'searchToDelete'
+  | 'service'
+  | 'serviceToDelete'
+  | 'job',
   string
 >;
 
@@ -240,6 +248,13 @@ const ROUTES: Route[] = [
     access: 'staff',
     as: 'leader',
     url: () => '/api/analytics/members/engagement/refresh-all',
+    status: 202,
+  },
+  {
+    route: 'GET /api/analytics/jobs/:id',
+    access: 'staff',
+    as: 'leader',
+    url: () => `/api/analytics/jobs/${ids.job}`,
     status: 200,
   },
   {
@@ -268,7 +283,7 @@ const ROUTES: Route[] = [
     access: 'staff',
     as: 'leader',
     url: () => `/api/analytics/members/${ids.member}/activities`,
-    body: () => ({ activityType: 'attendance', points: 2 }),
+    body: () => ({ activityType: 'service_attendance', points: 2 }),
     status: 200,
   },
   {
@@ -292,6 +307,20 @@ const ROUTES: Route[] = [
     access: 'staff',
     as: 'leader',
     url: () => `/api/member-details/${ids.member}/timeline`,
+    status: 200,
+  },
+  {
+    route: 'GET /api/member-details/:id/attendance',
+    access: 'staff',
+    as: 'leader',
+    url: () => `/api/member-details/${ids.member}/attendance?months=6`,
+    status: 200,
+  },
+  {
+    route: 'GET /api/member-details/me/attendance',
+    access: 'auth',
+    as: 'member',
+    url: () => '/api/member-details/me/attendance',
     status: 200,
   },
   {
@@ -339,6 +368,59 @@ const ROUTES: Route[] = [
     body: () => ({ content: 'Pastoral visit' }),
     status: 200,
   },
+
+  {
+    route: 'GET /api/services',
+    access: 'staff',
+    as: 'leader',
+    url: () => '/api/services?from=2026-01-01&to=2026-12-31',
+    status: 200,
+  },
+  {
+    route: 'POST /api/services',
+    access: 'staff',
+    as: 'leader',
+    url: () => '/api/services',
+    body: () => ({ date: '2026-09-13', type: 'bible_study' }),
+    status: 201,
+  },
+  {
+    route: 'GET /api/services/:id',
+    access: 'staff',
+    as: 'leader',
+    url: () => `/api/services/${ids.service}`,
+    status: 200,
+  },
+  {
+    route: 'PUT /api/services/:id',
+    access: 'staff',
+    as: 'leader',
+    url: () => `/api/services/${ids.service}`,
+    body: () => ({ title: 'Harvest Sunday' }),
+    status: 200,
+  },
+  {
+    route: 'DELETE /api/services/:id',
+    access: 'admin',
+    as: 'admin',
+    url: () => `/api/services/${ids.serviceToDelete}`,
+    status: 200,
+  },
+  {
+    route: 'GET /api/services/:id/attendance',
+    access: 'staff',
+    as: 'leader',
+    url: () => `/api/services/${ids.service}/attendance`,
+    status: 200,
+  },
+  {
+    route: 'PUT /api/services/:id/attendance',
+    access: 'staff',
+    as: 'leader',
+    url: () => `/api/services/${ids.service}/attendance`,
+    body: () => ({ present: [ids.member], absent: [ids.other] }),
+    status: 200,
+  },
 ];
 
 const methodOf = (r: Route) =>
@@ -378,23 +460,41 @@ describe('route matrix', () => {
           title: 'Seed video',
           type: 'YOUTUBE_VIDEO',
           url: 'https://youtu.be/abc123',
-          tags: '[]',
+          tags: [],
           uploadedById: admin.id,
         },
       })
     ).id;
     ids.search = (
       await prisma.savedSearch.create({
-        data: { name: 'Kept', query: '{}', createdBy: ids.member },
+        data: { name: 'Kept', query: '{}', createdById: ids.member },
       })
     ).id;
     ids.searchToDelete = (
       await prisma.savedSearch.create({
-        data: { name: 'Doomed', query: '{}', createdBy: ids.member },
+        data: { name: 'Doomed', query: '{}', createdById: ids.member },
       })
     ).id;
+    ids.service = (
+      await prisma.service.create({
+        data: { date: new Date('2026-09-06T00:00:00.000Z'), type: 'sunday_service' },
+      })
+    ).id;
+    ids.serviceToDelete = (
+      await prisma.service.create({
+        data: { date: new Date('2026-08-30T00:00:00.000Z'), type: 'sunday_service' },
+      })
+    ).id;
+    const jobs = await import('../src/modules/analytics/jobs.js');
+    ids.job = jobs.startEngagementRefresh().job.jobId;
+    await jobs.engagementRefreshIdle();
     for (const role of ['admin', 'leader', 'member'] as RoleName[])
       tokens[role] = await helpers.login(`routes-${role}@routes.test.local`);
+  });
+
+  // The refresh-all happy path starts a background job; let it finish before the next file.
+  afterAll(async () => {
+    await (await import('../src/modules/analytics/jobs.js')).engagementRefreshIdle();
   });
 
   it('lists every route mounted by the app, and only those', () => {
@@ -436,7 +536,7 @@ describe('route matrix', () => {
       ).status,
     ).toBe(403);
     const theirs = await prisma.savedSearch.create({
-      data: { name: 'Private', query: '{}', createdBy: ids.other, isPublic: false },
+      data: { name: 'Private', query: '{}', createdById: ids.other, isPublic: false },
     });
     expect(
       (
@@ -456,6 +556,40 @@ describe('route matrix', () => {
     expect(
       (await prisma.savedSearch.findUniqueOrThrow({ where: { id: theirs.id } })).usageCount,
     ).toBe(0);
+  });
+
+  // PHASE3 fix F10: first and last names are written and returned by the staff and self projections.
+  it('staff and members write optional first and last names; blank clears them', async () => {
+    const as = (role: RoleName) => ({ Authorization: `Bearer ${tokens[role]}` });
+    const created = await request(app).post('/api/users').set(as('leader')).send({
+      name: 'Grace Hopper',
+      firstName: ' Grace ',
+      lastName: 'Hopper',
+      email: 'routes-names@routes.test.local',
+      password: PASSWORD,
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.user).toMatchObject({ firstName: 'Grace', lastName: 'Hopper' });
+    const edited = await request(app)
+      .put(`/api/users/${created.body.user.id}`)
+      .set(as('leader'))
+      .send({ lastName: '  ' });
+    expect(edited.status).toBe(200);
+    expect(edited.body.user).toMatchObject({ firstName: 'Grace', lastName: null });
+    const tooLong = await request(app)
+      .put(`/api/users/${created.body.user.id}`)
+      .set(as('leader'))
+      .send({ firstName: 'x'.repeat(51), lastName: 'a\u0000b' });
+    expect(tooLong.status).toBe(400);
+    expect(Object.keys(tooLong.body.details).sort()).toEqual(['firstName', 'lastName']);
+
+    const own = await request(app)
+      .put(`/api/users/${ids.member}`)
+      .set(as('member'))
+      .send({ firstName: 'Mem', lastName: 'Ber' });
+    expect(own.status).toBe(200);
+    const me = await request(app).get('/api/auth/me').set(as('member'));
+    expect(me.body.user).toMatchObject({ firstName: 'Mem', lastName: 'Ber' });
   });
 
   it.each(ROUTES)('$route happy path', async (r) => {

@@ -4,15 +4,21 @@ import bcrypt from 'bcryptjs';
 import request from 'supertest';
 import { prisma } from '../src/lib/prisma';
 import { createApp } from '../src/app';
+import { engagementRefreshIdle } from '../src/modules/analytics/jobs';
 import type { RoleName } from '../src/types/auth';
 
 export const app = createApp();
 
 export async function resetDatabase() {
+  // A refresh-all job started by an earlier test must not write while the tables are emptied.
+  await engagementRefreshIdle();
+  await prisma.engagementSnapshot.deleteMany();
   await prisma.memberNote.deleteMany();
   await prisma.memberInteraction.deleteMany();
   await prisma.memberMilestone.deleteMany();
   await prisma.memberActivity.deleteMany();
+  await prisma.attendance.deleteMany();
+  await prisma.service.deleteMany();
   await prisma.memberEngagement.deleteMany();
   await prisma.savedSearch.deleteMany();
   await prisma.media.deleteMany();
@@ -20,7 +26,7 @@ export async function resetDatabase() {
   await prisma.user.deleteMany();
   await prisma.role.deleteMany();
   for (const name of ['admin', 'leader', 'member'] as RoleName[]) {
-    await prisma.role.create({ data: { name, permissions: '[]' } });
+    await prisma.role.create({ data: { name, permissions: [] } });
   }
 }
 
@@ -44,7 +50,10 @@ export async function createUser(opts: {
 }
 
 // createUser inserts rows directly, like accounts created before every account got an
-// engagement row. This runs the data migration that backfilled those rows, returning the
+// engagement row. backfillEngagementRows fills those gaps the way the data migration
+// 20261005000000_engagement_rows_for_all_users did, on the current schema (member_engagement is
+// keyed by userId since P3-D3, so the migration's own SQL, which also wrote a surrogate id, no
+// longer runs here; test/migrations.test.ts runs it against its historical schema). It returns the
 // number of rows it inserted.
 export const ENGAGEMENT_BACKFILL_SQL = readFileSync(
   resolve(
@@ -54,7 +63,10 @@ export const ENGAGEMENT_BACKFILL_SQL = readFileSync(
   'utf8',
 );
 export function backfillEngagementRows(): Promise<number> {
-  return prisma.$executeRawUnsafe(ENGAGEMENT_BACKFILL_SQL);
+  return prisma.$executeRawUnsafe(`
+    INSERT INTO "member_engagement" ("userId", "updatedAt")
+    SELECT u."id", CURRENT_TIMESTAMP FROM "users" AS u
+    WHERE NOT EXISTS (SELECT 1 FROM "member_engagement" AS e WHERE e."userId" = u."id")`);
 }
 
 // The JWT from the session cookie of a successful login (the body carries no token). Tests send

@@ -5,6 +5,5 @@ export { idParams };
 
 export const noInputQuery = z.object({});
 
-export const trendsQuery = z.object({
-  months: z.coerce.number().int().min(1).max(60).default(12),
-});
+// GET /api/analytics/jobs/:id: job ids are UUIDs.
+export const jobParams = z.object({ id: z.uuid({ error: 'Invalid job id' }) });

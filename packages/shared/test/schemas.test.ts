@@ -13,7 +13,9 @@ import {
   createUserInput,
   isCommonPassword,
   loginInput,
+  MAX_PERSON_NAME_PART,
   membershipStage,
+  normalizeMediaTag,
   optionalQueryText,
   passwordSchema,
   registerInput,
@@ -63,6 +65,38 @@ describe('input schemas', () => {
     expect(parsed).toEqual({ name: 'Ann', phone: null, bio: 'Hi' });
   });
 
+  it('takes skills and interests as lists: trimmed, de-duplicated ignoring case, at most 30', () => {
+    expect(
+      updateUserInput.parse({ volunteerSkills: [' Music', 'MUSIC ', 'Art'], interests: [] }),
+    ).toEqual({ volunteerSkills: ['Music', 'Art'], interests: [] });
+    expect(updateUserInput.safeParse({ interests: '["Hiking"]' }).success).toBe(false);
+    expect(updateUserInput.safeParse({ interests: [' '] }).success).toBe(false);
+    expect(updateUserInput.safeParse({ interests: Array(31).fill('x') }).success).toBe(false);
+  });
+
+  it('takes optional first and last names: trimmed, blank as null, at most 50, no U+0000', () => {
+    expect(MAX_PERSON_NAME_PART).toBe(50);
+    expect(updateUserInput.parse({ firstName: '  Ada ', lastName: '  ' })).toEqual({
+      firstName: 'Ada',
+      lastName: null,
+    });
+    expect(updateUserInput.parse({})).toEqual({});
+    expect(updateUserInput.safeParse({ firstName: 'x'.repeat(51) }).success).toBe(false);
+    expect(updateUserInput.safeParse({ lastName: 'x'.repeat(50) }).success).toBe(true);
+    expect(updateUserInput.safeParse({ lastName: 'a\u0000b' }).success).toBe(false);
+    const created = createUserInput.parse({
+      name: 'Ada Lovelace',
+      firstName: 'Ada',
+      lastName: ' ',
+      email: 'ada@example.org',
+      password: GOOD_PASSWORD,
+    });
+    expect([created.firstName, created.lastName]).toEqual(['Ada', null]);
+    expect(createUserInput.safeParse({ ...created, firstName: 'x'.repeat(51) }).success).toBe(
+      false,
+    );
+  });
+
   it('only accepts cuid role ids, at most 10', () => {
     expect(updateUserInput.safeParse({ roleIds: ['not-a-cuid'] }).success).toBe(false);
     expect(
@@ -79,6 +113,17 @@ describe('input schemas', () => {
       createMediaInput.safeParse({ ...base, url: 'http://youtu.be/dQw4w9WgXcQ' }).success,
     ).toBe(false);
     expect(createMediaInput.safeParse({ ...base, url: 'https://vimeo.com/1' }).success).toBe(false);
+  });
+
+  it('normalises media tags to the category format and drops duplicates', () => {
+    expect(normalizeMediaTag('  Special   Event ')).toBe('special-event');
+    expect(normalizeMediaTag('Easter - 2026')).toBe('easter-2026');
+    expect(normalizeMediaTag('worship')).toBe('worship');
+    const base = { title: 'Sermon', type: 'YOUTUBE_VIDEO', url: 'https://youtu.be/dQw4w9WgXcQ' };
+    expect(
+      createMediaInput.parse({ ...base, tags: ['Special event', 'special-event', ' Easter 2026'] })
+        .tags,
+    ).toEqual(['special-event', 'easter-2026']);
   });
 
   it('canonicalises YouTube watch and share URLs', () => {

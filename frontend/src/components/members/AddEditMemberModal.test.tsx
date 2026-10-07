@@ -78,10 +78,14 @@ describe('AddEditMemberModal', () => {
     expect(usersApi.createUser).toHaveBeenCalledTimes(1);
     expect(usersApi.createUser).toHaveBeenCalledWith({
       name: 'New Person',
+      firstName: null,
+      lastName: null,
       email: 'new@example.com',
       password: 'a long temporary password',
       phone: null,
       bio: null,
+      volunteerSkills: [],
+      interests: [],
       isActive: true,
       roleIds: ['crolemember0000000000001', 'croleleader0000000000001'],
     });
@@ -149,6 +153,89 @@ describe('AddEditMemberModal', () => {
       bio: null,
       isActive: false,
     });
+  });
+
+  it('edits skills and interests as chips and sends only the lists that changed', async () => {
+    await open({ ...existing, volunteerSkills: ['Music'], interests: ['Hiking'] });
+    const skills = screen.getByRole('textbox', { name: 'Volunteer Skills' });
+    fireEvent.change(skills, { target: { value: 'Sound desk' } });
+    fireEvent.keyDown(skills, { key: 'Enter' });
+    expect(screen.getByRole('button', { name: 'Remove Hiking' })).toBeInTheDocument();
+    await submit('Update Member');
+    expect(usersApi.updateUser).toHaveBeenCalledWith(existing.id, {
+      name: 'Ann Example',
+      phone: '555-0100',
+      bio: null,
+      volunteerSkills: ['Music', 'Sound desk'],
+    });
+  });
+
+  it('create sends the optional first and last names, trimmed', async () => {
+    await open();
+    type('Full Name *', 'Ada Lovelace');
+    type('First name', ' Ada ');
+    type('Last name', 'Lovelace');
+    type('Email *', 'ada@example.com');
+    type('Password *', 'a long temporary password');
+    await submit('Add Member');
+    expect(usersApi.createUser).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'Ada Lovelace', firstName: 'Ada', lastName: 'Lovelace' }),
+    );
+  });
+
+  it('update sends only the name parts that changed; a cleared one as null', async () => {
+    await open({ ...existing, firstName: 'Ann', lastName: 'Example' });
+    expect(screen.getByLabelText('First name')).toHaveValue('Ann');
+    type('Last name', '  ');
+    await submit('Update Member');
+    expect(usersApi.updateUser).toHaveBeenCalledWith(existing.id, {
+      name: 'Ann Example',
+      lastName: null,
+      phone: '555-0100',
+      bio: null,
+    });
+  });
+
+  it('shows a too-long first name inline with the API message', async () => {
+    await open(existing);
+    type('First name', 'x'.repeat(51));
+    await submit('Update Member');
+    expect(usersApi.updateUser).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('First name')).toHaveAccessibleDescription(
+      'First name must be at most 50 characters',
+    );
+  });
+
+  it('links a roles error to the role group and marks the boxes invalid', async () => {
+    usersApi.updateUser.mockRejectedValue(
+      new ApiError(400, 'Validation failed', 'VALIDATION', {
+        roleIds: ['Choose at most 10 roles'],
+      }),
+    );
+    await open(existing);
+    fireEvent.click(await screen.findByRole('checkbox', { name: /leader/ }));
+    await submit('Update Member');
+    expect(screen.getByRole('group', { name: 'Roles' })).toHaveAccessibleDescription(
+      'Choose at most 10 roles',
+    );
+    for (const box of screen.getAllByRole('checkbox', { name: /admin|leader|member/ }))
+      if (box.id !== 'member-active') expect(box).toHaveAttribute('aria-invalid', 'true');
+  });
+
+  it('shows an API error about a list inline on its chip field', async () => {
+    usersApi.updateUser.mockRejectedValue(
+      new ApiError(400, 'Validation failed', 'VALIDATION', {
+        interests: ['Interests cannot be blank'],
+      }),
+    );
+    await open(existing);
+    const interests = screen.getByRole('textbox', { name: 'Interests' });
+    fireEvent.change(interests, { target: { value: 'Art' } });
+    fireEvent.keyDown(interests, { key: 'Enter' });
+    await submit('Update Member');
+    expect(interests).toHaveAttribute('aria-invalid', 'true');
+    expect(interests).toHaveAccessibleDescription(/Interests cannot be blank/);
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it('shows the API error and stays open when saving fails', async () => {

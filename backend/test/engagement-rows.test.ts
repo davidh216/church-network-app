@@ -86,7 +86,6 @@ describe('the engagement backfill migration', () => {
     for (const id of [bare.id, inactive.id]) {
       const row = rows.find((r) => r.userId === id);
       expect(row).toMatchObject(DEFAULTS);
-      expect(row?.id).toMatch(/^[0-9a-f-]{36}$/);
     }
     // Running it again changes nothing.
     expect(await backfillEngagementRows()).toBe(0);

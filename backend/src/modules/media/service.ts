@@ -1,6 +1,11 @@
 import type { Prisma } from '@prisma/client';
 import type { z } from 'zod';
-import { youtubeVideoId, type createMediaInput, type listMediaQuery } from '@embrace/shared';
+import {
+  normalizeMediaTag,
+  youtubeVideoId,
+  type createMediaInput,
+  type listMediaQuery,
+} from '@embrace/shared';
 import { prisma } from '../../lib/prisma';
 import { HttpError } from '../../lib/http-error';
 import { escapeLike } from '../../lib/like';
@@ -15,8 +20,33 @@ function withVideoId<T extends { url: string }>(media: T): T & { videoId: string
   return { ...media, videoId: youtubeVideoId(media.url) };
 }
 
-// Approved public media, newest first, one page at a time. Text search and the tag filter ignore
-// case and match literally.
+// Ids of the media whose tag list holds `tag`. Every stored tag is in the tag form (new tags are
+// normalised on create, legacy ones by the 20261006030000 migration), so the query is put in that
+// form too and either spelling matches: 'Youth Night' and 'youth-night' find 'youth-night'.
+async function mediaIdsWithTag(tag: string): Promise<string[]> {
+  // Stored tags are in the tag form; the case-insensitive comparison also finds a legacy tag the
+  // migration could not normalise exactly as JavaScript does (some Unicode case rules).
+  const rows = await prisma.$queryRaw<{ id: string }[]>`
+    SELECT "id" FROM "media"
+     WHERE ${normalizeMediaTag(tag)} = ANY ("tags")
+        OR EXISTS (SELECT 1 FROM unnest("tags") AS t WHERE lower(t) = lower(${tag.trim()}))`;
+  return rows.map((row) => row.id);
+}
+
+// Ids of the media with a tag containing `text`, ignoring case and matching literally (strpos,
+// not LIKE). The text's tag form also counts, so "special event" finds 'special-event'.
+async function mediaIdsWithTagContaining(text: string): Promise<string[]> {
+  const rows = await prisma.$queryRaw<{ id: string }[]>`
+    SELECT "id" FROM "media"
+     WHERE EXISTS (SELECT 1 FROM unnest("tags") AS t
+                    WHERE strpos(lower(t), lower(${text})) > 0
+                       OR strpos(lower(t), ${normalizeMediaTag(text)}) > 0)`;
+  return rows.map((row) => row.id);
+}
+
+// Approved public media, newest first, one page at a time. Text search ignores case and matches
+// literally in the title, the description or any tag; the tag filter matches a whole tag,
+// ignoring case.
 export async function listMedia(query: z.output<typeof listMediaQuery>) {
   const where: Prisma.MediaWhereInput = { isPublic: true, isApproved: true };
   if (query.type) where.type = query.type;
@@ -25,10 +55,10 @@ export async function listMedia(query: z.output<typeof listMediaQuery>) {
     where.OR = [
       { title: { contains: search, mode: 'insensitive' } },
       { description: { contains: search, mode: 'insensitive' } },
+      { id: { in: await mediaIdsWithTagContaining(query.search) } },
     ];
   }
-  if (query.tag && query.tag !== 'all')
-    where.tags = { contains: escapeLike(query.tag), mode: 'insensitive' };
+  if (query.tag && query.tag !== 'all') where.id = { in: await mediaIdsWithTag(query.tag) };
 
   const { page, pageSize } = query;
   const [rows, total] = await prisma.$transaction([
@@ -53,7 +83,7 @@ export async function createMedia(uploadedById: string, body: z.output<typeof cr
       description: body.description ?? '',
       type: body.type,
       url: body.url,
-      tags: JSON.stringify(body.tags),
+      tags: body.tags,
       isApproved: true,
       isPublic: true,
       uploadedById,

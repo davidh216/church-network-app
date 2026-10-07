@@ -1,5 +1,10 @@
 import express from 'express';
-import { addInteractionInput, addMilestoneInput, addNoteInput } from '@embrace/shared';
+import {
+  addInteractionInput,
+  addMilestoneInput,
+  addNoteInput,
+  memberAttendanceQuery,
+} from '@embrace/shared';
 import { validate } from '../../middleware/validate';
 import {
   detailsQuery,
@@ -10,6 +15,15 @@ import {
   timelineQuery,
 } from './schemas';
 import * as details from './service';
+import { memberAttendanceSummary } from '../services/service';
+
+// A member's own records, open to every signed-in user. Mounted in app.ts behind authenticate,
+// ahead of the staff gate of the main router below.
+export const selfRouter = express.Router();
+
+selfRouter.get('/me/attendance', validate({ query: memberAttendanceQuery }), async (req, res) => {
+  res.json({ success: true, attendance: await memberAttendanceSummary(req.user!.id, req.query) });
+});
 
 // Mounted behind authenticate + requireRole(staff) in app.ts.
 const router = express.Router();
@@ -22,7 +36,19 @@ router.get(
   '/:id/timeline',
   validate({ params: idParams, query: timelineQuery }),
   async (req, res) => {
-    res.json({ success: true, activities: await details.listTimeline(req.params.id, req.query) });
+    const { items, total } = await details.listTimeline(req.params.id, req.user!, req.query);
+    res.json({ success: true, items, total, page: req.query.page, pageSize: req.query.pageSize });
+  },
+);
+
+router.get(
+  '/:id/attendance',
+  validate({ params: idParams, query: memberAttendanceQuery }),
+  async (req, res) => {
+    res.json({
+      success: true,
+      attendance: await memberAttendanceSummary(req.params.id, req.query),
+    });
   },
 );
 
@@ -53,7 +79,10 @@ router.post(
   '/:id/interactions',
   validate({ params: idParams, body: addInteractionInput }),
   async (req, res) => {
-    res.json({ success: true, interaction: await details.addInteraction(req.params.id, req.body) });
+    res.json({
+      success: true,
+      interaction: await details.addInteraction(req.params.id, req.user!.id, req.body),
+    });
   },
 );
 

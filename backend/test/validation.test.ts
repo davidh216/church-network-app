@@ -198,17 +198,22 @@ describe('request validation', () => {
 
   it('bounds limit and pageSize to 100 and coerces it from the query string', async () => {
     const tooMany = await request(app)
-      .get(`/api/member-details/${memberId}/timeline?limit=101`)
+      .get(`/api/member-details/${memberId}/interactions?limit=101`)
       .set(bearer(token));
     expect(tooMany.status).toBe(400);
     expect(tooMany.body.details.limit).toBeDefined();
+    const tooBig = await request(app)
+      .get(`/api/member-details/${memberId}/timeline?pageSize=101`)
+      .set(bearer(token));
+    expect(tooBig.status).toBe(400);
+    expect(tooBig.body.details.pageSize).toBeDefined();
     const negative = await request(app)
       .get(`/api/member-details/${memberId}/notes?offset=-1`)
       .set(bearer(token));
     expect(negative.status).toBe(400);
     expect(negative.body.details.offset).toBeDefined();
     const ok = await request(app)
-      .get(`/api/member-details/${memberId}/timeline?limit=100&offset=0`)
+      .get(`/api/member-details/${memberId}/timeline?pageSize=100&page=1`)
       .set(bearer(token));
     expect(ok.status).toBe(200);
     expect((await request(app).get('/api/media?pageSize=500').set(bearer(token))).status).toBe(400);

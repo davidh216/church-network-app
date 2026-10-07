@@ -1,5 +1,5 @@
 import type { MemberDetails } from '@/types/domain';
-import { formatDate, formatDateTime, parseJsonList } from '@/lib/members/profile';
+import { formatDate, formatDateTime } from '@/lib/members/profile';
 import { Field, pillClass } from './Field';
 
 function TagList({
@@ -44,13 +44,13 @@ export default function Notes({ member }: { member: MemberDetails }) {
           <h2 className="text-lg font-medium text-gray-900">Skills & Interests</h2>
           <TagList
             label="Volunteer Skills"
-            items={parseJsonList(member.volunteerSkills)}
+            items={member.volunteerSkills ?? []}
             colour="bg-blue-100 text-blue-800"
             empty="No skills listed"
           />
           <TagList
             label="Interests"
-            items={parseJsonList(member.interests)}
+            items={member.interests ?? []}
             colour="bg-green-100 text-green-800"
             empty="No interests listed"
           />

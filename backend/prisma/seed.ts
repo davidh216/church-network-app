@@ -9,7 +9,7 @@ try {
 
 const prisma = new PrismaClient();
 
-// Single source of truth for roles. Permissions are a JSON array of strings.
+// Single source of truth for roles. Permissions are a list of strings (a text[] column).
 const ROLES = [
   { name: 'admin', description: 'Administrator with full access', permissions: ['*'] },
   {
@@ -28,11 +28,11 @@ async function main() {
   for (const role of ROLES) {
     await prisma.role.upsert({
       where: { name: role.name },
-      update: { description: role.description, permissions: JSON.stringify(role.permissions) },
+      update: { description: role.description, permissions: [...role.permissions] },
       create: {
         name: role.name,
         description: role.description,
-        permissions: JSON.stringify(role.permissions),
+        permissions: [...role.permissions],
       },
     });
   }

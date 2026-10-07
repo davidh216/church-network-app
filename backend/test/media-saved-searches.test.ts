@@ -67,7 +67,7 @@ describe('media and saved searches (S3)', () => {
             title: `Video ${String(i).padStart(2, '0')}`,
             type: 'YOUTUBE_VIDEO',
             url: `https://www.youtube.com/watch?v=${id}`,
-            tags: '[]',
+            tags: [],
             uploadedById: staffId,
             isApproved: true,
             isPublic: true,
@@ -82,7 +82,7 @@ describe('media and saved searches (S3)', () => {
             title: 'Legacy',
             type: 'YOUTUBE_VIDEO',
             url: 'https://youtu.be/abc123',
-            tags: '[]',
+            tags: [],
             uploadedById: staffId,
             isApproved: true,
             isPublic: true,
@@ -96,7 +96,7 @@ describe('media and saved searches (S3)', () => {
           title: 'Unapproved',
           type: 'YOUTUBE_VIDEO',
           url: 'https://youtu.be/dQw4w9WgXcQ',
-          tags: '[]',
+          tags: [],
           uploadedById: staffId,
           isApproved: false,
         },
@@ -175,7 +175,7 @@ describe('media and saved searches (S3)', () => {
       const stored = await prisma.savedSearch.findUniqueOrThrow({
         where: { id: created.body.search.id },
       });
-      expect(JSON.parse(stored.query)).toEqual(query);
+      expect(stored.query).toEqual(query);
       const listed = await request(app).get('/api/users/saved-searches').set(bearer(member));
       expect(listed.body.searches).toContainEqual(
         expect.objectContaining({ id: created.body.search.id, query, invalid: false }),
@@ -206,12 +206,12 @@ describe('media and saved searches (S3)', () => {
       const stale = await prisma.savedSearch.create({
         data: {
           name: 'Old format',
-          query: JSON.stringify({ conditions: [{ field: 'age', operator: 'gt', value: 30 }] }),
-          createdBy: memberId,
+          query: { conditions: [{ field: 'age', operator: 'gt', value: 30 }] },
+          createdById: memberId,
         },
       });
       const broken = await prisma.savedSearch.create({
-        data: { name: 'Not JSON', query: '{not json', createdBy: memberId },
+        data: { name: 'Not a query', query: 'name contains smith', createdById: memberId },
       });
       const listed = await request(app).get('/api/users/saved-searches').set(bearer(member));
       const byId = new Map(
@@ -221,7 +221,7 @@ describe('media and saved searches (S3)', () => {
         invalid: true,
         query: { conditions: [{ field: 'age', operator: 'gt', value: 30 }] },
       });
-      expect(byId.get(broken.id)).toMatchObject({ invalid: true, query: null });
+      expect(byId.get(broken.id)).toMatchObject({ invalid: true, query: 'name contains smith' });
 
       const used = await request(app)
         .post(`/api/users/saved-searches/${stale.id}/use`)
@@ -230,6 +230,45 @@ describe('media and saved searches (S3)', () => {
       expect(
         (await prisma.savedSearch.findUniqueOrThrow({ where: { id: stale.id } })).usageCount,
       ).toBe(1);
+    });
+
+    it('names the author of each listed search to staff only, deactivated authors included', async () => {
+      const gone = await createUser({
+        email: 's3-gone@s3.test.local',
+        role: 'leader',
+        name: 'Deactivated Leader',
+        isActive: false,
+      });
+      const shared = await prisma.savedSearch.create({
+        data: { name: 'Shared by gone', query, isPublic: true, createdById: gone.id },
+      });
+      const own = await save({ name: 'Mine for authors', query });
+      expect(own.body.search).not.toHaveProperty('createdBy');
+
+      const asMember = await request(app).get('/api/users/saved-searches').set(bearer(member));
+      expect(asMember.status).toBe(200);
+      const memberIds = (asMember.body.searches as { id: string }[]).map((s) => s.id);
+      expect(memberIds).toEqual(expect.arrayContaining([shared.id, own.body.search.id]));
+      for (const search of asMember.body.searches) expect(search).not.toHaveProperty('createdBy');
+      expect(JSON.stringify(asMember.body)).not.toContain('Deactivated Leader');
+
+      const asStaff = await request(app).get('/api/users/saved-searches').set(bearer(staff));
+      const byId = new Map(
+        (asStaff.body.searches as { id: string }[]).map((s) => [s.id, s] as const),
+      );
+      expect(byId.get(shared.id)).toMatchObject({
+        createdBy: { id: gone.id, name: 'Deactivated Leader' },
+      });
+      await prisma.savedSearch.update({
+        where: { id: own.body.search.id },
+        data: { isPublic: true },
+      });
+      const again = await request(app).get('/api/users/saved-searches').set(bearer(staff));
+      expect(
+        (again.body.searches as { id: string; createdBy?: { id: string } }[]).find(
+          (s) => s.id === own.body.search.id,
+        )?.createdBy,
+      ).toEqual({ id: memberId, name: 's3-member' });
     });
   });
 });

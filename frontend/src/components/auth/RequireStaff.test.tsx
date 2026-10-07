@@ -1,6 +1,7 @@
 import { waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AnalyticsPage from '@/app/(app)/analytics/page';
+import ServicesRoute from '@/app/(app)/services/page';
 import RequireStaff from '@/components/auth/RequireStaff';
 import MemberProfileRoute from '@/components/members/MemberProfileRoute';
 import { AuthProvider } from '@/lib/auth/AuthProvider';
@@ -18,11 +19,18 @@ const authApi = vi.hoisted(() => ({
 }));
 vi.mock('@/lib/api/auth', () => authApi);
 
-const detailsApi = vi.hoisted(() => ({ getMemberDetails: vi.fn() }));
+const detailsApi = vi.hoisted(() => ({
+  getMemberDetails: vi.fn(),
+  getOwnAttendance: vi.fn(),
+  getMemberAttendance: vi.fn(),
+}));
 vi.mock('@/lib/api/memberDetails', () => detailsApi);
 
 const analyticsApi = vi.hoisted(() => ({ getAnalytics: vi.fn(), refreshAllEngagement: vi.fn() }));
 vi.mock('@/lib/api/analytics', () => analyticsApi);
+
+const servicesApi = vi.hoisted(() => ({ listServices: vi.fn() }));
+vi.mock('@/lib/api/services', () => servicesApi);
 
 const SELF = 'cluser0000000000000000001';
 const OTHER = 'cluser0000000000000000002';
@@ -38,6 +46,15 @@ beforeEach(() => {
   detailsApi.getMemberDetails.mockResolvedValue({
     ...makeUser(['member'], { id: OTHER, name: 'Bob Other' }),
     engagement: null,
+  });
+  detailsApi.getOwnAttendance.mockResolvedValue({
+    months: 12,
+    from: '2025-10-06',
+    to: '2026-10-05',
+    types: ['sunday_service'],
+    serviceCount: 4,
+    attendedCount: 1,
+    attended: [{ id: 's1', date: '2026-10-04', type: 'sunday_service', title: null }],
   });
   analyticsApi.getAnalytics.mockRejectedValue(new Error('not needed'));
 });
@@ -92,6 +109,21 @@ describe('/analytics', () => {
   });
 });
 
+describe('/services', () => {
+  it('redirects a member without asking the API', async () => {
+    await renderAs(['member'], <ServicesRoute />);
+    expect(router.replace).toHaveBeenCalledWith('/?notice=staff-only');
+    expect(servicesApi.listServices).not.toHaveBeenCalled();
+  });
+
+  it('lists the month for a leader', async () => {
+    servicesApi.listServices.mockResolvedValue({ services: [], total: 0, page: 1, pageSize: 100 });
+    const container = await renderAs(['leader'], <ServicesRoute />);
+    await waitFor(() => expect(container.textContent).toContain('No services in'));
+    expect(router.replace).not.toHaveBeenCalled();
+  });
+});
+
 describe('/members/[id]', () => {
   it('shows staff the full profile with a link back to the list', async () => {
     const container = await renderAs(['admin'], <MemberProfileRoute id={OTHER} />);
@@ -107,6 +139,10 @@ describe('/members/[id]', () => {
     expect(container.textContent).toContain('555-0100');
     expect(detailsApi.getMemberDetails).not.toHaveBeenCalled();
     expect(router.replace).not.toHaveBeenCalled();
+    // Their own attendance comes from /me/attendance, never the staff endpoint.
+    await waitFor(() => expect(container.textContent).toContain('You attended 1 of 4'));
+    expect(detailsApi.getOwnAttendance).toHaveBeenCalled();
+    expect(detailsApi.getMemberAttendance).not.toHaveBeenCalled();
   });
 
   it("sends a member opening someone else's profile to the dashboard", async () => {

@@ -10,3 +10,4 @@ export * from './saved-searches.js';
 export * from './analytics.js';
 export * from './member-details.js';
 export * from './search.js';
+export * from './services.js';

@@ -6,6 +6,7 @@ import * as media from './media';
 import * as memberDetails from './memberDetails';
 import * as roles from './roles';
 import * as savedSearches from './savedSearches';
+import * as services from './services';
 import * as users from './users';
 
 const fetchMock = vi.fn<typeof fetch>();
@@ -216,17 +217,35 @@ describe('roles, media, analytics, member details', () => {
     expect(call()).toEqual({ url: '/api/media', method: 'POST', body: input });
   });
 
-  it('getAnalytics and refreshAllEngagement', async () => {
+  it('getAnalytics, refreshAllEngagement (202 job) and getEngagementJob', async () => {
     respond({ success: true, analytics: { totalMembers: 3 } });
     await expect(analytics.getAnalytics()).resolves.toEqual({ totalMembers: 3 });
     expect(call(0).url).toBe('/api/analytics/members');
 
-    respond({ success: true, message: 'Updated 3' });
-    await expect(analytics.refreshAllEngagement()).resolves.toBe('Updated 3');
+    const job = {
+      jobId: 'job-1',
+      status: 'running',
+      processed: 0,
+      failed: 0,
+      skipped: 0,
+      total: 0,
+      startedAt: '2026-10-05T10:00:00.000Z',
+      finishedAt: null,
+    };
+    respond({ success: true, ...job, message: 'Engagement refresh started' }, { status: 202 });
+    await expect(analytics.refreshAllEngagement()).resolves.toEqual(job);
     expect(call(1)).toMatchObject({
       url: '/api/analytics/members/engagement/refresh-all',
       method: 'POST',
     });
+
+    const done = { ...job, status: 'completed', processed: 3, total: 3 };
+    respond({ success: true, ...done, finishedAt: '2026-10-05T10:00:02.000Z' });
+    await expect(analytics.getEngagementJob('job-1')).resolves.toEqual({
+      ...done,
+      finishedAt: '2026-10-05T10:00:02.000Z',
+    });
+    expect(call(2)).toEqual({ url: '/api/analytics/jobs/job-1', method: 'GET', body: undefined });
   });
 
   it('getMemberDetails', async () => {
@@ -236,6 +255,109 @@ describe('roles, media, analytics, member details', () => {
       emailOptIn: true,
     });
     expect(call().url).toBe('/api/member-details/u1');
+  });
+
+  it('getMemberTimeline', async () => {
+    const item = {
+      kind: 'note',
+      id: 'n1',
+      date: '2026-01-01T00:00:00.000Z',
+      title: 'T',
+      summary: null,
+    };
+    respond({ success: true, items: [item], total: 1, page: 2, pageSize: 5 });
+    await expect(memberDetails.getMemberTimeline('u1', { page: 2, pageSize: 5 })).resolves.toEqual({
+      items: [item],
+      total: 1,
+      page: 2,
+      pageSize: 5,
+    });
+    expect(call().url).toBe('/api/member-details/u1/timeline?page=2&pageSize=5');
+  });
+
+  it('getMemberAttendance and getOwnAttendance', async () => {
+    const attendance = { months: 6, serviceCount: 2, attendedCount: 1, attended: [] };
+    respond({ success: true, attendance });
+    await expect(
+      memberDetails.getMemberAttendance('u1', {
+        months: 6,
+        types: ['sunday_service', 'bible_study'],
+      }),
+    ).resolves.toEqual(attendance);
+    expect(call(0).url).toBe(
+      '/api/member-details/u1/attendance?months=6&types=sunday_service%2Cbible_study',
+    );
+
+    respond({ success: true, attendance });
+    await expect(memberDetails.getOwnAttendance()).resolves.toEqual(attendance);
+    expect(call(1)).toEqual({
+      url: '/api/member-details/me/attendance',
+      method: 'GET',
+      body: undefined,
+    });
+  });
+});
+
+describe('services endpoints', () => {
+  it('listServices passes the range and paging and returns the page', async () => {
+    respond({ success: true, services: [{ id: 's1' }], total: 9, page: 1, pageSize: 1 });
+    await expect(
+      services.listServices({ from: '2026-10-01', to: '2026-10-31', pageSize: 1 }),
+    ).resolves.toEqual({ services: [{ id: 's1' }], total: 9, page: 1, pageSize: 1 });
+    expect(call().url).toBe('/api/services?from=2026-10-01&to=2026-10-31&pageSize=1');
+  });
+
+  it('create, update and delete send the right method, path and body', async () => {
+    respond({ success: true, service: { id: 's1' } }, { status: 201 });
+    await expect(
+      services.createService({ date: '2026-10-04', type: 'sunday_service' }),
+    ).resolves.toEqual({ id: 's1' });
+    expect(call(0)).toEqual({
+      url: '/api/services',
+      method: 'POST',
+      body: { date: '2026-10-04', type: 'sunday_service' },
+    });
+    respond({ success: true, service: { id: 's1', title: 'Harvest' } });
+    await expect(services.updateService('s1', { title: 'Harvest' })).resolves.toEqual({
+      id: 's1',
+      title: 'Harvest',
+    });
+    expect(call(1)).toEqual({ url: '/api/services/s1', method: 'PUT', body: { title: 'Harvest' } });
+    respond({ success: true });
+    await expect(services.deleteService('s1')).resolves.toBeUndefined();
+    expect(call(2)).toEqual({ url: '/api/services/s1', method: 'DELETE', body: undefined });
+  });
+
+  it('a duplicate service rejects with the 409 message', async () => {
+    respond(
+      { error: 'A service of this type already exists on that date', code: 'CONFLICT' },
+      { status: 409 },
+    );
+    await expect(
+      services.createService({ date: '2026-10-04', type: 'sunday_service' }),
+    ).rejects.toMatchObject({
+      status: 409,
+      code: 'CONFLICT',
+      message: 'A service of this type already exists on that date',
+    });
+  });
+
+  it('reads and saves the attendance sheet', async () => {
+    respond({ success: true, service: { id: 's1' }, members: [{ present: true }] });
+    await expect(services.getServiceAttendance('s1')).resolves.toEqual({
+      service: { id: 's1' },
+      members: [{ present: true }],
+    });
+    expect(call(0).url).toBe('/api/services/s1/attendance');
+    respond({ success: true, present: 2, absent: 1 });
+    await expect(
+      services.saveServiceAttendance('s1', { present: ['a', 'b'], absent: ['c'] }),
+    ).resolves.toEqual({ present: 2, absent: 1 });
+    expect(call(1)).toEqual({
+      url: '/api/services/s1/attendance',
+      method: 'PUT',
+      body: { present: ['a', 'b'], absent: ['c'] },
+    });
   });
 });
 

@@ -6,6 +6,8 @@ interface Tile {
   colour: string;
   icon: string;
   evenOdd?: boolean;
+  /** A short line under the value saying what is counted. */
+  help?: string;
 }
 
 function tiles(a: MemberAnalytics): Tile[] {
@@ -29,8 +31,9 @@ function tiles(a: MemberAnalytics): Tile[] {
       icon: 'M8 9a3 3 0 100-6 3 3 0 000 6zM8 11a6 6 0 016 6H2a6 6 0 016-6zM16 7a1 1 0 10-2 0v1h-1a1 1 0 100 2h1v1a1 1 0 102 0v-1h1a1 1 0 100-2h-1V7z',
     },
     {
-      label: 'At Risk',
+      label: 'High Risk',
       value: a.atRiskMembers,
+      help: 'Active members whose risk level is high',
       colour: 'bg-red-500',
       evenOdd: true,
       icon: 'M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z',
@@ -38,6 +41,7 @@ function tiles(a: MemberAnalytics): Tile[] {
     {
       label: 'Avg Engagement',
       value: `${a.averageEngagementScore}%`,
+      help: 'Average overall score of active members',
       colour: 'bg-indigo-500',
       icon: 'M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z',
     },
@@ -72,6 +76,7 @@ export default function StatTiles({ analytics }: { analytics: MemberAnalytics })
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500">{tile.label}</p>
               <p className="text-2xl font-bold text-gray-900">{tile.value}</p>
+              {tile.help && <p className="text-xs text-gray-500">{tile.help}</p>}
             </div>
           </div>
         </div>

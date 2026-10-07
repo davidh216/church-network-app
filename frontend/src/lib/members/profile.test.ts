@@ -3,14 +3,14 @@ import {
   calculateAge,
   formatDate,
   formatDateTime,
+  formatDay,
+  formatDayOrDate,
   impactClass,
   interactionIcon,
   membershipDuration,
   milestoneIcon,
-  parseJsonList,
   priorityClass,
   profileDate,
-  riskBadgeClass,
 } from './profile';
 
 describe('member profile helpers', () => {
@@ -23,18 +23,27 @@ describe('member profile helpers', () => {
     expect(formatDate('garbage')).toBe('Not set');
   });
 
+  it('formats calendar dates as their UTC day and milestones by whether they have a time', () => {
+    const originalTz = process.env.TZ;
+    process.env.TZ = 'America/Chicago';
+    try {
+      expect(formatDay('2026-10-04T00:00:00.000Z')).toBe('October 4, 2026');
+      expect(formatDay(null)).toBe('Not set');
+      expect(formatDayOrDate('2026-10-04T00:00:00.000Z')).toBe('October 4, 2026');
+      // 02:00 UTC is 9 pm the day before in Chicago: a timestamp shows the local day.
+      expect(formatDayOrDate('2026-10-04T02:00:00.000Z')).toBe('October 3, 2026');
+      expect(formatDayOrDate(undefined)).toBe('Not set');
+    } finally {
+      if (originalTz === undefined) delete process.env.TZ;
+      else process.env.TZ = originalTz;
+    }
+  });
+
   it("uses the viewer's locale rather than en-US", () => {
     const spy = vi.spyOn(Date.prototype, 'toLocaleDateString');
     profileDate('2024-01-05T12:00:00');
     expect(spy).toHaveBeenCalledWith(undefined, expect.any(Object));
     expect(profileDate(null)).toBeNull();
-  });
-
-  it('parses JSON string lists and falls back to an empty list', () => {
-    expect(parseJsonList('["a","b"]')).toEqual(['a', 'b']);
-    expect(parseJsonList(undefined)).toEqual([]);
-    expect(parseJsonList('not json')).toEqual([]);
-    expect(parseJsonList('{"a":1}')).toEqual([]);
   });
 
   it('counts whole years of age, before and after the birthday', () => {
@@ -65,8 +74,5 @@ describe('member profile helpers', () => {
     expect(priorityClass('low')).toContain('gray');
     expect(impactClass('high')).toContain('purple');
     expect(impactClass('low')).toContain('gray');
-    expect(riskBadgeClass('high')).toContain('red');
-    expect(riskBadgeClass('medium')).toContain('yellow');
-    expect(riskBadgeClass('low')).toContain('green');
   });
 });

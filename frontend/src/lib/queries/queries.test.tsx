@@ -1,13 +1,22 @@
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import type { UseQueryResult } from '@tanstack/react-query';
+import type { EngagementJob } from '@embrace/shared';
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { ApiError } from '@/lib/api/client';
 import { makeTestQueryClient, queryWrapper } from '@/test/render';
 import { useAnalytics, useRefreshAllEngagement } from './analytics';
 import { queryKeys } from './keys';
 import { useCreateMedia, useMedia } from './media';
-import { useMemberDetails } from './memberDetails';
+import { useMemberAttendance, useMemberDetails, useOwnAttendance } from './memberDetails';
 import { useRoles } from './roles';
+import {
+  useCreateService,
+  useDeleteService,
+  useSaveAttendance,
+  useServiceAttendance,
+  useServices,
+  useUpdateService,
+} from './services';
 import {
   useCreateSavedSearch,
   useDeleteSavedSearch,
@@ -27,12 +36,29 @@ const usersApi = vi.hoisted(() => ({
 vi.mock('@/lib/api/users', () => usersApi);
 const mediaApi = vi.hoisted(() => ({ listMedia: vi.fn(), createMedia: vi.fn() }));
 vi.mock('@/lib/api/media', () => mediaApi);
-const analyticsApi = vi.hoisted(() => ({ getAnalytics: vi.fn(), refreshAllEngagement: vi.fn() }));
+const analyticsApi = vi.hoisted(() => ({
+  getAnalytics: vi.fn(),
+  refreshAllEngagement: vi.fn(),
+  getEngagementJob: vi.fn(),
+}));
 vi.mock('@/lib/api/analytics', () => analyticsApi);
 const rolesApi = vi.hoisted(() => ({ listRoles: vi.fn() }));
 vi.mock('@/lib/api/roles', () => rolesApi);
-const detailsApi = vi.hoisted(() => ({ getMemberDetails: vi.fn() }));
+const detailsApi = vi.hoisted(() => ({
+  getMemberDetails: vi.fn(),
+  getMemberAttendance: vi.fn(),
+  getOwnAttendance: vi.fn(),
+}));
 vi.mock('@/lib/api/memberDetails', () => detailsApi);
+const servicesApi = vi.hoisted(() => ({
+  listServices: vi.fn(),
+  createService: vi.fn(),
+  updateService: vi.fn(),
+  deleteService: vi.fn(),
+  getServiceAttendance: vi.fn(),
+  saveServiceAttendance: vi.fn(),
+}));
+vi.mock('@/lib/api/services', () => servicesApi);
 const savedApi = vi.hoisted(() => ({
   listSavedSearches: vi.fn(),
   createSavedSearch: vi.fn(),
@@ -95,6 +121,30 @@ const queryCases: QueryCase[] = [
     api: detailsApi.getMemberDetails,
     useHook: () => useMemberDetails('u1'),
     args: ['u1'],
+  },
+  {
+    name: 'useMemberAttendance',
+    api: detailsApi.getMemberAttendance,
+    useHook: () => useMemberAttendance('u1', { months: 6, types: ['sunday_service'] }),
+    args: ['u1', { months: 6, types: ['sunday_service'] }, expect.any(AbortSignal)],
+  },
+  {
+    name: 'useOwnAttendance',
+    api: detailsApi.getOwnAttendance,
+    useHook: () => useOwnAttendance(),
+    args: [{}, expect.any(AbortSignal)],
+  },
+  {
+    name: 'useServices',
+    api: servicesApi.listServices,
+    useHook: () => useServices({ from: '2026-10-01', to: '2026-10-31', pageSize: 1 }),
+    args: [{ from: '2026-10-01', to: '2026-10-31', pageSize: 1 }, expect.any(AbortSignal)],
+  },
+  {
+    name: 'useServiceAttendance',
+    api: servicesApi.getServiceAttendance,
+    useHook: () => useServiceAttendance('s1'),
+    args: ['s1', expect.any(AbortSignal)],
   },
   {
     name: 'useMedia',
@@ -216,6 +266,37 @@ describe('list hooks keep the previous page while the next loads', () => {
   });
 });
 
+it('useServices does not fetch while disabled', async () => {
+  const { result } = renderHook(() => useServices({}, { enabled: false }), {
+    wrapper: queryWrapper(),
+  });
+  expect(result.current.fetchStatus).toBe('idle');
+  expect(servicesApi.listServices).not.toHaveBeenCalled();
+});
+
+it('attendance summaries sit under the member-details prefix, so a member save refetches them', async () => {
+  detailsApi.getMemberAttendance.mockResolvedValue({ attended: [] });
+  const client = makeTestQueryClient();
+  const { result } = renderHook(() => useMemberAttendance('u1', { months: 12 }), {
+    wrapper: queryWrapper(client),
+  });
+  await waitFor(() => expect(result.current.isSuccess).toBe(true));
+  await client.invalidateQueries({ queryKey: queryKeys.memberDetails.detail('u1') });
+  await waitFor(() => expect(detailsApi.getMemberAttendance).toHaveBeenCalledTimes(2));
+});
+
+it('attendance sheets sit under the services prefix, so a service change refetches them', async () => {
+  servicesApi.getServiceAttendance.mockResolvedValue({ service: {}, members: [] });
+  const client = makeTestQueryClient();
+  const { result } = renderHook(() => useServiceAttendance('s1'), {
+    wrapper: queryWrapper(client),
+  });
+  await waitFor(() => expect(result.current.isSuccess).toBe(true));
+  expect(client.getQueryData(queryKeys.services.attendance('s1'))).toBeDefined();
+  await client.invalidateQueries({ queryKey: queryKeys.services.all });
+  await waitFor(() => expect(servicesApi.getServiceAttendance).toHaveBeenCalledTimes(2));
+});
+
 it('useRoles does not fetch while disabled', async () => {
   const { result } = renderHook(() => useRoles({ enabled: false }), { wrapper: queryWrapper() });
   expect(result.current.fetchStatus).toBe('idle');
@@ -253,12 +334,36 @@ const mutationCases: MutationCase[] = [
     invalidates: [queryKeys.media.all],
   },
   {
-    name: 'useRefreshAllEngagement',
-    api: analyticsApi.refreshAllEngagement,
-    useHook: useRefreshAllEngagement,
-    variables: undefined,
-    args: [],
-    invalidates: [queryKeys.analytics.all, queryKeys.users.all, queryKeys.memberDetails.all],
+    name: 'useCreateService',
+    api: servicesApi.createService,
+    useHook: useCreateService,
+    variables: { date: '2026-10-04', type: 'sunday_service' },
+    args: [{ date: '2026-10-04', type: 'sunday_service' }],
+    invalidates: [queryKeys.services.all, queryKeys.memberDetails.all],
+  },
+  {
+    name: 'useUpdateService',
+    api: servicesApi.updateService,
+    useHook: useUpdateService,
+    variables: { id: 's1', input: { title: 'Harvest' } },
+    args: ['s1', { title: 'Harvest' }],
+    invalidates: [queryKeys.services.all, queryKeys.memberDetails.all],
+  },
+  {
+    name: 'useDeleteService',
+    api: servicesApi.deleteService,
+    useHook: useDeleteService,
+    variables: 's1',
+    args: ['s1'],
+    invalidates: [queryKeys.services.all, queryKeys.memberDetails.all],
+  },
+  {
+    name: 'useSaveAttendance',
+    api: servicesApi.saveServiceAttendance,
+    useHook: useSaveAttendance,
+    variables: { id: 's1', input: { present: ['u1'], absent: [] } },
+    args: ['s1', { present: ['u1'], absent: [] }],
+    invalidates: [queryKeys.services.all, queryKeys.memberDetails.all],
   },
   {
     name: 'useCreateSavedSearch',
@@ -307,5 +412,100 @@ describe.each(mutationCases)('$name', ({ api, useHook, variables, args, invalida
     ).rejects.toBe(failure);
     await waitFor(() => expect(result.current.error).toBe(failure));
     expect(invalidate).not.toHaveBeenCalled();
+  });
+});
+
+describe('useRefreshAllEngagement', () => {
+  const job = (patch: Partial<EngagementJob> = {}): EngagementJob => ({
+    jobId: 'job-1',
+    status: 'running',
+    processed: 0,
+    failed: 0,
+    skipped: 0,
+    total: 3,
+    startedAt: '2026-10-05T10:00:00.000Z',
+    finishedAt: null,
+    ...patch,
+  });
+  const scoreKeys = [queryKeys.analytics.all, queryKeys.users.all, queryKeys.memberDetails.all];
+
+  function setup(options = { pollMs: 5, timeoutMs: 120_000 }) {
+    const client = makeTestQueryClient();
+    const invalidate = vi.spyOn(client, 'invalidateQueries');
+    const hook = renderHook(() => useRefreshAllEngagement(options), {
+      wrapper: queryWrapper(client),
+    });
+    const invalidated = () => invalidate.mock.calls.map(([filters]) => filters?.queryKey);
+    return { ...hook, invalidated };
+  }
+
+  it('polls the 202 job until it completes and only then refetches scores', async () => {
+    analyticsApi.refreshAllEngagement.mockResolvedValue(job());
+    let current = job({ processed: 1 });
+    analyticsApi.getEngagementJob.mockImplementation(() => Promise.resolve(current));
+    const { result, invalidated } = setup();
+    act(() => result.current.start());
+    await waitFor(() => expect(result.current.job?.processed).toBe(1));
+    await waitFor(() => expect(analyticsApi.getEngagementJob.mock.calls.length).toBeGreaterThan(2));
+    expect(result.current.refreshing).toBe(true);
+    expect(invalidated()).toEqual([]);
+
+    current = job({ status: 'completed', processed: 3 });
+    await waitFor(() => expect(result.current.job?.status).toBe('completed'));
+    await waitFor(() => expect(invalidated()).toEqual(scoreKeys));
+    expect(result.current.refreshing).toBe(false);
+    expect(result.current.error).toBeNull();
+    expect(analyticsApi.getEngagementJob).toHaveBeenCalledWith('job-1');
+    const polls = analyticsApi.getEngagementJob.mock.calls.length;
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(analyticsApi.getEngagementJob.mock.calls.length).toBe(polls);
+    expect(invalidated()).toEqual(scoreKeys);
+  });
+
+  it('refetches scores after a failed job too (some members may have been updated)', async () => {
+    analyticsApi.refreshAllEngagement.mockResolvedValue(job());
+    analyticsApi.getEngagementJob.mockResolvedValue(job({ status: 'failed' }));
+    const { result, invalidated } = setup();
+    act(() => result.current.start());
+    await waitFor(() => expect(result.current.job?.status).toBe('failed'));
+    await waitFor(() => expect(invalidated()).toEqual(scoreKeys));
+    expect(result.current.refreshing).toBe(false);
+  });
+
+  it('reports a failed start and refetches nothing', async () => {
+    analyticsApi.refreshAllEngagement.mockRejectedValue(failure);
+    const { result, invalidated } = setup();
+    act(() => result.current.start());
+    await waitFor(() => expect(result.current.error).toBe(failure));
+    expect(result.current.refreshing).toBe(false);
+    expect(analyticsApi.getEngagementJob).not.toHaveBeenCalled();
+    expect(invalidated()).toEqual([]);
+  });
+
+  it('stops polling with the error when the job is gone (404 after an API restart)', async () => {
+    const gone = new ApiError(404, 'Job not found');
+    analyticsApi.refreshAllEngagement.mockResolvedValue(job());
+    analyticsApi.getEngagementJob.mockRejectedValue(gone);
+    const { result, invalidated } = setup();
+    act(() => result.current.start());
+    await waitFor(() => expect(result.current.error).toBe(gone));
+    expect(result.current.refreshing).toBe(false);
+    const polls = analyticsApi.getEngagementJob.mock.calls.length;
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(analyticsApi.getEngagementJob.mock.calls.length).toBe(polls);
+    expect(invalidated()).toEqual([]);
+  });
+
+  it('gives up after the timeout while the job is still running', async () => {
+    analyticsApi.refreshAllEngagement.mockResolvedValue(job());
+    analyticsApi.getEngagementJob.mockResolvedValue(job({ processed: 1 }));
+    const { result, invalidated } = setup({ pollMs: 5, timeoutMs: 40 });
+    act(() => result.current.start());
+    await waitFor(() => expect(result.current.timedOut).toBe(true));
+    expect(result.current.refreshing).toBe(false);
+    const polls = analyticsApi.getEngagementJob.mock.calls.length;
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(analyticsApi.getEngagementJob.mock.calls.length).toBe(polls);
+    expect(invalidated()).toEqual([]);
   });
 });
