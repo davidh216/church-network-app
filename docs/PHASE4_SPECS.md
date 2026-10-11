@@ -131,7 +131,7 @@ The gameplan's exit criterion "a documented rollback for each" is met by this ta
 ### U6 Deployment hardening (M)
 - **Production configuration checks** (`backend/src/config/env.ts`). When `NODE_ENV=production`:
   - `CORS_ORIGIN` must be set explicitly, with no fallback to the localhost default, and every origin must be `https://` unless `COOKIE_SECURE=false`.
-  - `JWT_SECRET` must not equal the placeholder in `backend/.env.example`.
+  - `JWT_SECRET` must not be trivially weak: refuse a value made of one repeated character, fewer than 10 distinct characters, or one containing `changeme`, `secret` or `example` (case-insensitive). `backend/.env.example` leaves it empty, so there is no placeholder to compare against.
   - `TRUST_PROXY=true` is refused, because it trusts any client's X-Forwarded-For; a hop count or a subnet list is required.
   - Failures exit at start-up with the same prettified message as today.
   - Tests cover each rule, and the compose stack still starts (it sets `COOKIE_SECURE=false` and an explicit `CORS_ORIGIN`).
