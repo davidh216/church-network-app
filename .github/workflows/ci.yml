@@ -42,6 +42,14 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      # Supply-chain gates: no high or critical advisory in the production dependencies, and the
+      # registry signatures and provenance attestations of every installed package verify.
+      - run: npm audit --omit=dev --audit-level=high
+      # Non-blocking for now: it could not be run where this job was written (the sandbox blocks
+      # the sigstore TUF CDN that npm fetches its keys from). Make it blocking (drop
+      # continue-on-error) once it has passed here.
+      - run: npm audit signatures
+        continue-on-error: true
       # The backend imports @embrace/shared from its compiled dist.
       - run: npm run build:shared
       - run: npm run -w @embrace/shared typecheck
