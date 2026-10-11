@@ -98,7 +98,7 @@ A comprehensive church management platform built with modern web technologies, d
 ## 🚦 Getting Started
 
 ### **Prerequisites**
-- Node.js 22 (see `.nvmrc`) and npm 10
+- Node.js 24 (see `.nvmrc`) and npm 11
 - PostgreSQL 16, either installed locally or started with `docker compose up -d db`
 
 ### **Installation**
