@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-// Load a local .env file when present (Node 22 built-in; no dependency needed). Not under
+// Load a local .env file when present (Node built-in; no dependency needed). Not under
 // NODE_ENV=test: tests get their environment from vitest.config.mts only, so a developer's .env
 // (RATE_LIMIT_AUTH_MAX, SEED_ADMIN_*, ...) cannot change how they behave.
 if (process.env.NODE_ENV !== 'test') {

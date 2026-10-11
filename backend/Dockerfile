@@ -2,7 +2,7 @@
 # Express API image. Build context is the repository root, because the npm workspace
 # lockfile lives there:  docker build -f backend/Dockerfile .
 
-FROM node:22-alpine AS build
+FROM node:24-alpine AS build
 # Prisma's engines need OpenSSL on Alpine.
 RUN apk add --no-cache openssl
 WORKDIR /app
@@ -21,7 +21,7 @@ COPY backend backend
 # prisma generate, then tsc for src/ (dist/) and prisma/seed.ts (dist/prisma/seed.js)
 RUN npm run -w backend build
 
-FROM node:22-alpine AS runtime
+FROM node:24-alpine AS runtime
 RUN apk add --no-cache openssl
 ENV NODE_ENV=production
 WORKDIR /app
