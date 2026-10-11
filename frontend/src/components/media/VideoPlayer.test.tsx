@@ -124,6 +124,28 @@ describe('VideoPlayer', () => {
     }
   });
 
+  it('toggles fullscreen on f and F, but not on ctrl+f', async () => {
+    const requestFullscreen = vi.fn(async () => undefined);
+    const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'requestFullscreen');
+    Object.defineProperty(HTMLElement.prototype, 'requestFullscreen', {
+      value: requestFullscreen,
+      configurable: true,
+    });
+    try {
+      await render(<VideoPlayer media={video('https://youtu.be/dQw4w9WgXcQ')} onClose={vi.fn()} />);
+      fireEvent.keyDown(document, { key: 'f' });
+      expect(requestFullscreen).toHaveBeenCalledTimes(1);
+      fireEvent.keyDown(document, { key: 'F' });
+      expect(requestFullscreen).toHaveBeenCalledTimes(2);
+      // The browser's find shortcut stays the browser's.
+      fireEvent.keyDown(document, { key: 'f', ctrlKey: true });
+      expect(requestFullscreen).toHaveBeenCalledTimes(2);
+    } finally {
+      if (original) Object.defineProperty(HTMLElement.prototype, 'requestFullscreen', original);
+      else delete (HTMLElement.prototype as Partial<HTMLElement>).requestFullscreen;
+    }
+  });
+
   it('lists the keyboard shortcuts in a visually hidden description of the dialog', async () => {
     await render(<VideoPlayer media={video('https://youtu.be/dQw4w9WgXcQ')} onClose={vi.fn()} />);
     expect(screen.getByRole('dialog')).toHaveAccessibleDescription(
