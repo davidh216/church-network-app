@@ -5,6 +5,14 @@
 # Ports are published on 127.0.0.1 only; DB_PORT moves PostgreSQL off 5432 on the host.
 name: church-network
 
+# The API writes JSON lines to stdout; Docker keeps them in rotated files, so they cannot fill the
+# disk (at most 5 files of 10 MB per service). `docker compose logs api` reads them.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: '5'
+
 services:
   db:
     image: postgres:16-alpine
@@ -49,6 +57,7 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
+    logging: *logging
 
   web:
     build:
@@ -63,6 +72,13 @@ services:
     depends_on:
       api:
         condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '--spider', 'http://127.0.0.1:3000/login']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging: *logging
 
 volumes:
   db-data:
