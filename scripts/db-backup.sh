@@ -8,7 +8,8 @@
 #   DATABASE_URL set    pg_dump on this host connects to it. A Prisma URL works: query parameters
 #                       libpq does not know (schema, connection_limit, pgbouncer, sslaccept, ...)
 #                       are dropped, and the password goes through PGPASSWORD rather than the
-#                       command line. pg_dump must be at least the server's version.
+#                       command line (an exported PGPASSWORD or ~/.pgpass applies when the URL
+#                       has none). pg_dump must be at least the server's version.
 #   DATABASE_URL unset  pg_dump runs inside the compose `db` service (docker compose exec), as
 #                       DB_USER (default church) on DB_NAME (default church_dev).
 # Other settings:
@@ -54,7 +55,7 @@ trap 'rm -f -- "$partial"' EXIT
 
 if [[ -n ${DATABASE_URL:-} ]]; then
   pg_url_split "$DATABASE_URL"
-  PGPASSWORD=$PG_URL_PASSWORD pg_dump --format=custom --file="$partial" --dbname="$PG_URL"
+  pg_with_password pg_dump --format=custom --file="$partial" --dbname="$PG_URL"
 else
   docker compose -f "$repo_root/docker-compose.yml" exec -T db \
     pg_dump --format=custom --username="${DB_USER:-church}" --dbname="${DB_NAME:-church_dev}" \

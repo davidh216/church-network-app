@@ -43,7 +43,7 @@ restore_options=(--clean --if-exists --no-owner --no-privileges --single-transac
 
 if [[ -n ${DATABASE_URL:-} ]]; then
   pg_url_split "$DATABASE_URL" "$database"
-  PGPASSWORD=$PG_URL_PASSWORD pg_restore "${restore_options[@]}" --dbname="$PG_URL" "$dump"
+  pg_with_password pg_restore "${restore_options[@]}" --dbname="$PG_URL" "$dump"
 else
   docker compose -f "$repo_root/docker-compose.yml" exec -T db \
     pg_restore "${restore_options[@]}" --username="${DB_USER:-church}" --dbname="$database" \
