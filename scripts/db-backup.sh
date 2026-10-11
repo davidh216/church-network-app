@@ -16,7 +16,9 @@
 #                       exec), as DB_USER (default church) on DB_NAME (default church_dev); no
 #                       client tools are needed on the host.
 # Other settings:
-#   RETENTION_DAYS      backups older than this many days are deleted (default 14; 0 keeps all)
+#   RETENTION_DAYS      backups older than this many days are deleted (default 14; 0 keeps all).
+#                       Only files named exactly as this script names them are deleted, plus
+#                       <prefix>-*.dump.partial left by an interrupted run more than a day ago.
 #   BACKUP_PREFIX       file name prefix (default church): <prefix>-<UTC timestamp>.dump
 #
 # Restore with scripts/db-restore.sh. Nightly from cron, for example:
@@ -30,6 +32,10 @@ usage() {
 
 [[ $# -eq 1 && -n "$1" ]] || usage
 target_dir=$1
+if [[ $target_dir == -* ]]; then
+  echo "the target directory must not start with '-' (write ./$target_dir)" >&2
+  exit 64
+fi
 retention_days=${RETENTION_DAYS:-14}
 prefix=${BACKUP_PREFIX:-church}
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
@@ -73,8 +79,13 @@ mv -- "$partial" "$file"
 trap - EXIT
 echo "backup written: $file ($(wc -c <"$file" | tr -d ' ') bytes)"
 
+# -mtime +N matches files last modified more than N whole days ago. Only names this script
+# generates match, so other files kept in the directory are never deleted.
+digits8='[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]'
+digits6='[0-9][0-9][0-9][0-9][0-9][0-9]'
 if ((retention_days > 0)); then
-  # -mtime +N matches files last modified more than N whole days ago.
-  find "$target_dir" -maxdepth 1 -type f -name "$prefix-*.dump" -mtime +"$retention_days" \
-    -print -delete | sed 's/^/deleted old backup: /'
+  find "$target_dir" -maxdepth 1 -type f -name "$prefix-${digits8}T${digits6}Z.dump" \
+    -mtime +"$retention_days" -print -delete | sed 's/^/deleted old backup: /'
 fi
+find "$target_dir" -maxdepth 1 -type f -name "$prefix-*.dump.partial" -mtime +0 \
+  -print -delete | sed 's/^/deleted stale partial backup: /'
