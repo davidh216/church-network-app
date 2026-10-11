@@ -1,6 +1,6 @@
 # Church Network App: Modernization Gameplan
 
-Date: 2026-10-03. Status: APPROVED 2026-10-04 (initial scope = Phase 0 + Phase 1). Phase 0 implemented on branch `modernize/phase-0`; Phases 0, 1 and 2 are merged into `main` (PRs #1, #2, #3, merged 2026-10-05). Phase 3 is merged into `main` (PR #9, merged 2026-10-07). Phase 4 is specified in `PHASE4_SPECS.md` (draft for owner approval, 2026-10-11).
+Date: 2026-10-03. Status: APPROVED 2026-10-04 (initial scope = Phase 0 + Phase 1). Phase 0 implemented on branch `modernize/phase-0`; Phases 0, 1 and 2 are merged into `main` (PRs #1, #2, #3, merged 2026-10-05). Phase 3 is merged into `main` (PR #9, merged 2026-10-07). Phase 4 is specified in `PHASE4_SPECS.md` (approved 2026-10-11) and implemented on branch `modernize/phase-4`.
 
 Owner decisions (2026-10-04): D1 Postgres, moved up to the start of Phase 1 (switching the Prisma provider regenerates the migration history, so it follows the Phase 0 security fixes rather than preceding them). D2 registration requires admin approval. D3 httpOnly cookie sessions. D6 delete the lifecycle-automation tables. Remaining decisions take the recommendation unless the owner says otherwise.
 
@@ -270,7 +270,7 @@ Final pre-merge review (2026-10-07) of the whole PR on its last head, five lense
 
 ### Phase 4: platform upgrades (about 5 to 6 days, only after Phase 1 tests exist)
 
-Goal: current, supported majors with a documented rollback for each, images verified in CI, and a tested backup path. Detailed item specifications, version targets, rollbacks and decisions are in `PHASE4_SPECS.md` (DRAFT for owner approval, 2026-10-11). One sequential stream (U1 to U7) on `modernize/phase-4`, cut from `main` after PR #9.
+Goal: current, supported majors with a documented rollback for each, images verified in CI, and a tested backup path. Detailed item specifications, version targets, rollbacks and decisions are in `PHASE4_SPECS.md` (approved 2026-10-11 with the planner's recommendations). One sequential stream (U1 to U7) on `modernize/phase-4`, cut from `main` after PR #9.
 
 - [x] 4.1 Postgres: moved to Phase 1 item 1.0 by owner decision D1.
 - [ ] 4.2 (M) Next 16.4 and eslint-config-next 16.4 (proxy rename, native flat config, React Compiler lint findings fixed), ESLint 10 in every workspace, TypeScript held at 5.9 (decision P4-D1; React already at 19.3). F090, F117, F118, F119. Spec U1, U3, U4.

@@ -1,6 +1,6 @@
 # Phase 4 implementation specifications: platform upgrades
 
-Companion to `MODERNIZATION_GAMEPLAN.md` section 6, Phase 4. Written by the planner for the implementation agents (Claude Opus 5.5, medium effort). Status: DRAFT for owner approval (2026-10-11). Decisions P4-D1 to P4-D7 in section 4 carry the planner's recommendations. One stream (U) runs sequentially on branch `modernize/phase-4`, cut from `main` after the Phase 3 merge (PR #9). It ships as one pull request into `main`, with each major upgrade in its own commits so it can be reverted on its own.
+Companion to `MODERNIZATION_GAMEPLAN.md` section 6, Phase 4. Written by the planner for the implementation agents (Claude Opus 5.5, medium effort). Status: APPROVED 2026-10-11 with the planner's recommendations (P4-D1 TypeScript stays on 5.9, P4-D2 Node 24, P4-D3 ESLint 10, P4-D4 Prisma 7.10 with `prisma-client-js`, P4-D5 fix the React Compiler lint findings, P4-D6 Dependabot PRs #4 to #8 closed as superseded after merge, P4-D7 backup scripts with a CI restore drill). One stream (U) runs sequentially on branch `modernize/phase-4`, cut from `main` after the Phase 3 merge (PR #9). It ships as one pull request into `main`, with each major upgrade in its own commits so it can be reverted on its own.
 
 Research basis: the planner read the registry metadata, release notes, upgrade guides and the shipped package contents for every target below on 2026-10-11. Next 16.4, eslint-config-next 16.4 and ESLint 10 were also trial-installed in a scratch copy of the repository: typecheck, the frontend tests, the build and a standalone-server smoke test all passed. Findings closed: F047, F090, F117 (decided), F118 (already at React 19.3), F119.
 
@@ -177,7 +177,7 @@ The gameplan's exit criterion "a documented rollback for each" is met by this ta
    - An adversarial review covering data access under the driver adapter, deployment and security, and the docs.
    - Fixes, the gameplan update, a push, and the PR into `main`.
 
-## 4. Decisions (owner)
+## 4. Decisions (taken 2026-10-11: all recommendations accepted)
 | Id | Decision | Options | Recommendation |
 |---|---|---|---|
 | P4-D1 | TypeScript | Stay on 5.9 (recommended); move to 6.0; move to 7.0 | Stay on 5.9. TS 7 has no compiler API, so typescript-eslint (peer `<6.1`) cannot run typed lint. Revisit when 7.1 ships its API and typescript-eslint supports it. 6.0 gains little now. |
