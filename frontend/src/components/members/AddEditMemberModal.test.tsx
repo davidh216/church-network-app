@@ -312,9 +312,20 @@ describe('AddEditMemberModal', () => {
 
     it('shows the member values in the first frame after opening', async () => {
       const { rerender } = await render(modal(false, null));
-      rerender(modal(true, existing));
-      // No settle: the values are there before any effect or promise runs.
-      expect(screen.getByLabelText('Full Name *')).toHaveValue('Ann Example');
+      // The Dialog focuses the first field in its own effect, which runs before any effect of
+      // the modal. Recording the field's value at that moment shows what the first committed
+      // frame held: a reset made in an effect would still show an empty field here, even though
+      // the value is right once rerender has flushed every effect.
+      const seen: string[] = [];
+      const record = (e: FocusEvent) => seen.push((e.target as HTMLInputElement).value);
+      document.addEventListener('focusin', record);
+      try {
+        rerender(modal(true, existing));
+      } finally {
+        document.removeEventListener('focusin', record);
+      }
+      expect(screen.getByLabelText('Full Name *')).toHaveFocus();
+      expect(seen[0]).toBe('Ann Example');
       expect(screen.getByLabelText('Phone')).toHaveValue('555-0100');
       await settle();
     });
