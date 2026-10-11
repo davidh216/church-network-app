@@ -4,7 +4,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { prisma } from '../src/lib/prisma';
+import { pgAdapter, prisma } from '../src/lib/prisma';
 
 // Data-transforming migrations run against a fixture holding legacy values (PHASE3_SPECS.md 0.1).
 // Each fixture lives in its own Postgres schema of the test database: the migrations before the
@@ -30,9 +30,11 @@ const migrationNames = readdirSync(MIGRATIONS, { withFileTypes: true })
 const migrationSql = (name: string) =>
   readFileSync(resolve(MIGRATIONS, name, 'migration.sql'), 'utf8');
 
+// Prisma 7's `db execute` takes its URL only from prisma.config.ts, which reads DATABASE_URL.
 function execute(sql: string) {
-  execSync(`npx prisma db execute --stdin --url "${TEST_DATABASE_URL}"`, {
+  execSync('npx prisma db execute --stdin', {
     cwd: BACKEND,
+    env: { ...process.env, DATABASE_URL: TEST_DATABASE_URL },
     input: sql,
     stdio: ['pipe', 'pipe', 'pipe'],
   });
@@ -72,6 +74,10 @@ function migrateFixture(schema: string, migration: string, fixture: string, toHe
     ].join('\n'),
   );
 }
+
+// A Prisma client reading the fixture schema, built like the API's client.
+const fixtureClient = (schema: string) =>
+  new PrismaClient({ adapter: pgAdapter(`${TEST_DATABASE_URL}?schema=${schema}`) });
 
 const dropSchema = (schema: string) =>
   execute(`${clearArchive(schema)}\nDROP SCHEMA IF EXISTS "${schema}" CASCADE;`);
@@ -996,7 +1002,7 @@ describe('legacy JSON migrated to the head schema stays readable through Prisma'
       `,
       true,
     );
-    client = new PrismaClient({ datasourceUrl: `${TEST_DATABASE_URL}?schema=${schema}` });
+    client = fixtureClient(schema);
   }, 60_000);
 
   afterAll(async () => {
@@ -1014,6 +1020,12 @@ describe('legacy JSON migrated to the head schema stays readable through Prisma'
     );
     expect(member?.activities.map((a) => a.metadata)).toEqual([nestedJson(200)]);
     expect(await client.savedSearch.findMany({ where: { isPublic: true } })).toEqual([]);
+  });
+
+  it("runs raw SQL in the URL's schema too (search_path), as Prisma 6 did", async () => {
+    const [row] = await client.$queryRaw<{ schema: string; users: bigint }[]>`
+      SELECT current_schema() AS schema, (SELECT count(*) FROM "users") AS users`;
+    expect(row).toEqual({ schema, users: 1n });
   });
 });
 
@@ -1750,7 +1762,7 @@ describe('a Phase 2 database upgraded by prisma migrate deploy (whole chain)', (
   });
 
   it('serves the upgraded data through the Prisma client', async () => {
-    const client = new PrismaClient({ datasourceUrl: schemaUrl });
+    const client = fixtureClient(schema);
     try {
       const member = await client.user.findUnique({
         where: { id: 'u1' },
