@@ -1,17 +1,66 @@
 version: 2
 updates:
-  # One root lockfile covers both workspaces.
+  # One root lockfile covers every workspace.
   - package-ecosystem: npm
     directory: /
     schedule:
       interval: weekly
+    # A release has to be out this long before Dependabot proposes it, so a compromised or broken
+    # version is usually caught and pulled first.
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
+    ignore:
+      # @types/node follows the runtime major (.nvmrc, the Docker base images), never ahead of it.
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
+      # TypeScript stays on 5.9 until decision P4-D1 changes: typed ESLint cannot run on 7.
+      - dependency-name: typescript
+        update-types: ['version-update:semver-major']
+      # The root overrides.eslint has to move together with every workspace's eslint range, and
+      # Dependabot cannot update overrides, so an ESLint major is a manual upgrade.
+      - dependency-name: eslint
+        update-types: ['version-update:semver-major']
+    # Each dependency goes into the first group that matches it, so the named groups (packages
+    # that must move together) come before the catch-all.
     groups:
+      next:
+        patterns: [next, eslint-config-next]
+      prisma:
+        patterns: [prisma, '@prisma/*']
+      typescript-eslint:
+        patterns: [typescript-eslint, '@typescript-eslint/*']
+      react:
+        patterns: [react, react-dom, '@types/react', '@types/react-dom']
+      vitest:
+        patterns: [vitest, '@vitest/*']
+      playwright:
+        patterns: ['@playwright/test', '@axe-core/playwright']
       npm-minor-and-patch:
         update-types:
           - minor
           - patch
 
+  # ci.yml pins every action by commit SHA with a `# vX.Y.Z` comment; Dependabot updates both.
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    groups:
+      github-actions:
+        patterns: ['*']
+
+  # The node:<major>-alpine base images. A Node major is a planned upgrade (.nvmrc, engines,
+  # @types/node and CI move with it), so only minor and patch updates are proposed.
+  - package-ecosystem: docker
+    directories:
+      - /backend
+      - /frontend
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: node
+        update-types: ['version-update:semver-major']
+    groups:
+      node-images:
+        patterns: [node]
