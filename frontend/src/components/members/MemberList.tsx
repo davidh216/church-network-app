@@ -55,10 +55,8 @@ export default function MemberList() {
   // Focus targets: the panel toggles (when a panel closes) and the heading (when a dialog's
   // opener is gone).
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const toggleRefs = {
-    advanced: useRef<HTMLButtonElement>(null),
-    saved: useRef<HTMLButtonElement>(null),
-  };
+  const advancedToggleRef = useRef<HTMLButtonElement>(null);
+  const savedToggleRef = useRef<HTMLButtonElement>(null);
 
   // The inputs update at once; the query follows 300 ms after the last change.
   const {
@@ -97,7 +95,7 @@ export default function MemberList() {
 
   // Closing or applying a panel returns focus to the toggle that opened it.
   const closePanel = () => {
-    if (panel) toggleRefs[panel].current?.focus();
+    if (panel) (panel === 'advanced' ? advancedToggleRef : savedToggleRef).current?.focus();
     setPanel(null);
   };
 
@@ -153,7 +151,8 @@ export default function MemberList() {
             canManage && (
               <MemberListActions
                 panel={panel}
-                toggleRefs={toggleRefs}
+                advancedToggleRef={advancedToggleRef}
+                savedToggleRef={savedToggleRef}
                 onTogglePanel={togglePanel}
                 selectedCount={selectedMembers.size}
                 onExport={() => void exportMembers()}

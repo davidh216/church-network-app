@@ -92,12 +92,11 @@ export default function MemberFilters({
       el.focus();
     }
   };
-  const clearAdvanced = advanced && {
-    ...advanced,
-    onClear: () => {
-      focusOnMount.current = true;
-      advanced.onClear();
-    },
+  // The search box is not rendered while an advanced query is active, so it takes focus when it
+  // mounts after the query is cleared.
+  const clearAdvanced = () => {
+    focusOnMount.current = true;
+    advanced?.onClear();
   };
   const clearAndFocus = (clear: () => void) => () => {
     clear();
@@ -114,8 +113,12 @@ export default function MemberFilters({
     <div className="mt-4 space-y-4">
       <div className="flex flex-col lg:flex-row gap-4">
         <div className="flex-1">
-          {clearAdvanced ? (
-            <AdvancedQueryChip {...clearAdvanced} />
+          {advanced ? (
+            <AdvancedQueryChip
+              query={advanced.query}
+              onEdit={advanced.onEdit}
+              onClear={clearAdvanced}
+            />
           ) : (
             <div className="relative">
               <input

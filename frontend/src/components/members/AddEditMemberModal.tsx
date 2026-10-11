@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useId, type RefObject } from 'react';
+import { useState, useId, type RefObject } from 'react';
 import { createUserInput, MIN_PASSWORD_LENGTH, updateUserInput } from '@embrace/shared';
 import {
   apiErrorsFor,
@@ -44,21 +44,27 @@ export default function AddEditMemberModal({
   member,
   fallbackFocus,
 }: AddEditMemberModalProps) {
-  const [formData, setFormData] = useState({
-    name: '',
-    ...nameParts(null),
-    email: '',
-    phone: '',
-    bio: '',
-    isActive: true,
-    password: '',
-  });
+  const [formData, setFormData] = useState(() => initialFormData(member));
   // null until the user picks roles: a new member then defaults to the member role and an
   // edited member keeps their current roles.
   const [pickedRoles, setPickedRoles] = useState<string[] | null>(null);
-  const [lists, setLists] = useState(() => profileLists(null));
+  const [lists, setLists] = useState(() => profileLists(member));
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  // Reset the form whenever it opens or switches member (no data is fetched here). The reset is
+  // made while rendering, so the dialog's first frame already shows the member's values.
+  const openedFor = isOpen ? (member ?? null) : undefined;
+  const [shownFor, setShownFor] = useState<Member | null | undefined>(openedFor);
+  if (openedFor !== shownFor) {
+    setShownFor(openedFor);
+    if (openedFor !== undefined) {
+      setFormData(initialFormData(openedFor));
+      setLists(profileLists(openedFor));
+      setPickedRoles(null);
+      setError('');
+      setFieldErrors({});
+    }
+  }
   const rolesQuery = useRoles({ enabled: isOpen });
   const roles = rolesQuery.data ?? [];
   const createUser = useCreateUser();
@@ -71,25 +77,6 @@ export default function AddEditMemberModal({
     ? member.roles.map((ur) => ur.role.id)
     : roles.filter((r) => r.name === 'member').map((r) => r.id);
   const selectedRoles = pickedRoles ?? defaultRoles;
-
-  // Reset the form whenever it opens or switches member (no data is fetched here).
-  useEffect(() => {
-    if (isOpen) {
-      setFormData({
-        name: member?.name ?? '',
-        ...nameParts(member),
-        email: member?.email ?? '',
-        phone: member?.phone || '',
-        bio: member?.bio || '',
-        isActive: member ? member.isActive : true,
-        password: '',
-      });
-      setLists(profileLists(member));
-      setPickedRoles(null);
-      setError('');
-      setFieldErrors({});
-    }
-  }, [isOpen, member]);
 
   // Validates with the API's own schema (same rules and messages): the field errors, or the save
   // call with the schema's output (trimmed, blanks as null).
@@ -283,4 +270,17 @@ export default function AddEditMemberModal({
       </div>
     </Dialog>
   );
+}
+
+/** The form's values for a member, or blank ones for a new member. */
+function initialFormData(member: Member | null | undefined) {
+  return {
+    name: member?.name ?? '',
+    ...nameParts(member),
+    email: member?.email ?? '',
+    phone: member?.phone || '',
+    bio: member?.bio || '',
+    isActive: member ? member.isActive : true,
+    password: '',
+  };
 }

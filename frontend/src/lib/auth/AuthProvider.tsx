@@ -42,21 +42,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Set while a 401 is being handled, so the logout call it makes cannot re-enter.
   const handling401 = useRef(false);
 
-  const refresh = useCallback(async () => {
-    try {
-      setUser(await authApi.me());
-      setStatus('authenticated');
-    } catch (err) {
-      if (isApiError(err) && (err.status === 401 || err.status === 403)) {
-        setUser(null);
-        setStatus('anonymous');
-      } else {
-        // Unreachable or failing API: not evidence of a signed-out user, so keep any user
-        // already loaded and let the page offer a retry.
-        setStatus('error');
-      }
-    }
-  }, []);
+  // The state is only set in the callbacks of the me() call, once the API has answered, so the
+  // mount effect below never updates state synchronously.
+  const refresh = useCallback(
+    () =>
+      authApi.me().then(
+        (me) => {
+          setUser(me);
+          setStatus('authenticated');
+        },
+        (err: unknown) => {
+          if (isApiError(err) && (err.status === 401 || err.status === 403)) {
+            setUser(null);
+            setStatus('anonymous');
+          } else {
+            // Unreachable or failing API: not evidence of a signed-out user, so keep any user
+            // already loaded and let the page offer a retry.
+            setStatus('error');
+          }
+        },
+      ),
+    [],
+  );
 
   const login = useCallback(async (email: string, password: string) => {
     const signedIn = await authApi.login(email, password);
