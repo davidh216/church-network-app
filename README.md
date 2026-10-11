@@ -136,8 +136,8 @@ A comprehensive church management platform built with modern web technologies, d
 **Back up first: the upgrade is one-way.** To roll back, restore the dump and run the previous build.
 
 ```bash
-docker compose exec db pg_dump -U church -Fc church_dev > pre-upgrade.dump   # with compose
-pg_dump -Fc "$DATABASE_URL" > pre-upgrade.dump                                 # local database
+scripts/db-backup.sh ./backups                          # through `docker compose exec db` when DATABASE_URL is unset
+DATABASE_URL=postgresql://... scripts/db-backup.sh ./backups   # any reachable server
 ```
 
 `npm run -w backend db:migrate` (or the api container on start) applies new migrations in order. The Phase 3 migrations convert data in place:
@@ -177,6 +177,38 @@ docker compose run --rm --entrypoint node api dist/jobs/refresh-engagement.js   
 
 Staff can also start it from the Analytics page.
 
+### **Operations**
+**Configuration in production.** With `NODE_ENV=production` the API refuses to start when:
+- `CORS_ORIGIN` is unset, or any origin is not `https://`. Plain-HTTP origins are accepted only with `COOKIE_SECURE=false`, as the local compose stack sets.
+- `JWT_SECRET` is weak: one repeated character, fewer than 10 distinct characters, or containing `changeme`, `secret` or `example`. Generate one with `openssl rand -base64 48`.
+- `TRUST_PROXY=true`. Use a hop count or an address or subnet list instead.
+
+**Single instance.** Run one API instance: the engagement refresh job keeps its status in the API process.
+
+**Logs.** The API writes one JSON line per request to stdout, so collect stdout (`docker compose logs api` or your platform's log collector). Compose rotates the api and web logs (json-file, 5 files of 10 MB). Every response carries an `X-Request-Id` header. It equals the `req.id` of its log line and the `requestId` in a 500 body, so ask users for it when they report an error.
+
+**Backups.** `scripts/db-backup.sh <dir>` writes `church-<UTC timestamp>.dump` (`pg_dump -Fc`, file mode 600), checks that the dump can be read, and deletes backups older than `RETENTION_DAYS` (default 14). It uses `DATABASE_URL` when set, otherwise `docker compose exec db`. `pg_dump` on the host must be at least the server's major version. Run it nightly, for example from cron:
+
+```cron
+15 2 * * * cd /srv/church-network-app && scripts/db-backup.sh /var/backups/church >> /var/log/church-backup.log 2>&1
+```
+
+**Restores.** `scripts/db-restore.sh <dump> <database>` restores into an existing database in one transaction (`--clean --if-exists --no-owner --no-privileges`), so a failure leaves the database unchanged. CI runs this drill after every Playwright run.
+1. To check a backup without touching production:
+   ```bash
+   psql "$ADMIN_URL" -c 'CREATE DATABASE church_restore'
+   scripts/db-restore.sh backups/church-<timestamp>.dump church_restore
+   DATABASE_URL='postgresql://.../church_restore?schema=public' npx -w backend prisma migrate status
+   ```
+2. To restore production: `docker compose stop api`, then `scripts/db-restore.sh <dump> church_dev`, then `docker compose start api`.
+
+**Rolling back an upgrade.** Phase 4 changed no schema, so each upgrade is rolled back by redeploying the previous image, or by reverting that item's commits (`PHASE4_SPECS.md` 1.3: Node 24, Next 16, ESLint 10, Prisma 7). Prisma 6 and 7 read the same migration history.
+
+**Dependency notes.**
+- `overrides.eslint` in the root `package.json` must move together with every workspace's `eslint` range. Dependabot cannot update overrides, so it ignores ESLint majors.
+- `overrides.mysql2` patches the Prisma CLI's copy; drop it when Prisma updates it.
+- `allowScripts` lists the dependencies whose install scripts may run (advisory in npm 11.21). Approve a new one with `npm approve-scripts`.
+
 ### **Accounts and Roles**
 - Self-registration creates an **inactive** account. An admin or leader activates it (edit the member and tick Active) before the person can sign in.
 - The first admin comes from the seed (`SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD`). Passwords must be at least 12 characters and not a common password. Signed-in users change theirs with `POST /api/auth/change-password`; admins reset others with `POST /api/users/:id/reset-password`.
@@ -190,7 +222,7 @@ npm run format:check                                             # prettier
 npx -w frontend playwright install chromium                     # once; CI does this itself
 E2E_WEB_PORT=3111 E2E_API_PORT=5111 npm run -w frontend test:e2e # Playwright suite; starts both dev servers and needs SEED_ADMIN_* in backend/.env
 ```
-A husky pre-commit hook runs lint-staged (eslint --fix and prettier on staged files). CI (`.github/workflows/ci.yml`) runs typecheck, lint, format check, tests against a Postgres service, builds, the compiled seed, a migration drift check and the Playwright suite on pull requests and on pushes to `main` and `modernize/**`.
+A husky pre-commit hook runs lint-staged (eslint --fix and prettier on staged files). CI (`.github/workflows/ci.yml`) runs on pull requests and on pushes to `main` and `modernize/**`. It runs typecheck, lint, format check, tests against a Postgres service, builds, the compiled seed, a migration drift check (`SHADOW_DATABASE_URL=... npx -w backend prisma migrate diff --from-migrations prisma/migrations --to-schema prisma/schema.prisma --exit-code`) and a production audit (`npm audit --omit=dev --audit-level=high`; `npm audit signatures` is non-blocking for now). It also runs the Playwright suite followed by a backup and restore drill, and an Images job that builds both Dockerfiles and smoke-tests the compose stack (health, login page, sign-in through the web app, refresh CLI, and 503 within 10 seconds of the database stopping). Actions are pinned by commit SHA. Dependabot updates them weekly together with npm (7-day cooldown, 14 days for majors) and the Node base images.
 
 ## 📁 Project Structure
 
@@ -199,7 +231,8 @@ church-network-app/
 ├── package.json                # npm workspaces: backend, frontend, packages/*; root scripts
 ├── tsconfig.base.json          # shared strict compiler options
 ├── docker-compose.yml          # db, api, web
-├── .github/workflows/ci.yml    # typecheck, lint, test, build, migrate diff, e2e
+├── .github/workflows/ci.yml    # checks, tests, drift, audit, e2e, restore drill, image build and smoke test
+├── scripts/                    # db-backup.sh, db-restore.sh
 ├── backend/                    # Express 5 API
 │   ├── Dockerfile
 │   ├── prisma/

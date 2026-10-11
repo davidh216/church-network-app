@@ -155,6 +155,13 @@ The gameplan's exit criterion "a documented rollback for each" is met by this ta
   - The API returns the request id in an `X-Request-Id` response header, so a user-reported error can be matched to its log line. Add a test.
 - **Accept:** all required checks pass, the new CI job passes on the PR, and both scripts pass shellcheck.
 
+- **Implementation notes.**
+  - `X-Request-Id` already existed, so U6 added a test that each log line carries the same id.
+  - The web service gained a compose healthcheck, so the smoke test can wait for it.
+  - Restores also use `--no-owner --no-privileges --single-transaction`.
+  - libpq rejects Prisma's `?schema=` parameter, so the scripts' helper strips it and passes the password through `PGPASSWORD`.
+  - Run the seed and refresh CLI from `backend/`, so `backend/.env` is read.
+
 ### U7 Supply chain (S)
 - **Pinned actions.** Pin every GitHub Action in `ci.yml` by commit SHA with a `# vX.Y.Z` comment; Dependabot keeps both current.
 - **Dependabot** (`.github/dependabot.yml`):
@@ -171,6 +178,11 @@ The gameplan's exit criterion "a documented rollback for each" is met by this ta
   - Add a `docker` entry for both Dockerfiles that ignores Node majors.
 - **CI audit gates.** After `npm ci`, run `npm audit --omit=dev --audit-level=high` and `npm audit signatures`. If `audit signatures` fails for a reason outside this repository, report it in the PR and keep the step non-blocking with `continue-on-error` and a comment.
 - **Accept:** actionlint passes, Dependabot's configuration is valid (GitHub validates it on push), and CI is green.
+
+- **Implementation notes.**
+  - `npm audit signatures` is non-blocking until its first green run on GitHub (the sandbox cannot reach sigstore's CDN).
+  - The root `allowScripts` lists esbuild, prisma, @prisma/engines and unrs-resolver; npm 11.21 treats it as advisory.
+  - Dependabot also ignores ESLint majors, because the root override must move with the workspace ranges.
 
 ## 3. Verification by the planner
 1. **After U1 to U4:** the required checks, Playwright twice with axe, a standalone-server smoke test, and an adversarial review covering regressions, lint config correctness, and the behaviour of the React Compiler rule fixes. Then fixes and a push.
