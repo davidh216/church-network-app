@@ -45,4 +45,6 @@ USER node
 EXPOSE 5000
 # Migrate, seed, serve. The seed is idempotent: it upserts the roles and creates the first admin
 # only when SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD are set and that account does not exist yet.
-ENTRYPOINT ["sh", "-c", "npx prisma migrate deploy && node dist/prisma/seed.js && node dist/server.js"]
+# `npx --no` runs the installed CLI only: if it were missing, start-up fails instead of npx
+# downloading whatever version npm calls latest.
+ENTRYPOINT ["sh", "-c", "npx --no prisma migrate deploy && node dist/prisma/seed.js && node dist/server.js"]
