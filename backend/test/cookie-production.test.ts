@@ -56,7 +56,7 @@ describe('COOKIE_SECURE override', () => {
   });
 
   it('unset follows NODE_ENV', async () => {
-    // Earlier tests constructed Prisma clients, which may have loaded backend/.env.
+    // A COOKIE_SECURE set in the shell running the tests must not decide the outcome.
     vi.stubEnv('COOKIE_SECURE', undefined);
     expect(await cookieOptions({ NODE_ENV: 'development' })).toMatchObject({ secure: false });
     expect(loadEnvFile).toHaveBeenCalled();

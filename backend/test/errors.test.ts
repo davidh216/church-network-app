@@ -78,6 +78,12 @@ describe('error handler', () => {
     expect((await request(throwing(known('P1001'))).get('/boom')).status).toBe(500);
   });
 
+  // The pg adapter reports a deadlock (40P01) as P2034. It is not the caller's fault, so it stays
+  // an unhandled 500 that is logged, as under Prisma 6.
+  it('answers a deadlock (P2034) with 500', async () => {
+    expect((await request(throwing(known('P2034'))).get('/boom')).status).toBe(500);
+  });
+
   it('maps a missing record in the real app to 404', async () => {
     await resetDatabase();
     await createUser({ email: 'errors-admin@errors.test.local', role: 'admin' });
