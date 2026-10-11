@@ -40,5 +40,11 @@
     "eslint": "^10.12.0",
     "mysql2": "^3.23.1",
     "postcss": "^8.5.23"
+  },
+  "allowScripts": {
+    "esbuild": true,
+    "prisma": true,
+    "unrs-resolver": true,
+    "@prisma/engines": true
   }
 }
