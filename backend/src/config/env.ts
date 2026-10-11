@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { DatabaseUrlError, INVALID_DATABASE_URL, pgConfigFromUrl } from '../lib/pg-config';
 
 // Load a local .env file when present (Node built-in; no dependency needed). Not under
 // NODE_ENV=test: tests get their environment from vitest.config.mts only, so a developer's .env
@@ -14,7 +15,18 @@ if (process.env.NODE_ENV !== 'test') {
 const fields = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().min(1).max(65535).default(5000),
-  DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
+  // Read as the Prisma client will read it. The message never echoes the URL (or its password).
+  DATABASE_URL: z
+    .string()
+    .min(1, 'DATABASE_URL is required')
+    .superRefine((url, ctx) => {
+      try {
+        pgConfigFromUrl(url);
+      } catch (error) {
+        const message = error instanceof DatabaseUrlError ? error.message : INVALID_DATABASE_URL;
+        ctx.addIssue({ code: 'custom', message });
+      }
+    }),
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
   JWT_EXPIRES_IN: z.string().default('7d'),
   // Comma-separated browser origins. Defaults to http://localhost:3000 outside production; in
