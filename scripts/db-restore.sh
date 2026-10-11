@@ -7,7 +7,8 @@
 #
 # Where the server is:
 #   DATABASE_URL set    pg_restore on this host connects to that server, to <database> instead of
-#                       the URL's own database (a Prisma URL works, as in db-backup.sh).
+#                       the URL's own database (a Prisma URL works, as in db-backup.sh). It must
+#                       be at least the version of the pg_dump that wrote the backup.
 #   DATABASE_URL unset  pg_restore runs inside the compose `db` service as DB_USER (default
 #                       church), reading the dump from stdin.
 #

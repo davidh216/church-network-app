@@ -5,13 +5,16 @@
 #   scripts/db-backup.sh <target-dir>
 #
 # Where the database is:
-#   DATABASE_URL set    pg_dump on this host connects to it. A Prisma URL works: query parameters
-#                       libpq does not know (schema, connection_limit, pgbouncer, sslaccept, ...)
-#                       are dropped, and the password goes through PGPASSWORD rather than the
-#                       command line (an exported PGPASSWORD or ~/.pgpass applies when the URL
-#                       has none). pg_dump must be at least the server's version.
-#   DATABASE_URL unset  pg_dump runs inside the compose `db` service (docker compose exec), as
-#                       DB_USER (default church) on DB_NAME (default church_dev).
+#   DATABASE_URL set    pg_dump and pg_restore (which checks the dump) run on this host and
+#                       connect to it. A Prisma URL works: query parameters libpq does not know
+#                       (schema, connection_limit, pgbouncer, sslaccept, ...) are dropped, and the
+#                       password goes through PGPASSWORD rather than the command line (an exported
+#                       PGPASSWORD or ~/.pgpass applies when the URL has none). The host's client
+#                       tools must be at least the server's major version: pg_dump refuses a newer
+#                       server.
+#   DATABASE_URL unset  pg_dump and the check run inside the compose `db` service (docker compose
+#                       exec), as DB_USER (default church) on DB_NAME (default church_dev); no
+#                       client tools are needed on the host.
 # Other settings:
 #   RETENTION_DAYS      backups older than this many days are deleted (default 14; 0 keeps all)
 #   BACKUP_PREFIX       file name prefix (default church): <prefix>-<UTC timestamp>.dump
@@ -53,17 +56,19 @@ file="$target_dir/$prefix-$stamp.dump"
 partial="$file.partial"
 trap 'rm -f -- "$partial"' EXIT
 
+# After the dump, pg_restore reads its table of contents: an unreadable dump fails here, not on
+# restore day. It runs where pg_dump ran, so it can read what that pg_dump version wrote.
 if [[ -n ${DATABASE_URL:-} ]]; then
   pg_url_split "$DATABASE_URL"
   pg_with_password pg_dump --format=custom --file="$partial" --dbname="$PG_URL"
+  pg_restore --list "$partial" >/dev/null
 else
-  docker compose -f "$repo_root/docker-compose.yml" exec -T db \
+  compose=(docker compose -f "$repo_root/docker-compose.yml")
+  "${compose[@]}" exec -T db \
     pg_dump --format=custom --username="${DB_USER:-church}" --dbname="${DB_NAME:-church_dev}" \
     >"$partial"
+  "${compose[@]}" exec -T db pg_restore --list <"$partial" >/dev/null
 fi
-
-# pg_restore reads the table of contents: an unreadable dump fails here, not on restore day.
-pg_restore --list "$partial" >/dev/null
 mv -- "$partial" "$file"
 trap - EXIT
 echo "backup written: $file ($(wc -c <"$file" | tr -d ' ') bytes)"
