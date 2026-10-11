@@ -3,6 +3,10 @@ import nextVitals from 'eslint-config-next/core-web-vitals';
 import nextTs from 'eslint-config-next/typescript';
 import jsxA11y from 'eslint-plugin-jsx-a11y';
 
+// The file pattern eslint-config-next registers its plugins (react, react-hooks, jsx-a11y,
+// @next/next) for.
+const NEXT_FILES = '**/*.{js,jsx,mjs,ts,tsx,mts,cts}';
+
 export default defineConfig([
   globalIgnores([
     '.next/**',
@@ -16,9 +20,12 @@ export default defineConfig([
   ...nextVitals,
   ...nextTs,
   // Phase 2 (F4): the full jsx-a11y recommended set, as errors. Only its rules: the Next config
-  // already registers the jsx-a11y plugin, and registering it a second time fails.
-  { rules: jsxA11y.flatConfigs.recommended.rules },
+  // already registers the jsx-a11y plugin, and registering it a second time fails. The Next
+  // config registers its plugins for these extensions only, so both blocks below are scoped to
+  // the same list; without it, any other file (a .cjs, say) aborts the lint run.
+  { files: [NEXT_FILES], rules: jsxA11y.flatConfigs.recommended.rules },
   {
+    files: [NEXT_FILES],
     rules: {
       '@typescript-eslint/no-explicit-any': 'error',
       'react-hooks/rules-of-hooks': 'error',
