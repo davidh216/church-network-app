@@ -30,6 +30,7 @@ Same as `PHASE3_SPECS.md` section 0, plus:
 | `prisma`, `@prisma/client` | 6.19.3 | **~7.10.0** | Stable line with long-term support. Prisma 8 is a release-candidate rewrite. |
 | `@prisma/adapter-pg` | none | **~7.10.0** (production dependency) | Required driver adapter; brings `pg` |
 | `lint-staged` | 16.4.0 | ^17.6.0 | No configuration change |
+| `mysql2` (root override, transitive via the Prisma CLI) | 3.15.3 | ^3.23.1 | Clears two high advisories; drop when Prisma updates it |
 | Minor and patch updates | | express ^5.3.0, express-rate-limit ^8.7.1, @playwright/test ^1.64.0, concurrently ^10.0.6 | concurrently 10.0.6 fixes a critical advisory in shell-quote (dev only) |
 
 ### 1.2 Unchanged guarantees
@@ -117,7 +118,9 @@ The gameplan's exit criterion "a documented rollback for each" is met by this ta
   - `test/migrations.test.ts` passes the URL through `env` instead of `--url`, and gives both fixture clients `PrismaPg` with `{ schema }`.
   - Delete `test/setup-env.mts`, the Prisma `.env` block in `test/env-file.test.ts`, and the `setupFiles` entry; Prisma no longer loads `.env`.
   - Update the stale comments in `lib/prisma.ts`.
-- **CI drift check.** The new command is `npx -w backend prisma migrate diff --from-migrations prisma/migrations --to-schema prisma/schema.prisma --exit-code`, with `SHADOW_DATABASE_URL` pointing at church_test, never at the database in `DATABASE_URL`. `--to-schema-datamodel` and `--shadow-database-url` were removed. The planner updates the documented command in the specs and README.
+- **CI drift check.** The new command, from the repo root, is `SHADOW_DATABASE_URL=postgresql://church:church@localhost:5432/church_test npx -w backend prisma migrate diff --from-migrations prisma/migrations --to-schema prisma/schema.prisma --exit-code`. `--to-schema-datamodel` and `--shadow-database-url` were removed. The shadow database is wiped before use, so `SHADOW_DATABASE_URL` must never equal `DATABASE_URL`. The planner updates the documented command in the specs and README.
+- **Search path (implementation note).** The adapter's `schema` option only qualifies the queries Prisma generates. Prisma 6 also set `search_path` from `?schema=`, so `pgAdapter` adds `options: -c search_path="<schema>"`. That keeps unqualified raw SQL (media search) on the URL's schema, and a migration test pins it. An `options=` parameter in the URL itself would take precedence.
+- **mysql2 override (implementation note).** The Prisma 7.10 CLI pins `mysql2` 3.15.3, which has two high advisories. A root `overrides.mysql2: ^3.23.1` keeps `npm audit --omit=dev` at 0. Drop it once Prisma ships a fixed version.
 - **Docker.**
   - Keep `apk add openssl`, which the schema engine needs for `migrate deploy`.
   - Run the local binary in the entrypoint (`npx --no prisma migrate deploy`), so a missing CLI fails instead of downloading the Prisma 8 release candidate.

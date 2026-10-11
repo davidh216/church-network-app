@@ -154,7 +154,7 @@ SELECT * FROM phase3_archive.saved_searches;        -- deleted saved searches
 DROP SCHEMA phase3_archive CASCADE;
 ```
 
-If the relations migration stops because notes point at a deleted author and no admin account exists, nothing from that migration is applied. Give an existing account the admin role (the seed cannot run while a migration has failed), mark the migration as rolled back, and deploy again. With compose, run the Prisma commands through `docker compose run --rm --entrypoint npx api prisma ...`.
+If the relations migration stops because notes point at a deleted author and no admin account exists, nothing from that migration is applied. Give an existing account the admin role (the seed cannot run while a migration has failed), mark the migration as rolled back, and deploy again. With compose, run the Prisma commands through `docker compose run --rm --entrypoint npx api --no prisma ...` (`--no` makes npx fail rather than download a different Prisma).
 
 ```sql
 INSERT INTO user_roles (id, "userId", "roleId")
