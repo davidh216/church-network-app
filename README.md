@@ -32,7 +32,7 @@ A comprehensive church management platform built with modern web technologies, d
 ## 🛠️ Technology Stack
 
 ### **Frontend**
-- **Next.js 15**: React framework with App Router
+- **Next.js 16**: React framework with App Router
 - **React 19**: Latest React with modern hooks and features
 - **TypeScript**: Full type safety throughout the application
 - **Tailwind CSS 4**: Utility-first CSS framework for rapid styling
@@ -222,7 +222,7 @@ church-network-app/
 │   ├── Dockerfile
 │   ├── src/
 │   │   ├── app/                # layout, providers, dashboard, members, media, analytics, services, login, register
-│   │   ├── middleware.ts       # redirects to /login without a session cookie
+│   │   ├── proxy.ts            # redirects to /login without a session cookie
 │   │   ├── components/         # auth, members, media, analytics, services, dashboard, layout, ui (+ tests)
 │   │   ├── lib/api/            # apiFetch client and typed endpoint modules
 │   │   ├── lib/auth/           # AuthProvider, useAuth, useIsStaff
