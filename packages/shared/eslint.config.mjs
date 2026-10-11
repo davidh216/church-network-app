@@ -1,13 +1,14 @@
 // @ts-check
+import { defineConfig } from 'eslint/config';
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import globals from 'globals';
 import prettier from 'eslint-config-prettier';
 
-export default tseslint.config(
+export default defineConfig([
   { ignores: ['dist/', 'node_modules/', 'eslint.config.mjs'] },
   js.configs.recommended,
-  ...tseslint.configs.recommendedTypeChecked,
+  tseslint.configs.recommendedTypeChecked,
   {
     languageOptions: {
       globals: globals.node,
@@ -25,4 +26,4 @@ export default tseslint.config(
     },
   },
   prettier,
-);
+]);
