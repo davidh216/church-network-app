@@ -140,3 +140,34 @@ jobs:
           name: playwright-report
           path: frontend/playwright-report/
           retention-days: 7
+      # Restore drill (decision P4-D7): back up church_dev (migrated, seeded and used by the e2e
+      # run) with scripts/db-backup.sh, restore it into a fresh database with
+      # scripts/db-restore.sh, then check the migration history and every table's row count.
+      - name: Backup and restore drill
+        shell: bash
+        run: |
+          pg_dump --version
+          backup_dir="$RUNNER_TEMP/backups"
+          scripts/db-backup.sh "$backup_dir"
+          dump="$(find "$backup_dir" -name 'church-*.dump' | sort | tail -n 1)"
+          server=postgresql://church:church@localhost:5432
+          psql "$server/church_dev" -v ON_ERROR_STOP=1 -c 'CREATE DATABASE church_restore'
+          scripts/db-restore.sh "$dump" church_restore
+          DATABASE_URL="$server/church_restore?schema=public" npx -w backend prisma migrate status \
+            | tee "$RUNNER_TEMP/migrate-status"
+          grep -q 'Database schema is up to date' "$RUNNER_TEMP/migrate-status"
+          # Exact row counts of every table, the migration history included.
+          row_counts() {
+            psql "$1" -At -v ON_ERROR_STOP=1 \
+              -c "SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY 1" \
+              | while read -r table; do
+                  count="$(psql "$1" -At -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM public.\"$table\"")"
+                  echo "$table $count"
+                done
+          }
+          row_counts "$server/church_dev" >"$RUNNER_TEMP/rows-source"
+          row_counts "$server/church_restore" >"$RUNNER_TEMP/rows-restored"
+          cat "$RUNNER_TEMP/rows-source"
+          grep -Eq '^users [1-9]' "$RUNNER_TEMP/rows-source"
+          diff "$RUNNER_TEMP/rows-source" "$RUNNER_TEMP/rows-restored"
+          echo "restore drill passed"
