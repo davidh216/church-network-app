@@ -3,8 +3,9 @@ import type { AddressInfo } from 'node:net';
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
-// /health must answer 503 promptly when the database cannot be reached, not hang (PHASE4_SPECS.md
-// U5: the pg adapter's connectionTimeoutMillis). Each test loads the app afresh with its own
+// /health must answer 503 when the database cannot be reached, not hang (PHASE4_SPECS.md U5: the
+// pg adapter's connectionTimeoutMillis, by default the larger of Prisma 6's connect_timeout and
+// pool_timeout defaults, 10 s; see pgConfigFromUrl). Each test loads the app afresh with its own
 // Prisma client pointing at an unreachable database; the shared test client is put back after.
 const globalForPrisma = globalThis as { prisma?: unknown };
 const sharedClient = globalForPrisma.prisma;
@@ -66,14 +67,24 @@ describe('health while the database is down', () => {
     expect(elapsed).toBeLessThan(2_000);
   });
 
-  it('answers 503 within the 5 s connection timeout when the server does not respond', async () => {
+  it('answers 503 within the 10 s connection timeout when the server does not respond', async () => {
     const { port } = silent.address() as AddressInfo;
     const { res, elapsed } = await healthAgainst(
       `postgresql://church:church@127.0.0.1:${port}/church_test?schema=public`,
     );
     expect(res.status).toBe(503);
     expect(res.body.status).toBe('DEGRADED');
-    expect(elapsed).toBeGreaterThanOrEqual(4_500);
-    expect(elapsed).toBeLessThan(8_000);
+    expect(elapsed).toBeGreaterThanOrEqual(9_500);
+    expect(elapsed).toBeLessThan(13_000);
+  }, 20_000);
+
+  it('answers 503 within the connect_timeout and pool_timeout given in the URL', async () => {
+    const { port } = silent.address() as AddressInfo;
+    const { res, elapsed } = await healthAgainst(
+      `postgresql://church:church@127.0.0.1:${port}/church_test?schema=public&connect_timeout=2&pool_timeout=1`,
+    );
+    expect(res.status).toBe(503);
+    expect(elapsed).toBeGreaterThanOrEqual(1_500);
+    expect(elapsed).toBeLessThan(5_000);
   }, 15_000);
 });
