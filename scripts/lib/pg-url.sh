@@ -4,10 +4,14 @@
 #
 # pg_url_split <url> [database]
 # Turns a Prisma-style PostgreSQL URL into one the PostgreSQL client tools accept:
-#   PG_URL           the URL without its password and without the `schema` query parameter
-#                    (libpq rejects it), and with its database replaced by <database> when given
+#   PG_URL           the URL without its password, with its database replaced by <database> when
+#                    given, and with only the query parameters libpq knows (PG_URL_KEYS); libpq
+#                    rejects the rest, such as Prisma's schema, connection_limit, pool_timeout,
+#                    pgbouncer or sslaccept
 #   PG_URL_PASSWORD  the password, percent-decoded (empty when the URL has none), for PGPASSWORD,
 #                    so it never appears in a process listing
+PG_URL_KEYS='sslmode sslrootcert sslcert sslkey sslcrl host hostaddr port application_name options target_session_attrs connect_timeout channel_binding gssencmode'
+
 pg_url_split() {
   local url=$1 database=${2:-} query='' param kept='' rest userinfo='' hostpart path
   local -a params
@@ -39,12 +43,22 @@ pg_url_split() {
   if [[ -n $query ]]; then
     IFS='&' read -r -a params <<<"$query"
     for param in "${params[@]}"; do
-      [[ -z $param || $param == schema=* ]] && continue
+      pg_url_key_allowed "${param%%=*}" || continue
       kept+="${kept:+&}$param"
     done
   fi
 
   PG_URL="postgresql://${userinfo:+$userinfo@}$hostpart/$path${kept:+?$kept}"
+}
+
+# Whether libpq accepts the query parameter <key>: PG_URL_KEYS and keepalives*.
+pg_url_key_allowed() {
+  local key=$1 allowed
+  [[ $key == keepalives || $key == keepalives_* ]] && return 0
+  for allowed in $PG_URL_KEYS; do
+    [[ $key == "$allowed" ]] && return 0
+  done
+  return 1
 }
 
 # Percent-decodes a URL component (%40 -> @).

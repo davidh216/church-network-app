@@ -5,9 +5,10 @@
 #   scripts/db-backup.sh <target-dir>
 #
 # Where the database is:
-#   DATABASE_URL set    pg_dump on this host connects to it (a Prisma URL works: its `schema`
-#                       parameter is dropped, and the password goes through PGPASSWORD rather
-#                       than the command line). pg_dump must be at least the server's version.
+#   DATABASE_URL set    pg_dump on this host connects to it. A Prisma URL works: query parameters
+#                       libpq does not know (schema, connection_limit, pgbouncer, sslaccept, ...)
+#                       are dropped, and the password goes through PGPASSWORD rather than the
+#                       command line. pg_dump must be at least the server's version.
 #   DATABASE_URL unset  pg_dump runs inside the compose `db` service (docker compose exec), as
 #                       DB_USER (default church) on DB_NAME (default church_dev).
 # Other settings:
