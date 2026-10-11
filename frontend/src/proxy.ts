@@ -6,7 +6,7 @@ import { SESSION_COOKIE, isPublicPath } from './lib/auth/paths';
  * from /login. The cookie's presence is only a UX hint: the API is the authority
  * and the AuthProvider handles a cookie the API rejects.
  */
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   if (isBypassed(pathname)) return NextResponse.next();
 

@@ -7,7 +7,7 @@ import PageSpinner from './PageSpinner';
 import ServerUnavailable from './ServerUnavailable';
 
 /**
- * The signed-in shell around every (app) route: header, navigation and sign-out. The middleware
+ * The signed-in shell around every (app) route: header, navigation and sign-out. The proxy
  * sends visitors without a session cookie to /login; if the API rejects the cookie, the
  * AuthProvider routes there instead. Pages render only once the user is known.
  */

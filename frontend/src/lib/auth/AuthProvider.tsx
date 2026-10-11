@@ -94,7 +94,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { pathname, search } = window.location;
       if (handling401.current || isPublicPath(pathname)) return;
       handling401.current = true;
-      // A stale or invalid cookie would make the middleware bounce /login back to /,
+      // A stale or invalid cookie would make the proxy (src/proxy.ts) bounce /login back to /,
       // so ask the API to clear it before going to the sign-in page.
       void authApi
         .logout()
