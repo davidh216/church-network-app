@@ -171,3 +171,69 @@ jobs:
           grep -Eq '^users [1-9]' "$RUNNER_TEMP/rows-source"
           diff "$RUNNER_TEMP/rows-source" "$RUNNER_TEMP/rows-restored"
           echo "restore drill passed"
+
+  images:
+    name: Images and compose smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      # The runner's default builder (docker driver) keeps the layers, so the compose build
+      # below reuses them. API_URL matches the build argument in docker-compose.yml.
+      - name: Build the API image
+        run: docker buildx build --file backend/Dockerfile --tag church-network-api:ci .
+      - name: Build the web image
+        run: >-
+          docker buildx build --file frontend/Dockerfile
+          --build-arg API_URL=http://api:5000 --tag church-network-web:ci .
+      # The api service reads backend/.env (docker-compose.yml env_file): a throwaway secret and
+      # seed admin, as the README tells operators to set up.
+      - name: Throwaway JWT secret and seed admin
+        run: |
+          jwt_secret="$(openssl rand -hex 32)"
+          admin_password="$(openssl rand -hex 16)"
+          echo "::add-mask::$jwt_secret"
+          echo "::add-mask::$admin_password"
+          umask 077
+          {
+            echo "JWT_SECRET=$jwt_secret"
+            echo "SEED_ADMIN_EMAIL=ci-admin@example.com"
+            echo "SEED_ADMIN_PASSWORD=$admin_password"
+          } >backend/.env
+          echo "SEED_ADMIN_PASSWORD=$admin_password" >>"$GITHUB_ENV"
+      # --wait returns once db, api and web report healthy (each has a healthcheck), and fails
+      # if one does not within the timeout.
+      - name: Start the compose stack
+        run: docker compose up -d --build --wait --wait-timeout 300
+      - name: API health, login page and sign-in through the web app
+        shell: bash
+        run: |
+          curl --fail --silent --show-error --max-time 10 http://127.0.0.1:5000/health \
+            | tee "$RUNNER_TEMP/health.json"
+          echo
+          grep -q '"status":"OK"' "$RUNNER_TEMP/health.json"
+          curl --fail --silent --show-error --max-time 10 --output /dev/null \
+            http://127.0.0.1:3000/login
+          # The seeded admin signs in through the Next.js /api rewrite to the api service.
+          printf '{"email":"ci-admin@example.com","password":"%s"}' "$SEED_ADMIN_PASSWORD" \
+            | curl --fail --silent --show-error --max-time 10 --output /dev/null \
+              --header 'Content-Type: application/json' --data-binary @- \
+              http://127.0.0.1:3000/api/auth/login
+      - name: Refresh CLI in the api image
+        run: docker compose run --rm -T --entrypoint node api dist/jobs/refresh-engagement.js
+      - name: /health answers 503 within 10 seconds of the database stopping
+        shell: bash
+        run: |
+          docker compose stop db
+          code="$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 10 \
+            http://127.0.0.1:5000/health || true)"
+          echo "GET /health after stopping db: $code"
+          test "$code" = 503
+      - name: Compose state and logs
+        if: failure()
+        run: |
+          docker compose ps --all
+          docker compose logs --no-color --tail 200
+      - name: Remove the stack
+        if: always()
+        run: docker compose down --volumes
