@@ -81,6 +81,34 @@ export async function deleteSavedSearches(admin: APIRequestContext, prefix: stri
   }
 }
 
+/** Deletes every group (archived ones too) named `name`, leftovers of interrupted runs included. */
+export async function deleteGroups(admin: APIRequestContext, name: string) {
+  const list = await admin.get('/api/groups', { params: { status: 'all' } });
+  expect(list.ok()).toBe(true);
+  const { groups } = (await list.json()) as { groups: { id: string; name: string }[] };
+  for (const group of groups.filter((g) => g.name === name)) {
+    expect((await admin.delete(`/api/groups/${group.id}`)).ok()).toBe(true);
+  }
+}
+
+/** Creates a group named `name` with `memberId` on its roster; returns its id. */
+export async function createGroupWithMember(
+  admin: APIRequestContext,
+  name: string,
+  memberId: string,
+): Promise<string> {
+  const created = await admin.post('/api/groups', {
+    data: { name, type: 'small_group', meetingDay: 'Wednesdays', location: 'Hall' },
+  });
+  expect(created.status()).toBe(201);
+  const { group } = (await created.json()) as { group: { id: string } };
+  const added = await admin.post(`/api/groups/${group.id}/members`, {
+    data: { userId: memberId, role: 'co_leader' },
+  });
+  expect(added.status()).toBe(201);
+  return group.id;
+}
+
 /** Adds one video when the library is empty, so the media page has cards to check. */
 export async function ensureOneVideo(admin: APIRequestContext) {
   const list = await admin.get('/api/media', { params: { pageSize: 1 } });

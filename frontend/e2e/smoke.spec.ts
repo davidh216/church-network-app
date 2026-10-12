@@ -2,20 +2,26 @@ import { expect, test, type Page } from '@playwright/test';
 import { seededAdmin } from './admin';
 import {
   adminRequest,
+  createGroupWithMember,
+  deleteGroups,
   deleteSavedSearches,
   E2E_MEMBER,
   ensureE2eMember,
   ensureOneVideo,
 } from './api';
 import { expectNoSeriousA11yViolations } from './axe';
+import { deleteGroupAuditEvents } from './db';
 
 // The saved search the advanced-query test creates; leftovers from interrupted runs are removed
 // before the suite and the search itself after it, so church_dev does not grow.
 const SAVED_SEARCH_NAME = 'E2E new members';
+// The group the group-page test creates and deletes, with its audit events.
+const GROUP_NAME = 'E2E smoke group';
 
 test.beforeAll(async () => {
   const admin = await adminRequest();
   await deleteSavedSearches(admin, SAVED_SEARCH_NAME);
+  await deleteGroups(admin, GROUP_NAME);
   // The /media checks (and its axe scan) need at least one card with a play button.
   await ensureOneVideo(admin);
   await admin.dispose();
@@ -24,7 +30,9 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   const admin = await adminRequest();
   await deleteSavedSearches(admin, SAVED_SEARCH_NAME);
+  await deleteGroups(admin, GROUP_NAME);
   await admin.dispose();
+  deleteGroupAuditEvents(GROUP_NAME);
 });
 
 async function signIn(page: Page, email: string, password: string) {
@@ -116,6 +124,22 @@ test('admin navigates the dashboard, members, a profile, media, analytics and th
   await expect(page.getByRole('status', { name: 'Loading videos' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: /^Play / }).first()).toBeAttached();
   await expectNoSeriousA11yViolations(page, '/media');
+
+  // Groups: the directory, and the New Group dialog passes axe while open; nothing is saved.
+  await nav.getByRole('link', { name: 'Groups' }).click();
+  await expect(page).toHaveURL(/\/groups$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'Groups' })).toBeVisible();
+  await expect(page.getByRole('status', { name: 'Loading groups' })).toHaveCount(0);
+  await expect(page.getByRole('status', { name: 'Loading your groups' })).toHaveCount(0);
+  await expectNoSeriousA11yViolations(page, '/groups');
+  const newGroup = page.getByRole('button', { name: 'New Group' });
+  await newGroup.click();
+  const groupDialog = page.getByRole('dialog', { name: 'New Group' });
+  await expect(groupDialog.getByLabel('Name *')).toBeFocused();
+  await expectNoSeriousA11yViolations(page, '/groups with the New Group dialog');
+  await page.keyboard.press('Escape');
+  await expect(groupDialog).toHaveCount(0);
+  await expect(newGroup).toBeFocused();
 
   // Services (staff): the month list, and the New Service dialog passes axe while open.
   await nav.getByRole('link', { name: 'Services' }).click();
@@ -250,4 +274,45 @@ test('admin builds an advanced query, saves it, reloads and applies it', async (
   await expect(page.getByRole('status', { name: 'Loading members' })).toHaveCount(0);
   await expect(page.locator('table tbody tr')).toHaveCount(Math.min(total, 25));
   // afterAll deletes the saved search.
+});
+
+test('admin opens a group page with its roster, edits nothing and deletes the group', async ({
+  page,
+}) => {
+  const admin = seededAdmin();
+  await page.goto('/login');
+  await signIn(page, admin.email, admin.password);
+  // The group is set up through the page's own session (the login limit counts every sign-in),
+  // with the admin as its co-leader.
+  const me = (await (await page.request.get('/api/auth/me')).json()) as {
+    user: { id: string; name: string };
+  };
+  const groupId = await createGroupWithMember(page.request, GROUP_NAME, me.user.id);
+
+  await page.goto(`/groups/${groupId}`);
+  await expect(page.getByRole('heading', { level: 1, name: GROUP_NAME })).toBeVisible();
+  const roster = page.getByRole('region', { name: /^Roster/ });
+  await expect(roster.getByRole('link', { name: me.user.name })).toBeVisible();
+  await expect(roster.getByLabel(`Role of ${me.user.name}`)).toHaveValue('co_leader');
+  // The add-member search: a debounced name query against the member search.
+  await page.getByLabel('Find a member').fill(admin.email);
+  const matches = page.getByRole('list', { name: 'Matching members' });
+  await expect(matches.getByText('In the group')).toBeVisible();
+  await expectNoSeriousA11yViolations(page, '/groups/[id]');
+
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  const editDialog = page.getByRole('dialog', { name: 'Edit Group' });
+  await expect(editDialog.getByLabel('Name *')).toBeFocused();
+  await expectNoSeriousA11yViolations(page, '/groups/[id] with the Edit Group dialog');
+  await page.keyboard.press('Escape');
+  await expect(editDialog).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Delete', exact: true }).click();
+  const deleteDialog = page.getByRole('dialog', { name: 'Delete Group?' });
+  await expect(deleteDialog).toContainText('and its roster (1 person)');
+  await expectNoSeriousA11yViolations(page, '/groups/[id] with the Delete Group dialog');
+  await deleteDialog.getByRole('button', { name: 'Delete Group' }).click();
+  await expect(page).toHaveURL(/\/groups$/);
+  await expect(page.getByRole('link', { name: GROUP_NAME })).toHaveCount(0);
+  // afterAll removes the group's audit events (and the group, if this test failed before).
 });
