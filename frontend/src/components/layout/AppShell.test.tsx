@@ -87,6 +87,7 @@ describe('app shell', () => {
       'Media',
       'Services',
       'Analytics',
+      'Audit Log',
       'My Profile',
     ]);
     expect(links(container)).toEqual(
@@ -295,7 +296,7 @@ describe('navigation helpers', () => {
     expect(isCurrent('/', '/')).toBe(true);
   });
 
-  it('lists Services and Analytics for staff only', () => {
+  it('lists Services and Analytics for staff only, and the audit log for admins', () => {
     expect(navItems(false, 'u1').map((i) => i.href)).toEqual([
       '/',
       '/members',
@@ -308,6 +309,15 @@ describe('navigation helpers', () => {
       '/media',
       '/services',
       '/analytics',
+      '/members/u1',
+    ]);
+    expect(navItems(true, 'u1', true).map((i) => i.href)).toEqual([
+      '/',
+      '/members',
+      '/media',
+      '/services',
+      '/analytics',
+      '/admin/audit',
       '/members/u1',
     ]);
   });

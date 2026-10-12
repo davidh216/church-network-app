@@ -68,6 +68,8 @@ export function useUpdateUser() {
         queryClient.invalidateQueries({ queryKey: queryKeys.users.all }),
         queryClient.invalidateQueries({ queryKey: queryKeys.memberDetails.detail(id) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.analytics.all }),
+        // A role or status change is audited.
+        queryClient.invalidateQueries({ queryKey: queryKeys.audit.all }),
       ]),
   });
 }

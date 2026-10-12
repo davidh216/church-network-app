@@ -323,6 +323,7 @@ const mutationCases: MutationCase[] = [
       queryKeys.users.all,
       queryKeys.memberDetails.detail('u1'),
       queryKeys.analytics.all,
+      queryKeys.audit.all,
     ],
   },
   {

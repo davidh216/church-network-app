@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useAuth, useIsStaff } from '@/lib/auth/AuthProvider';
+import { useAuth, useHasRole, useIsStaff } from '@/lib/auth/AuthProvider';
 import AppNav from './AppNav';
 import PageSpinner from './PageSpinner';
 import ServerUnavailable from './ServerUnavailable';
@@ -14,6 +14,7 @@ import ServerUnavailable from './ServerUnavailable';
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const { user, status, logout, refresh } = useAuth();
   const staff = useIsStaff();
+  const admin = useHasRole('admin');
 
   if (status === 'error') return <ServerUnavailable onRetry={refresh} />;
 
@@ -84,7 +85,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         </div>
-        <AppNav staff={staff} userId={user.id} />
+        <AppNav staff={staff} admin={admin} userId={user.id} />
       </header>
       {/* tabIndex -1 lets the skip link move focus here, not only scroll. */}
       <main

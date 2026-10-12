@@ -14,7 +14,7 @@ export function isCurrent(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function navItems(staff: boolean, userId: string): NavItem[] {
+export function navItems(staff: boolean, userId: string, admin = false): NavItem[] {
   return [
     { href: '/', label: 'Dashboard' },
     { href: '/members', label: 'Members' },
@@ -25,13 +25,21 @@ export function navItems(staff: boolean, userId: string): NavItem[] {
           { href: '/analytics', label: 'Analytics' },
         ]
       : []),
+    ...(admin ? [{ href: '/admin/audit', label: 'Audit Log' }] : []),
     { href: `/members/${encodeURIComponent(userId)}`, label: 'My Profile' },
   ];
 }
 
-export default function AppNav({ staff, userId }: { staff: boolean; userId: string }) {
+interface AppNavProps {
+  staff: boolean;
+  /** Admins also get the audit log. */
+  admin?: boolean;
+  userId: string;
+}
+
+export default function AppNav({ staff, admin = false, userId }: AppNavProps) {
   const pathname = usePathname() ?? '/';
-  const items = navItems(staff, userId);
+  const items = navItems(staff, userId, admin);
   // The most specific match wins, so "/members/<me>" marks My Profile rather than Members.
   const current = items
     .filter((item) => isCurrent(pathname, item.href))

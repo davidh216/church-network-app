@@ -34,7 +34,7 @@ async function signIn(page: Page, email: string, password: string) {
   await expect(page.getByText(/^Welcome back, /)).toBeVisible();
 }
 
-test('admin navigates the dashboard, members, a profile, media and analytics, then logs out', async ({
+test('admin navigates the dashboard, members, a profile, media, analytics and the audit log, then logs out', async ({
   page,
 }) => {
   const admin = seededAdmin();
@@ -126,6 +126,13 @@ test('admin navigates the dashboard, members, a profile, media and analytics, th
   await expect(page.getByRole('heading', { name: 'Member Analytics Dashboard' })).toBeVisible();
   await expect(page.getByRole('status', { name: 'Loading analytics' })).toHaveCount(0);
   await expectNoSeriousA11yViolations(page, '/analytics');
+
+  // Audit log (admin).
+  await nav.getByRole('link', { name: 'Audit Log' }).click();
+  await expect(page).toHaveURL(/\/admin\/audit$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'Audit Log' })).toBeVisible();
+  await expect(page.getByRole('status', { name: 'Loading the audit log' })).toHaveCount(0);
+  await expectNoSeriousA11yViolations(page, '/admin/audit');
 
   // Unknown routes get the not-found page.
   await page.goto('/no-such-page');
