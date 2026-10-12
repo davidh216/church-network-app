@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import type { RegisterResult } from '@/types/domain';
 import * as analytics from './analytics';
+import * as auditApi from './audit';
 import * as auth from './auth';
 import * as media from './media';
 import * as memberDetails from './memberDetails';
@@ -393,6 +394,25 @@ describe('saved searches endpoints', () => {
     await expect(savedSearches.deleteSavedSearch('missing')).rejects.toMatchObject({
       status: 404,
       message: 'Search not found',
+    });
+  });
+});
+
+describe('audit endpoint', () => {
+  it('listAudit sends only the set filters and returns the page', async () => {
+    respond({ success: true, events: [], total: 0, page: 2, pageSize: 50 });
+    await expect(
+      auditApi.listAudit({
+        action: 'tag_created',
+        actorId: undefined,
+        from: '2026-01-01',
+        page: 2,
+      }),
+    ).resolves.toEqual({ events: [], total: 0, page: 2, pageSize: 50 });
+    expect(call()).toEqual({
+      url: '/api/audit?action=tag_created&from=2026-01-01&page=2',
+      method: 'GET',
+      body: undefined,
     });
   });
 });
