@@ -22,6 +22,7 @@ import servicesRoutes from './modules/services/router';
 import auditRoutes from './modules/audit/router';
 import tagsRoutes from './modules/tags/router';
 import groupsRoutes from './modules/groups/router';
+import familiesRoutes, { ownFamilyRoutes } from './modules/families/router';
 
 // package.json sits one level above both src/ (tsx) and dist/ (node).
 const { version } = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8')) as {
@@ -76,6 +77,9 @@ export function createApp() {
   app.use('/api/tags', authenticate, requireRole(...STAFF), tagsRoutes);
   // The groups directory is open to every signed-in user; writes are staff-only, deletes admin-only.
   app.use('/api/groups', authenticate, groupsRoutes);
+  // Families are staff-only except GET /api/families/mine (the caller's own family, names only);
+  // deleting a family is admin-only.
+  app.use('/api/families', authenticate, ownFamilyRoutes, requireRole(...STAFF), familiesRoutes);
   // The audit log is admin-only (PHASE5_SPECS.md 1.2).
   app.use('/api/audit', authenticate, requireRole('admin'), auditRoutes);
 

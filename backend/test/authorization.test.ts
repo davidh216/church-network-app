@@ -569,4 +569,100 @@ describe('authorization', () => {
       expect(await prisma.group.count({ where: { id: activeId } })).toBe(1);
     });
   });
+
+  // PHASE5_SPECS.md 1.2: members read their own family (names and relationships) and nothing else.
+  describe('families (G4)', () => {
+    let familyId: string;
+    let otherFamilyId: string;
+    const asMember = () => bearer(memberToken);
+
+    beforeAll(async () => {
+      await prisma.user.update({
+        where: { id: otherMemberId },
+        data: { phone: '555-0199', address: '9 Hidden Road', city: 'Secretville' },
+      });
+      familyId = (
+        await prisma.family.create({
+          data: {
+            familyName: 'Authz Family',
+            address: '1 Private Lane',
+            zipCode: '99999',
+            headOfFamilyId: otherMemberId,
+            members: { connect: [{ id: memberId }, { id: otherMemberId }] },
+          },
+        })
+      ).id;
+      const [low, high] = [memberId, otherMemberId].sort();
+      await prisma.familyRelationship.create({
+        data: {
+          familyId,
+          primaryUserId: low!,
+          relatedUserId: high!,
+          relationshipType: 'sibling',
+        },
+      });
+      otherFamilyId = (
+        await prisma.family.create({
+          data: { familyName: 'Authz Elsewhere', members: { connect: [{ id: leaderId }] } },
+        })
+      ).id;
+    });
+
+    it("a member reads their own family's names and relationships, never contact details", async () => {
+      const res = await request(app).get('/api/families/mine').set(asMember());
+      expect(res.status).toBe(200);
+      expect(res.body.family).toEqual({
+        familyName: 'Authz Family',
+        relatives: [{ name: 'Other Person', relationship: 'sibling' }],
+      });
+      expect(res.text).not.toMatch(
+        /other@authorization|555-0199|Hidden Road|Secretville|Private Lane|99999|Authz Elsewhere/,
+      );
+      expect(res.text).not.toContain(otherMemberId);
+      expect(res.text).not.toContain(familyId);
+    });
+
+    it('a member cannot list, read or change families, whether they exist or not', async () => {
+      const missing = 'cmissingfamily000000000000';
+      const tries = [
+        request(app).get('/api/families'),
+        request(app).get(`/api/families/${familyId}`),
+        request(app).get(`/api/families/${otherFamilyId}`),
+        request(app).get(`/api/families/${missing}`),
+        request(app).post('/api/families').send({ familyName: 'Mine' }),
+        request(app).patch(`/api/families/${familyId}`).send({ headOfFamilyId: memberId }),
+        request(app).delete(`/api/families/${familyId}`),
+        request(app).put(`/api/families/${otherFamilyId}/members/${memberId}`).send({ move: true }),
+        request(app).delete(`/api/families/${familyId}/members/${otherMemberId}`),
+        request(app)
+          .put(`/api/families/${familyId}/relationships`)
+          .send({ userId: memberId, relatedUserId: otherMemberId, type: 'spouse' }),
+      ];
+      // The role gate answers before any lookup, so the status says nothing about existence.
+      for (const attempt of tries) {
+        const res = await attempt.set(asMember());
+        expect(res.status).toBe(403);
+        expect(res.body).toEqual({ error: 'Insufficient permissions' });
+      }
+      const family = await prisma.family.findUniqueOrThrow({
+        where: { id: familyId },
+        include: { members: true, relationships: true },
+      });
+      expect(family.headOfFamilyId).toBe(otherMemberId);
+      expect(family.members).toHaveLength(2);
+      expect(family.relationships.map((r) => r.relationshipType)).toEqual(['sibling']);
+      expect(await prisma.family.count({ where: { familyName: 'Mine' } })).toBe(0);
+    });
+
+    it('a leader reads and edits families but cannot delete one', async () => {
+      const res = await request(app).get(`/api/families/${familyId}`).set(bearer(leaderToken));
+      expect(res.status).toBe(200);
+      expect(res.body.family.members.map((m: { name: string }) => m.name)).toContain(
+        'Other Person',
+      );
+      const del = await request(app).delete(`/api/families/${familyId}`).set(bearer(leaderToken));
+      expect(del.status).toBe(403);
+      expect(await prisma.family.count({ where: { id: familyId } })).toBe(1);
+    });
+  });
 });
