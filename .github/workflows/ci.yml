@@ -225,6 +225,26 @@ jobs:
               http://127.0.0.1:3000/api/auth/login
       - name: Refresh CLI in the api image
         run: docker compose run --rm -T --entrypoint node api dist/jobs/refresh-engagement.js
+      # The backup scripts' compose mode (DATABASE_URL unset): pg_dump and pg_restore run inside
+      # the db service, so the host needs no PostgreSQL client tools.
+      - name: Backup and restore through docker compose
+        shell: bash
+        env:
+          DATABASE_URL: ''
+        run: |
+          scripts/db-backup.sh "$RUNNER_TEMP/backups"
+          dumps=("$RUNNER_TEMP"/backups/church-*.dump)
+          test "${#dumps[@]}" -eq 1
+          psql_db() {
+            docker compose exec -T db psql -U church -At -v ON_ERROR_STOP=1 "$@"
+          }
+          psql_db -d church_dev -c 'CREATE DATABASE church_restore'
+          scripts/db-restore.sh "${dumps[0]}" church_restore
+          source_users="$(psql_db -d church_dev -c 'SELECT count(*) FROM public.users')"
+          restored_users="$(psql_db -d church_restore -c 'SELECT count(*) FROM public.users')"
+          echo "users: church_dev $source_users, church_restore $restored_users"
+          test "$source_users" -ge 1
+          test "$source_users" = "$restored_users"
       - name: /health answers 503 within 10 seconds of the database stopping
         shell: bash
         run: |
