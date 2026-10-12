@@ -17,9 +17,9 @@ export function pgAdapter(connectionString: string) {
 // User read unless a query explicitly opts back in (login does).
 // Prisma 7 reads no .env file and takes no URL from the schema: the URL comes from the
 // configuration parsed in config/env.ts, which has already rejected a URL pgConfigFromUrl cannot
-// read. A query fails after the connection timeout (10 s by default) when no connection can be
-// made, so /health answers 503 while the database is down, and idle connections close after 5
-// minutes.
+// read. A query fails after the connection timeout (5 s by default (connect_timeout); longer only
+// with an explicit pool_timeout) when no connection can be made, so /health answers 503 while
+// the database is down, and idle connections close after 5 minutes.
 function createClient() {
   return new PrismaClient({
     adapter: pgAdapter(env.DATABASE_URL),
