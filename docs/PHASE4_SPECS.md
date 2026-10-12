@@ -30,6 +30,8 @@ Same as `PHASE3_SPECS.md` section 0, plus:
 | `prisma`, `@prisma/client` | 6.19.3 | **~7.10.0** | Stable line with long-term support. Prisma 8 is a release-candidate rewrite. |
 | `@prisma/adapter-pg` | none | **~7.10.0** (production dependency) | Required driver adapter; brings `pg` |
 | `lint-staged` | 16.4.0 | ^17.6.0 | No configuration change |
+| `pg-connection-string` (backend, production) | none | ^2.14.1 | Reads DATABASE_URL with libpq semantics (`pgConfigFromUrl`) |
+| `proxy-addr` (backend, production) | transitive | direct, the version express uses | Production TRUST_PROXY check |
 | `mysql2` (root override, transitive via the Prisma CLI) | 3.15.3 | ^3.23.1 | Clears two high advisories; drop when Prisma updates it |
 | Minor and patch updates | | express ^5.3.0, express-rate-limit ^8.7.1, @playwright/test ^1.64.0, concurrently ^10.0.6 | concurrently 10.0.6 fixes a critical advisory in shell-quote (dev only) |
 
@@ -43,12 +45,12 @@ Each major upgrade is reverted by reverting its item's commits on a branch, then
 
 | Item | How to roll it back | Database impact |
 |---|---|---|
-| U2 Node 24 | Revert the U2 commits; images go back to `node:22-alpine` | None |
-| U3 Next 16 | Revert the U3 commits. The `proxy.ts` rename and the lint config go back with them. | None |
+| U2 Node 24 | Revert the U2 commits and set both Dockerfiles' `FROM` lines to `node:22-alpine` by hand (they are digest-pinned since U7) | None |
+| U3 Next 16 | Revert U4 first (ESLint 10 needs eslint-config-next 16), then the U3 and U3-fix commits. The `proxy.ts` rename and the lint config go back with them. | None |
 | U4 ESLint 10 | Revert the U4 commits | None |
 | U5 Prisma 7 | Revert the U5 commits, then `npm ci` regenerates the 6.x client | None. `_prisma_migrations` has the same format in 6 and 7, so 6 reads history written by 7 and both can run against one database during a rolling deploy. |
 
-The gameplan's exit criterion "a documented rollback for each" is met by this table, which the planner copies into the README's upgrade section.
+Lockfile and root `package.json` conflicts during a revert are resolved by regenerating with `npm install`. The gameplan's exit criterion "a documented rollback for each" is met by this table, which the README summarises and points to.
 
 ## 2. Stream U (branch `modernize/phase-4`)
 
@@ -161,8 +163,8 @@ The gameplan's exit criterion "a documented rollback for each" is met by this ta
   - Restores also use `--no-owner --no-privileges --single-transaction`.
   - libpq rejects Prisma's `?schema=` parameter, so the scripts' helper strips it and passes the password through `PGPASSWORD`.
   - Run the seed and refresh CLI from `backend/`, so `backend/.env` is read.
-  - The TRUST_PROXY check also refuses `0.0.0.0/0` and `::/0`.
-  - The backup scripts pass only libpq parameters to the client tools.
+  - In production TRUST_PROXY lists are compiled with `proxy-addr` (what Express uses). Unreadable values and lists that trust nearly every address are refused.
+  - The backup scripts pass only libpq parameters to the client tools. They keep `user`, route `password=` through `PGPASSWORD`, and turn `sslaccept=strict` with `require` into `verify-full`.
   - Compose-mode backups are checked inside the database container.
   - Retention deletes only the script's own file names.
 
@@ -187,7 +189,7 @@ The gameplan's exit criterion "a documented rollback for each" is met by this ta
   - `npm audit signatures` is blocking; it passed on GitHub's runners.
   - The Node and PostgreSQL base images are pinned by digest, so Dependabot's docker and docker-compose entries can update them.
   - Dependabot ignores `@eslint/js` majors together with ESLint's.
-  - `allowScripts` also lists fsevents for macOS.
+  - `fsevents` stays out of `allowScripts`, so macOS keeps its prebuilt binary instead of compiling.
   - The root `allowScripts` lists esbuild, prisma, @prisma/engines and unrs-resolver; npm 11.21 treats it as advisory.
   - Dependabot also ignores ESLint majors, because the root override must move with the workspace ranges.
 
@@ -195,7 +197,7 @@ The gameplan's exit criterion "a documented rollback for each" is met by this ta
 1. **After U1 to U4:** the required checks, Playwright twice with axe, a standalone-server smoke test, and an adversarial review covering regressions, lint config correctness, and the behaviour of the React Compiler rule fixes. Then fixes and a push.
 2. **After U5 to U7:**
    - The required checks, the seed and refresh CLI on church_dev, and the upgrade path: a Phase 3 database (church_dev as it stands) under Prisma 7 with nothing to apply and no drift.
-   - A rollback drill: revert the U5 commits on a scratch branch, run `npm ci` and the backend tests against the same database, then discard the branch.
+   - A rollback drill: run the pre-U5 build (Prisma 6) against the database Prisma 7 has used (migrate status, seed, refresh CLI, `/health`). As run: the U4 head in a scratch worktree against the dev database; all passed.
    - An adversarial review covering data access under the driver adapter, deployment and security, and the docs.
    - Fixes, the gameplan update, a push, and the PR into `main`.
 

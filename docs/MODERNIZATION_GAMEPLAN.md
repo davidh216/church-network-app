@@ -275,9 +275,9 @@ Goal: current, supported majors with a documented rollback for each, images veri
 - [x] 4.1 Postgres: moved to Phase 1 item 1.0 by owner decision D1.
 - [x] 4.2 (M) Next 16.4 and eslint-config-next 16.4 (proxy rename, native flat config, React Compiler lint findings fixed), ESLint 10 in every workspace, TypeScript held at 5.9 (decision P4-D1; React already at 19.3). F090, F117, F118, F119. Spec U1, U3, U4.
 - [x] 4.3 (M) Prisma 7.10 with the pg driver adapter, `prisma.config.ts` datasource and the renamed `migrate diff` flags; Prisma 8 deferred until it is generally available. F047. Spec U5.
-- [x] 4.4 (M) Node 24 LTS; production configuration checks; Docker images built and smoke-tested in CI; backup and restore scripts with a CI restore drill; bounded container logs and `X-Request-Id`; pinned actions, Dependabot groups and audit gates. foundation. Spec U2, U6, U7.
+- [x] 4.4 (M) Node 24 LTS; production configuration checks; Docker images built and smoke-tested in CI; backup and restore scripts with a CI restore drill; bounded container logs and `X-Request-Id`; pinned actions, Dependabot groups and audit gates. Spec U2, U6, U7.
 
-Exit criteria: CI green on the new majors, including the image build and compose smoke test; a documented rollback for each major (`PHASE4_SPECS.md` 1.3, copied into the README); restore drill green; Phase 4 PR into `main`.
+Exit criteria: CI green on the new majors, including the image build and compose smoke test; a documented rollback for each major (`PHASE4_SPECS.md` 1.3, summarised in the README); restore drill green; Phase 4 PR into `main`.
 
 Verified 2026-10-12 on `modernize/phase-4` with Node 24.21 and npm 11.21:
 - **Root checks.** `npm run typecheck`, `npm run lint` (jsx-a11y, max-lines and the React Compiler rules as errors, ESLint 10), `npm run format:check` and `npm run build` (Next 16.4 with Turbopack) all pass.
