@@ -7,9 +7,11 @@
 # Where the database is:
 #   DATABASE_URL set    pg_dump and pg_restore (which checks the dump) run on this host and
 #                       connect to it. A Prisma URL works: query parameters libpq does not know
-#                       (schema, connection_limit, pgbouncer, sslaccept, ...) are dropped, and the
-#                       password goes through PGPASSWORD rather than the command line (an exported
-#                       PGPASSWORD or ~/.pgpass applies when the URL has none). The host's client
+#                       (schema, connection_limit, pgbouncer, ...) are dropped, sslaccept=strict
+#                       turns sslmode=require or prefer into verify-full as the API reads it, and
+#                       the password (before the @ or in a password= parameter) goes through
+#                       PGPASSWORD rather than the command line (an exported PGPASSWORD or
+#                       ~/.pgpass applies when the URL has none). The host's client
 #                       tools must be at least the server's major version: pg_dump refuses a newer
 #                       server.
 #   DATABASE_URL unset  pg_dump and the check run inside the compose `db` service (docker compose

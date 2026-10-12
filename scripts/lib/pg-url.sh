@@ -7,13 +7,18 @@
 #   PG_URL           the URL without its password, with its database replaced by <database> when
 #                    given, and with only the query parameters libpq knows (PG_URL_KEYS); libpq
 #                    rejects the rest, such as Prisma's schema, connection_limit, pool_timeout,
-#                    pgbouncer or sslaccept
+#                    pgbouncer or sslaccept. Prisma's sslaccept=strict turns sslmode=require or
+#                    prefer into verify-full, as the API reads it (sslaccept=accept_invalid_certs
+#                    leaves sslmode as it is).
 #   PG_URL_PASSWORD  the password, percent-decoded (empty when the URL has none), for PGPASSWORD
-#                    (see pg_with_password), so it never appears in a process listing
-PG_URL_KEYS='sslmode sslrootcert sslcert sslkey sslcrl host hostaddr port application_name options target_session_attrs connect_timeout channel_binding gssencmode'
+#                    (see pg_with_password), so it never appears in a process listing. A
+#                    password= query parameter is taken out of the URL and wins over the one
+#                    before the @, as in libpq and the API.
+PG_URL_KEYS='user passfile service sslmode sslrootcert sslcert sslkey sslcrl sslpassword sslsni sslnegotiation ssl_min_protocol_version ssl_max_protocol_version require_auth host hostaddr port application_name options target_session_attrs connect_timeout channel_binding gssencmode'
 
 pg_url_split() {
-  local url=$1 database=${2:-} query='' param kept='' rest userinfo='' hostpart path
+  local url=$1 database=${2:-} query='' param key value kept='' rest userinfo='' hostpart path
+  local sslaccept=''
   local -a params
   if [[ $url == *\?* ]]; then
     query=${url#*\?}
@@ -43,7 +48,21 @@ pg_url_split() {
   if [[ -n $query ]]; then
     IFS='&' read -r -a params <<<"$query"
     for param in "${params[@]}"; do
-      pg_url_key_allowed "${param%%=*}" || continue
+      [[ ${param%%=*} == sslaccept ]] && sslaccept=${param#*=}
+    done
+    for param in "${params[@]}"; do
+      key=${param%%=*}
+      value=''
+      [[ $param == *=* ]] && value=${param#*=}
+      if [[ $key == password ]]; then
+        # Decoded as a query value ('+' is a space), as the API's driver reads it.
+        [[ -n $value ]] && PG_URL_PASSWORD=$(pg_url_decode "${value//+/ }")
+        continue
+      fi
+      pg_url_key_allowed "$key" || continue
+      if [[ $key == sslmode && $sslaccept == strict && ($value == require || $value == prefer) ]]; then
+        param='sslmode=verify-full'
+      fi
       kept+="${kept:+&}$param"
     done
   fi
