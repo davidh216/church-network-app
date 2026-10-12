@@ -5,6 +5,7 @@ const PROFILE_TABS = [
   { id: 'timeline', label: 'Timeline', icon: '📅' },
   { id: 'attendance', label: 'Attendance', icon: '✅' },
   { id: 'family', label: 'Family', icon: '👨‍👩‍👧‍👦' },
+  { id: 'groups', label: 'Groups', icon: '👥' },
   { id: 'interactions', label: 'Interactions', icon: '💬' },
   { id: 'milestones', label: 'Milestones', icon: '🏆' },
   { id: 'activity', label: 'Activity & Notes', icon: '📊' },

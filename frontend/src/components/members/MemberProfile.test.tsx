@@ -155,6 +155,44 @@ describe('MemberProfile', () => {
     expect(screen.getByText('SMS/Text Messages')).toHaveTextContent('SMS/Text Messages: Opted out');
   });
 
+  it('lists the member groups on the Groups tab, archived groups and paused rows marked', async () => {
+    detailsApi.getMemberDetails.mockResolvedValue({
+      ...details,
+      groupMemberships: [
+        {
+          group: { id: 'g1', name: 'Choir', type: 'ministry', isActive: true },
+          role: 'co_leader',
+          joinDate: '2026-01-02T12:00:00.000Z',
+          isActive: true,
+        },
+        {
+          group: { id: 'g2', name: 'Old Committee', type: 'committee', isActive: false },
+          role: 'member',
+          joinDate: '2025-01-02T12:00:00.000Z',
+          isActive: false,
+        },
+      ],
+    });
+    await render(<MemberProfile memberId="u1" />);
+    await screen.findByRole('heading', { level: 1 });
+    fireEvent.click(screen.getByRole('tab', { name: /Groups/ }));
+    const panel = screen.getByRole('tabpanel', { name: /Groups/ });
+    expect(within(panel).getByRole('link', { name: 'Choir' })).toHaveAttribute(
+      'href',
+      '/groups/g1',
+    );
+    expect(panel).toHaveTextContent('Co-leader');
+    expect(panel).toHaveTextContent('Committee · Archived group · Membership paused');
+  });
+
+  it('says so when the member is in no group', async () => {
+    detailsApi.getMemberDetails.mockResolvedValue({ ...details, groupMemberships: [] });
+    await render(<MemberProfile memberId="u1" />);
+    await screen.findByRole('heading', { level: 1 });
+    fireEvent.click(screen.getByRole('tab', { name: /Groups/ }));
+    expect(screen.getByText(/Ada Lovelace is not in any group/)).toBeTruthy();
+  });
+
   it('shows the attendance tab and refetches for another window and service types', async () => {
     detailsApi.getMemberDetails.mockResolvedValue(details);
     detailsApi.getMemberAttendance.mockResolvedValue({

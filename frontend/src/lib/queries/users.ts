@@ -36,6 +36,20 @@ export function useMemberRows(request: MemberRowsRequest) {
   });
 }
 
+/**
+ * Staff only: up to `limit` active members whose name or email matches `q`, for pickers such as
+ * adding a member to a group. Nothing is fetched while `q` is blank; pass a debounced value.
+ */
+export function useMemberLookup(q: string, limit = 8) {
+  const params: ListUsersParams = { q, status: 'active', sort: 'name', pageSize: limit };
+  return useQuery({
+    queryKey: queryKeys.users.list(params),
+    queryFn: ({ signal }) => listUsers(params, signal),
+    enabled: q.trim().length > 0,
+    placeholderData: keepPreviousData,
+  });
+}
+
 export function useUser(id: string) {
   return useQuery({ queryKey: queryKeys.users.detail(id), queryFn: () => getUser(id) });
 }

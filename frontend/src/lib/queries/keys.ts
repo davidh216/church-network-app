@@ -1,3 +1,4 @@
+import type { GroupListParams } from '@/lib/api/groups';
 import type {
   ListAuditParams,
   ListMediaParams,
@@ -49,6 +50,13 @@ export const queryKeys = {
   tags: {
     all: ['tags'] as const,
     list: (includeArchived: boolean) => ['tags', 'list', { includeArchived }] as const,
+  },
+  groups: {
+    all: ['groups'] as const,
+    list: (params: GroupListParams) => ['groups', 'list', params] as const,
+    /** The signed-in user's own memberships (group ids are cuids, never "mine"). */
+    mine: () => ['groups', 'mine'] as const,
+    detail: (id: string) => ['groups', 'detail', id] as const,
   },
   /** Every audited change invalidates `audit.all`, so the log never shows a stale page. */
   audit: {

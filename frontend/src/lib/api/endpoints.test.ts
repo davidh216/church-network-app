@@ -3,6 +3,7 @@ import type { RegisterResult } from '@/types/domain';
 import * as analytics from './analytics';
 import * as auditApi from './audit';
 import * as auth from './auth';
+import * as groups from './groups';
 import * as media from './media';
 import * as memberDetails from './memberDetails';
 import * as roles from './roles';
@@ -450,6 +451,57 @@ describe('tags endpoints', () => {
     expect([call(0), call(1)]).toEqual([
       { url: '/api/users/u1/tags', method: 'POST', body: { tagId: 't1' } },
       { url: '/api/users/u1/tags/t1', method: 'DELETE', body: undefined },
+    ]);
+  });
+});
+
+describe('groups endpoints', () => {
+  it('lists the directory with filters, and the own memberships', async () => {
+    respond({ success: true, groups: [] });
+    respond({ success: true, groups: [{ id: 'g1' }] });
+    respond({ success: true, memberships: [{ role: 'member' }] });
+    await expect(groups.listGroups()).resolves.toEqual([]);
+    await expect(groups.listGroups({ type: 'committee', status: 'all' })).resolves.toEqual([
+      { id: 'g1' },
+    ]);
+    await expect(groups.listOwnGroups()).resolves.toEqual([{ role: 'member' }]);
+    expect([call(0).url, call(1).url, call(2).url]).toEqual([
+      '/api/groups',
+      '/api/groups?type=committee&status=all',
+      '/api/groups?mine=true',
+    ]);
+  });
+
+  it('reads, creates, updates and deletes a group', async () => {
+    respond({ success: true, group: { id: 'g1' } });
+    respond({ success: true, group: { id: 'g1' } }, { status: 201 });
+    respond({ success: true, group: { id: 'g1' } });
+    respond({ success: true, removed: 3 });
+    await expect(groups.getGroup('g1')).resolves.toEqual({ id: 'g1' });
+    await groups.createGroup({ name: 'Choir', type: 'ministry' });
+    await groups.updateGroup('g1', { isActive: false });
+    await expect(groups.deleteGroup('g1')).resolves.toEqual({ removed: 3 });
+    expect([call(0), call(1), call(2), call(3)]).toEqual([
+      { url: '/api/groups/g1', method: 'GET', body: undefined },
+      { url: '/api/groups', method: 'POST', body: { name: 'Choir', type: 'ministry' } },
+      { url: '/api/groups/g1', method: 'PATCH', body: { isActive: false } },
+      { url: '/api/groups/g1', method: 'DELETE', body: undefined },
+    ]);
+  });
+
+  it('changes the roster under the group', async () => {
+    respond({ success: true, member: { userId: 'u1' } }, { status: 201 });
+    respond({ success: true, member: { userId: 'u1' } });
+    respond({ success: true });
+    await expect(groups.addGroupMember('g1', { userId: 'u1', role: 'leader' })).resolves.toEqual({
+      userId: 'u1',
+    });
+    await groups.updateGroupMember('g1', 'u1', { role: 'member' });
+    await groups.removeGroupMember('g1', 'u1');
+    expect([call(0), call(1), call(2)]).toEqual([
+      { url: '/api/groups/g1/members', method: 'POST', body: { userId: 'u1', role: 'leader' } },
+      { url: '/api/groups/g1/members/u1', method: 'PATCH', body: { role: 'member' } },
+      { url: '/api/groups/g1/members/u1', method: 'DELETE', body: undefined },
     ]);
   });
 });

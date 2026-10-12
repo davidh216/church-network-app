@@ -3,12 +3,14 @@
 import Link from 'next/link';
 import { formatLocalDate } from '@/lib/format/date';
 import type { User } from '@/types/domain';
+import OwnGroups from '@/components/groups/OwnGroups';
 import OwnAttendance from './OwnAttendance';
 import OwnProfileLists from './OwnProfileLists';
 
 /**
  * A member's own profile at `/members/<own id>`. The detailed CRM view (member-details) is
- * staff-only, so this shows the self projection the session already loaded from /auth/me.
+ * staff-only, so this shows the self projection the session already loaded from /auth/me, the
+ * member's own groups and their attendance.
  */
 export default function OwnProfile({ user }: { user: User }) {
   const rows: Array<[string, string | null | undefined]> = [
@@ -38,6 +40,7 @@ export default function OwnProfile({ user }: { user: User }) {
           ))}
       </dl>
       <OwnProfileLists user={user} />
+      <OwnGroups headingId="own-groups-heading" />
       <OwnAttendance />
     </section>
   );

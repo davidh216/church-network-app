@@ -12,6 +12,7 @@ import Attendance from './profile/Attendance';
 import ChurchInfo from './profile/ChurchInfo';
 import ContactInfo from './profile/ContactInfo';
 import Family from './profile/Family';
+import Groups from './profile/Groups';
 import Interactions from './profile/Interactions';
 import Milestones from './profile/Milestones';
 import Notes from './profile/Notes';
@@ -32,6 +33,7 @@ const TAB_PANELS: Record<ProfileTabId, ComponentType<{ member: MemberDetails }>>
   timeline: Timeline,
   attendance: Attendance,
   family: Family,
+  groups: Groups,
   interactions: Interactions,
   milestones: Milestones,
   activity: Notes,

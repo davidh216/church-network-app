@@ -18,6 +18,9 @@ vi.mock('@/lib/api/users', () => usersApi);
 const detailsApi = vi.hoisted(() => ({ getOwnAttendance: vi.fn() }));
 vi.mock('@/lib/api/memberDetails', () => detailsApi);
 
+const groupsApi = vi.hoisted(() => ({ listOwnGroups: vi.fn() }));
+vi.mock('@/lib/api/groups', () => groupsApi);
+
 const stored = makeUser(['member'], { volunteerSkills: ['Music'], interests: ['Hiking'] });
 
 // The route renders OwnProfile with the signed-in user from the auth context.
@@ -48,6 +51,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   authApi.me.mockResolvedValue(stored);
   detailsApi.getOwnAttendance.mockReturnValue(new Promise(() => undefined));
+  groupsApi.listOwnGroups.mockReturnValue(new Promise(() => undefined));
 });
 
 describe('OwnProfile skills and interests', () => {

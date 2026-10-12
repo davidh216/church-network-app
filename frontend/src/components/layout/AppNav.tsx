@@ -19,6 +19,7 @@ export function navItems(staff: boolean, userId: string, admin = false): NavItem
     { href: '/', label: 'Dashboard' },
     { href: '/members', label: 'Members' },
     { href: '/media', label: 'Media' },
+    { href: '/groups', label: 'Groups' },
     ...(staff
       ? [
           { href: '/services', label: 'Services' },

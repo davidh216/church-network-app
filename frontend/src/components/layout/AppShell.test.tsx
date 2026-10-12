@@ -72,7 +72,13 @@ describe('app shell', () => {
     const container = await renderDashboard(['member']);
     expect(container.textContent).toContain('Welcome back, Ann Example!');
     expect(container.textContent).toContain('Your Profile');
-    expect(linkTexts(container, 'nav a')).toEqual(['Dashboard', 'Members', 'Media', 'My Profile']);
+    expect(linkTexts(container, 'nav a')).toEqual([
+      'Dashboard',
+      'Members',
+      'Media',
+      'Groups',
+      'My Profile',
+    ]);
     expect(linkTexts(container)).not.toContain('Member Analytics');
     expect(linkTexts(container)).not.toContain('Services and Attendance');
     expect(container.querySelector('nav a[aria-current="page"]')?.textContent).toBe('Dashboard');
@@ -85,6 +91,7 @@ describe('app shell', () => {
       'Dashboard',
       'Members',
       'Media',
+      'Groups',
       'Services',
       'Analytics',
       'Audit Log',
@@ -296,17 +303,19 @@ describe('navigation helpers', () => {
     expect(isCurrent('/', '/')).toBe(true);
   });
 
-  it('lists Services and Analytics for staff only, and the audit log for admins', () => {
+  it('lists Groups for everyone, Services and Analytics for staff, the audit log for admins', () => {
     expect(navItems(false, 'u1').map((i) => i.href)).toEqual([
       '/',
       '/members',
       '/media',
+      '/groups',
       '/members/u1',
     ]);
     expect(navItems(true, 'u1').map((i) => i.href)).toEqual([
       '/',
       '/members',
       '/media',
+      '/groups',
       '/services',
       '/analytics',
       '/members/u1',
@@ -315,6 +324,7 @@ describe('navigation helpers', () => {
       '/',
       '/members',
       '/media',
+      '/groups',
       '/services',
       '/analytics',
       '/admin/audit',

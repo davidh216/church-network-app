@@ -11,6 +11,7 @@ import type {
   InteractionStatus,
   InteractionType,
   MaritalStatus,
+  MemberGroupMembership,
   MediaType,
   MembershipStage,
   MembershipType,
@@ -258,6 +259,8 @@ export interface MemberDetails {
     /** Who added it; null when unknown or the account is gone. */
     addedBy?: { id: string; name: string } | null;
   }>;
+  /** Every group membership (staff only), archived groups and inactive rows included. */
+  groupMemberships?: MemberGroupMembership[];
   memberNotes?: Array<{
     id: string;
     title?: string;
