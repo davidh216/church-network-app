@@ -237,4 +237,35 @@ describe('Dialog', () => {
     expect(screen.queryByRole('button', { name: 'Edit row' })).toBeNull();
     expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Members' }));
   });
+
+  it('calls the callbacks of the latest render without reopening', () => {
+    const first = vi.fn();
+    const second = vi.fn();
+    const escape = vi.fn();
+    const { rerender } = render(
+      <Dialog labelledBy="l" onClose={first}>
+        <h2 id="l">Latest</h2>
+      </Dialog>,
+    );
+    const panel = screen.getByRole('dialog');
+    rerender(
+      <Dialog labelledBy="l" onClose={second}>
+        <h2 id="l">Latest</h2>
+      </Dialog>,
+    );
+    expect(screen.getByRole('dialog')).toBe(panel);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    fireEvent.click(panel.parentElement!);
+    expect(first).not.toHaveBeenCalled();
+    expect(second).toHaveBeenCalledTimes(2);
+
+    rerender(
+      <Dialog labelledBy="l" onClose={second} onEscape={escape}>
+        <h2 id="l">Latest</h2>
+      </Dialog>,
+    );
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(escape).toHaveBeenCalledTimes(1);
+    expect(second).toHaveBeenCalledTimes(2);
+  });
 });

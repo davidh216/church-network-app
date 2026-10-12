@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, type MouseEvent, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, type MouseEvent, type ReactNode } from 'react';
 import { focusableWithin, trapTarget } from '@/lib/a11y/focus';
 
 interface DialogProps {
@@ -56,9 +56,12 @@ export default function Dialog({
 }: DialogProps) {
   const ownRef = useRef<HTMLDivElement>(null);
   const ref = panelRef ?? ownRef;
-  // The latest callbacks, so the open/close effect runs once per mount.
+  // The latest callbacks, so the open/close effect runs once per mount. They are stored after
+  // each commit (a layout effect, before any event can reach the new props), never during render.
   const handlers = useRef({ onClose, onEscape, fallbackFocus });
-  handlers.current = { onClose, onEscape, fallbackFocus };
+  useLayoutEffect(() => {
+    handlers.current = { onClose, onEscape, fallbackFocus };
+  });
 
   useEffect(() => {
     const panel = ref.current;
@@ -103,7 +106,7 @@ export default function Dialog({
   }, [ref]);
 
   const handleBackdrop = (e: MouseEvent<HTMLDivElement>) => {
-    if (closeOnBackdrop && e.target === e.currentTarget) handlers.current.onClose();
+    if (closeOnBackdrop && e.target === e.currentTarget) onClose();
   };
 
   // Focus guards: when focus is somewhere the keydown trap cannot see (a cross-origin iframe

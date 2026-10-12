@@ -1,6 +1,6 @@
 # Church Network App: Modernization Gameplan
 
-Date: 2026-10-03. Status: APPROVED 2026-10-04 (initial scope = Phase 0 + Phase 1). Phase 0 implemented on branch `modernize/phase-0`; Phases 0, 1 and 2 are merged into `main` (PRs #1, #2, #3, merged 2026-10-05). Phase 3 is specified in `PHASE3_SPECS.md` (approved 2026-10-05), implemented and verified on branch `modernize/phase-3`, and proposed in PR #9 into `main` (GitHub numbered it after four Dependabot PRs).
+Date: 2026-10-03. Status: APPROVED 2026-10-04 (initial scope = Phase 0 + Phase 1). Phase 0 implemented on branch `modernize/phase-0`; Phases 0, 1 and 2 are merged into `main` (PRs #1, #2, #3, merged 2026-10-05). Phase 3 is merged into `main` (PR #9, merged 2026-10-07). Phase 4 is specified in `PHASE4_SPECS.md` (approved 2026-10-11) and implemented on branch `modernize/phase-4`.
 
 Owner decisions (2026-10-04): D1 Postgres, moved up to the start of Phase 1 (switching the Prisma provider regenerates the migration history, so it follows the Phase 0 security fixes rather than preceding them). D2 registration requires admin approval. D3 httpOnly cookie sessions. D6 delete the lifecycle-automation tables. Remaining decisions take the recommendation unless the owner says otherwise.
 
@@ -268,14 +268,43 @@ Each fix batch was rechecked by an independent agent. The rulings are recorded i
 
 Final pre-merge review (2026-10-07) of the whole PR on its last head, five lenses (deploy and operations, security, migrations, docs accuracy, Phase 1 and 2 regressions) with a verifier per finding: 44 confirmed, 2 refuted, none blocking. The code findings were fixed and rechecked (rulings H1 to H12 in `PHASE3_SPECS.md` section 8); the documentation findings were corrected in the README, this gameplan and the spec.
 
-### Phase 4: platform upgrades (about 4 to 6 days, only after Phase 1 tests exist)
+### Phase 4: platform upgrades (about 5 to 6 days, only after Phase 1 tests exist)
+
+Goal: current, supported majors with a documented rollback for each, images verified in CI, and a tested backup path. Detailed item specifications, version targets, rollbacks and decisions are in `PHASE4_SPECS.md` (approved 2026-10-11 with the planner's recommendations). One sequential stream (U1 to U7) on `modernize/phase-4`, cut from `main` after PR #9.
 
 - [x] 4.1 Postgres: moved to Phase 1 item 1.0 by owner decision D1.
-- [ ] 4.2 (M) Next 16 and eslint-config-next 16, ESLint 10 (plain `eslint` already in use), React 19.3, TypeScript 5.9. F090, F117, F118, F119.
-- [ ] 4.3 (M) Prisma 7 (new generator and `prisma.config.ts`). F047.
-- [ ] 4.4 (S) Deployment target hardening: production env validation, structured logs shipped, backups for the database. foundation.
+- [x] 4.2 (M) Next 16.4 and eslint-config-next 16.4 (proxy rename, native flat config, React Compiler lint findings fixed), ESLint 10 in every workspace, TypeScript held at 5.9 (decision P4-D1; React already at 19.3). F090, F117, F118, F119. Spec U1, U3, U4.
+- [x] 4.3 (M) Prisma 7.10 with the pg driver adapter, `prisma.config.ts` datasource and the renamed `migrate diff` flags; Prisma 8 deferred until it is generally available. F047. Spec U5.
+- [x] 4.4 (M) Node 24 LTS; production configuration checks; Docker images built and smoke-tested in CI; backup and restore scripts with a CI restore drill; bounded container logs and `X-Request-Id`; pinned actions, Dependabot groups and audit gates. Spec U2, U6, U7.
 
-Exit criteria: CI green on the new majors; a documented rollback for each.
+Exit criteria: CI green on the new majors, including the image build and compose smoke test; a documented rollback for each major (`PHASE4_SPECS.md` 1.3, summarised in the README); restore drill green; Phase 4 PR into `main`.
+
+Verified 2026-10-12 on `modernize/phase-4` with Node 24.21 and npm 11.21:
+- **Root checks.** `npm run typecheck`, `npm run lint` (jsx-a11y, max-lines and the React Compiler rules as errors, ESLint 10), `npm run format:check` and `npm run build` (Next 16.4 with Turbopack) all pass.
+- **Tests.** `npm test` passes 137 shared, 714 backend and 467 frontend tests.
+- **No drift.** The Prisma 7 drift check reports no difference.
+- **Tooling.** `docker compose config`, actionlint (with shellcheck), shellcheck on the scripts and the Playwright suite all pass.
+- **Upgrade and rollback.** Prisma 7.10 found nothing to apply on the Phase 3 dev database. The rollback drill ran the Prisma 6 build (the U4 head) against that same database afterwards: migrate status up to date, seed and refresh CLI clean, `/health` OK.
+- **CI on GitHub** additionally proves what this container cannot:
+  - both Docker images build on Node 24, and the compose stack starts healthy;
+  - sign-in works through the web app, the refresh CLI runs in the image, and `/health` returns 503 within 10 seconds of the database stopping;
+  - the backup and restore drill passes;
+  - `npm audit signatures` passes.
+- **Audit.** `npm audit --omit=dev` reports 0. The full audit keeps one dev-only high advisory chain (braces via `@next/eslint-plugin-next`) with no upstream fix.
+
+Adversarial reviews:
+- **U1 to U4:** 1 should-fix and 3 nits. A `.cjs` file would have crashed the lint run; two React tests were weak; the ESLint override needed a Dependabot ignore. All were fixed.
+- **U5 to U7:** 5 should-fix and 7 nits, all fixed. The largest were:
+  - `DATABASE_URL` changing meaning under the pg driver (certificate checks and pool size), now read as Prisma 6 did;
+  - a malformed URL that would print the database password;
+  - backup scripts that failed on Prisma-only URL parameters and on servers without a host client;
+  - retention deleting other files that shared the prefix.
+- **Final pre-merge review** of the fix commits, the docs and the whole PR. No blockers. Every finding is fixed:
+  - SSL modes and certificate files are now checked explicitly under pg, so unknown modes, `sslaccept` without `sslmode`, and a lone `sslcert` are refused rather than misread.
+  - TRUST_PROXY catch-alls are detected with proxy-addr.
+  - The backup scripts keep `user` and `password`.
+  - The compose-mode backup runs in CI.
+  - The README now says how to restore into an empty database and in which order to revert upgrades.
 
 ### Phase 5 and beyond (out of this plan's estimates)
 

@@ -32,7 +32,7 @@ A comprehensive church management platform built with modern web technologies, d
 ## 🛠️ Technology Stack
 
 ### **Frontend**
-- **Next.js 15**: React framework with App Router
+- **Next.js 16**: React framework with App Router
 - **React 19**: Latest React with modern hooks and features
 - **TypeScript**: Full type safety throughout the application
 - **Tailwind CSS 4**: Utility-first CSS framework for rapid styling
@@ -98,7 +98,7 @@ A comprehensive church management platform built with modern web technologies, d
 ## 🚦 Getting Started
 
 ### **Prerequisites**
-- Node.js 22 (see `.nvmrc`) and npm 10
+- Node.js 24 (see `.nvmrc`) and npm 11
 - PostgreSQL 16, either installed locally or started with `docker compose up -d db`
 
 ### **Installation**
@@ -133,11 +133,11 @@ A comprehensive church management platform built with modern web technologies, d
 `docker compose up --build` starts `db`, `api` (runs `prisma migrate deploy`, the idempotent seed, then the compiled server) and `web` (standalone Next.js build). Ports are published on 127.0.0.1 only. The api service reads `backend/.env` for `JWT_SECRET` and the `SEED_ADMIN_*` values, and runs with `COOKIE_SECURE=false` because the stack is plain http; a real deployment sits behind TLS, leaves `COOKIE_SECURE` unset, and runs behind a reverse proxy that sets `X-Forwarded-For` (see `TRUST_PROXY` in `backend/.env.example`).
 
 ### **Upgrading an existing database**
-**Back up first: the upgrade is one-way.** To roll back, restore the dump and run the previous build.
+**Back up first: the upgrade is one-way.** To roll back, restore the dump into an empty database (see Restores) and run the previous build.
 
 ```bash
-docker compose exec db pg_dump -U church -Fc church_dev > pre-upgrade.dump   # with compose
-pg_dump -Fc "$DATABASE_URL" > pre-upgrade.dump                                 # local database
+scripts/db-backup.sh ./backups                          # through `docker compose exec db` when DATABASE_URL is unset
+DATABASE_URL=postgresql://... scripts/db-backup.sh ./backups   # any reachable server
 ```
 
 `npm run -w backend db:migrate` (or the api container on start) applies new migrations in order. The Phase 3 migrations convert data in place:
@@ -154,7 +154,7 @@ SELECT * FROM phase3_archive.saved_searches;        -- deleted saved searches
 DROP SCHEMA phase3_archive CASCADE;
 ```
 
-If the relations migration stops because notes point at a deleted author and no admin account exists, nothing from that migration is applied. Give an existing account the admin role (the seed cannot run while a migration has failed), mark the migration as rolled back, and deploy again. With compose, run the Prisma commands through `docker compose run --rm --entrypoint npx api prisma ...`.
+If the relations migration stops because notes point at a deleted author and no admin account exists, nothing from that migration is applied. Give an existing account the admin role (the seed cannot run while a migration has failed), mark the migration as rolled back, and deploy again. With compose, run the Prisma commands through `docker compose run --rm --entrypoint npx api --no prisma ...` (`--no` makes npx fail rather than download a different Prisma).
 
 ```sql
 INSERT INTO user_roles (id, "userId", "roleId")
@@ -177,6 +177,55 @@ docker compose run --rm --entrypoint node api dist/jobs/refresh-engagement.js   
 
 Staff can also start it from the Analytics page.
 
+### **Operations**
+**Configuration in production.** With `NODE_ENV=production` the API refuses to start when:
+- `CORS_ORIGIN` is unset, or any origin is not `https://`. Plain-HTTP origins are accepted only with `COOKIE_SECURE=false`, as the local compose stack sets.
+- `JWT_SECRET` is weak: one repeated character, fewer than 10 distinct characters, or containing `changeme`, `secret` or `example`. Generate one with `openssl rand -base64 48`.
+- `TRUST_PROXY` is `true`, cannot be read by Express (for example `0.0.0.0/0`, a trailing comma or a host name), or trusts nearly every address (for example `0.0.0.0/1,128.0.0.0/1` or `::ffff:0:0/96`). Use a hop count or the proxy's address or subnet.
+
+**DATABASE_URL.** The API reads it through the `pg` driver. Pool size, timeouts and schema keep their Prisma 6 meaning. SSL follows libpq as `pg` implements it, which differs from Prisma 6 in two places:
+- **SSL modes.** `disable`, `allow` and no `sslmode` connect without TLS. `prefer` and `require` require TLS without checking the certificate; `prefer` does not fall back to a plain connection, so use `disable` or omit `sslmode` for a server without TLS. `verify-ca` (needs `sslrootcert`) checks the certificate chain, and `verify-full` also checks the hostname. `prefer` or `require` with `sslrootcert` check the chain as `verify-ca` does, and `sslrootcert=system` checks chain and hostname against Node's default roots. `sslaccept=strict` or `accept_invalid_certs` override the check, but only together with an `sslmode`. Other `sslmode` values are refused.
+- **Certificate files.** `sslrootcert` is the server's CA. `sslcert` with `sslkey` is a client certificate. Prisma 6 read a lone `sslcert` as the CA; such a URL is now refused, so move the path to `sslrootcert`. File parameters need an explicit `sslmode`, and relative paths resolve from the process's working directory (`/app/backend` in the image). `prisma migrate deploy` still reads the URL with Prisma's own rules.
+- **Pool.** `connection_limit` sets the pool size (default CPUs × 2 + 1). Waiting for a connection is limited by `connect_timeout` (default 5 s), or by the larger of it and `pool_timeout` when that is set; `connection_limit`, `connect_timeout` and `pool_timeout` must be whole numbers of at least 1.
+- **Schema.** `schema` (default `public`) must be a plain identifier. `options` in the URL are kept. `socket_timeout`, `pgbouncer`, `statement_cache_size`, `sslidentity` and `sslpassword` are ignored.
+- **Malformed URLs.** A malformed URL stops start-up with a message that never shows it. Percent-encode special characters in the password, including `#` (`%23`), `/`, `?` and `@`.
+
+**Single instance.** Run one API instance: the engagement refresh job keeps its status in the API process.
+
+**Logs.** The API writes one JSON line per request to stdout, so collect stdout (`docker compose logs api` or your platform's log collector). Compose rotates the api and web logs (json-file, 5 files of 10 MB). Every response carries an `X-Request-Id` header. It equals the `req.id` of its log line and the `requestId` in a 500 body, so ask users for it when they report an error.
+
+**Backups.** `scripts/db-backup.sh <dir>` writes `church-<UTC timestamp>.dump` (`pg_dump -Fc`, file mode 600), checks that the dump can be read, and deletes backups older than `RETENTION_DAYS` (default 14). It uses `DATABASE_URL` when set, otherwise `docker compose exec db`.
+- **Host client.** With `DATABASE_URL`, the host's `pg_dump` and `pg_restore` must be at least the server's major version. Compose mode needs no client tools on the host.
+- **Password.** When the URL has no password, `PGPASSWORD` or `~/.pgpass` is used.
+- **URL parameters.** A `password=` URL parameter goes through `PGPASSWORD`. Prisma-only parameters are dropped. libpq's own (`sslmode`, `user`, `passfile`, `service`, `sslrootcert` and the other SSL settings) are kept, and `sslaccept=strict` with `require` or `prefer` becomes `verify-full`.
+- **What retention deletes.** Only the script's own file names, plus partial files older than a day, so other files in the directory are safe.
+
+Run it nightly, for example from cron:
+
+```cron
+15 2 * * * cd /srv/church-network-app && scripts/db-backup.sh /var/backups/church >> /var/log/church-backup.log 2>&1
+```
+
+**Restores.** `scripts/db-restore.sh <dump> <database>` restores into an existing database in one transaction (`--clean --if-exists --no-owner --no-privileges`), so a failure leaves the database unchanged. `--clean` replaces only the objects in the dump, so a dump taken before a migration must go into an empty database. CI runs this drill after every passing Playwright run, in both `DATABASE_URL` and compose mode.
+1. To check a backup without touching production:
+   ```bash
+   docker compose exec -T db psql -U church -d church_dev -c 'CREATE DATABASE church_restore'   # or psql against your server
+   scripts/db-restore.sh backups/church-<timestamp>.dump church_restore
+   DATABASE_URL='postgresql://.../church_restore?schema=public' npx -w backend prisma migrate status
+   ```
+2. To restore production (`church_dev` in compose): `docker compose stop api`, then `scripts/db-restore.sh <dump> church_dev`, then `docker compose start api`. To return to a dump taken before an upgrade, drop and recreate the database first (`DROP DATABASE church_dev; CREATE DATABASE church_dev;` with the api stopped), then restore and run the previous build.
+
+**Rolling back an upgrade.** Phase 4 changed no schema. Each upgrade is rolled back by redeploying the previous build, or by reverting that item's commits (`docs/PHASE4_SPECS.md` 1.3):
+- **Order.** Revert ESLint 10 (U4) before Next 16 (U3), because ESLint 10 needs eslint-config-next 16.
+- **Node 22.** Reverting Node 24 (U2) means setting both Dockerfiles' `FROM` lines back to `node:22-alpine` by hand, because they are now digest-pinned.
+- **Lockfile.** Resolve lockfile conflicts by running `npm install`.
+- **Prisma.** Prisma 6 and 7 read the same migration history.
+
+**Dependency notes.**
+- `overrides.eslint` in the root `package.json` must move together with every workspace's `eslint` range. Dependabot cannot update overrides, so it ignores ESLint majors.
+- `overrides.mysql2` patches the Prisma CLI's copy; drop it when Prisma updates it.
+- `allowScripts` lists the dependencies whose install scripts may run (advisory in npm 11.21). Approve a new one with `npm approve-scripts`.
+
 ### **Accounts and Roles**
 - Self-registration creates an **inactive** account. An admin or leader activates it (edit the member and tick Active) before the person can sign in.
 - The first admin comes from the seed (`SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD`). Passwords must be at least 12 characters and not a common password. Signed-in users change theirs with `POST /api/auth/change-password`; admins reset others with `POST /api/users/:id/reset-password`.
@@ -190,7 +239,7 @@ npm run format:check                                             # prettier
 npx -w frontend playwright install chromium                     # once; CI does this itself
 E2E_WEB_PORT=3111 E2E_API_PORT=5111 npm run -w frontend test:e2e # Playwright suite; starts both dev servers and needs SEED_ADMIN_* in backend/.env
 ```
-A husky pre-commit hook runs lint-staged (eslint --fix and prettier on staged files). CI (`.github/workflows/ci.yml`) runs typecheck, lint, format check, tests against a Postgres service, builds, the compiled seed, a migration drift check and the Playwright suite on pull requests and on pushes to `main` and `modernize/**`.
+A husky pre-commit hook runs lint-staged: prettier on staged files at the root, plus `eslint --fix` in the backend, frontend and shared workspaces. CI (`.github/workflows/ci.yml`) runs on pull requests and on pushes to `main` and `modernize/**`. It runs typecheck, lint, format check, tests against a Postgres service, builds, the compiled seed, a migration drift check (`SHADOW_DATABASE_URL=... npx -w backend prisma migrate diff --from-migrations prisma/migrations --to-schema prisma/schema.prisma --exit-code`; the shadow database is wiped, so point it at a scratch database such as church_test, never at `DATABASE_URL`), a production advisory audit (`npm audit --omit=dev --audit-level=high`) and a registry-signature check of all installed packages (`npm audit signatures`). It also runs the Playwright suite followed by a backup and restore drill, and an Images job that builds both Dockerfiles and smoke-tests the compose stack (health, login page, sign-in through the web app, refresh CLI, a compose-mode backup and restore, and 503 within 10 seconds of the database stopping). Actions are pinned by commit SHA. Dependabot updates them weekly together with npm (7-day cooldown, 14 days for majors) and the Node and PostgreSQL images, which the Dockerfiles and compose pin by digest.
 
 ## 📁 Project Structure
 
@@ -199,7 +248,8 @@ church-network-app/
 ├── package.json                # npm workspaces: backend, frontend, packages/*; root scripts
 ├── tsconfig.base.json          # shared strict compiler options
 ├── docker-compose.yml          # db, api, web
-├── .github/workflows/ci.yml    # typecheck, lint, test, build, migrate diff, e2e
+├── .github/workflows/ci.yml    # checks, tests, drift, audit, e2e, restore drill, image build and smoke test
+├── scripts/                    # db-backup.sh, db-restore.sh, lib/pg-url.sh
 ├── backend/                    # Express 5 API
 │   ├── Dockerfile
 │   ├── prisma/
@@ -211,7 +261,7 @@ church-network-app/
 │   │   ├── app.ts              # Express app: middleware, modules, 404/error handlers
 │   │   ├── server.ts           # listen and graceful shutdown
 │   │   ├── config/env.ts       # zod-validated environment
-│   │   ├── lib/                # prisma singleton, logger, HttpError, shared zod schemas
+│   │   ├── lib/                # prisma singleton, pg-config (DATABASE_URL reader), logger and request logger, HttpError, shared zod schemas
 │   │   ├── middleware/         # authenticate, requireRole, validate, error handler, not found
 │   │   ├── jobs/               # refresh-engagement CLI (cron)
 │   │   └── modules/            # auth, users, saved-searches, roles, media, analytics, member-details, services
@@ -222,7 +272,7 @@ church-network-app/
 │   ├── Dockerfile
 │   ├── src/
 │   │   ├── app/                # layout, providers, dashboard, members, media, analytics, services, login, register
-│   │   ├── middleware.ts       # redirects to /login without a session cookie
+│   │   ├── proxy.ts            # redirects to /login without a session cookie
 │   │   ├── components/         # auth, members, media, analytics, services, dashboard, layout, ui (+ tests)
 │   │   ├── lib/api/            # apiFetch client and typed endpoint modules
 │   │   ├── lib/auth/           # AuthProvider, useAuth, useIsStaff
@@ -234,7 +284,8 @@ church-network-app/
 │   ├── MODERNIZATION_GAMEPLAN.md
 │   ├── PHASE1_SPECS.md
 │   ├── PHASE2_SPECS.md
-│   └── PHASE3_SPECS.md
+│   ├── PHASE3_SPECS.md
+│   └── PHASE4_SPECS.md
 └── README.md
 ```
 

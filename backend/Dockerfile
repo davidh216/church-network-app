@@ -2,7 +2,9 @@
 # Express API image. Build context is the repository root, because the npm workspace
 # lockfile lives there:  docker build -f backend/Dockerfile .
 
-FROM node:22-alpine AS build
+# Pinned by digest (the multi-arch index of node:24-alpine), so a rebuild uses the same base
+# image; Dependabot proposes new digests weekly (.github/dependabot.yml).
+FROM node:24-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS build
 # Prisma's engines need OpenSSL on Alpine.
 RUN apk add --no-cache openssl
 WORKDIR /app
@@ -21,7 +23,7 @@ COPY backend backend
 # prisma generate, then tsc for src/ (dist/) and prisma/seed.ts (dist/prisma/seed.js)
 RUN npm run -w backend build
 
-FROM node:22-alpine AS runtime
+FROM node:24-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS runtime
 RUN apk add --no-cache openssl
 ENV NODE_ENV=production
 WORKDIR /app
@@ -45,4 +47,6 @@ USER node
 EXPOSE 5000
 # Migrate, seed, serve. The seed is idempotent: it upserts the roles and creates the first admin
 # only when SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD are set and that account does not exist yet.
-ENTRYPOINT ["sh", "-c", "npx prisma migrate deploy && node dist/prisma/seed.js && node dist/server.js"]
+# `npx --no` runs the installed CLI only: if it were missing, start-up fails instead of npx
+# downloading whatever version npm calls latest.
+ENTRYPOINT ["sh", "-c", "npx --no prisma migrate deploy && node dist/prisma/seed.js && node dist/server.js"]

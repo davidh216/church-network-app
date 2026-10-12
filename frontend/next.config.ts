@@ -6,6 +6,8 @@ const nextConfig: NextConfig = {
   // the workspace root because dependencies are hoisted to the root node_modules.
   output: 'standalone',
   outputFileTracingRoot: path.join(__dirname, '..'),
+  // `next dev` would otherwise write frontend/AGENTS.md when it detects a coding agent.
+  agentRules: false,
   // YouTube thumbnails go through next/image; only YouTube's image host is allowed. Avatars stay
   // plain <img> because their hosts are user-supplied (decision P2-3).
   images: {

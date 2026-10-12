@@ -303,4 +303,56 @@ describe('AddEditMemberModal', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
   });
+
+  describe('resets the form', () => {
+    const modal = (isOpen: boolean, member: Member | null) => (
+      <AddEditMemberModal isOpen={isOpen} onClose={onClose} onSave={onSave} member={member} />
+    );
+    const other: Member = { ...existing, id: 'cmember000000000000000002', name: 'Bo Other' };
+
+    it('shows the member values in the first frame after opening', async () => {
+      const { rerender } = await render(modal(false, null));
+      // The Dialog focuses the first field in its own effect, which runs before any effect of
+      // the modal. Recording the field's value at that moment shows what the first committed
+      // frame held: a reset made in an effect would still show an empty field here, even though
+      // the value is right once rerender has flushed every effect.
+      const seen: string[] = [];
+      const record = (e: FocusEvent) => seen.push((e.target as HTMLInputElement).value);
+      document.addEventListener('focusin', record);
+      try {
+        rerender(modal(true, existing));
+      } finally {
+        document.removeEventListener('focusin', record);
+      }
+      expect(screen.getByLabelText('Full Name *')).toHaveFocus();
+      expect(seen[0]).toBe('Ann Example');
+      expect(screen.getByLabelText('Phone')).toHaveValue('555-0100');
+      await settle();
+    });
+
+    it('discards unsaved edits and errors when it is closed and opened again', async () => {
+      usersApi.updateUser.mockRejectedValue(new Error('boom'));
+      const { rerender } = await render(modal(true, existing));
+      type('Full Name *', 'Changed Name');
+      await submit('Update Member');
+      expect(screen.getByRole('alert')).toBeInTheDocument();
+
+      rerender(modal(false, existing));
+      rerender(modal(true, existing));
+      expect(screen.getByLabelText('Full Name *')).toHaveValue('Ann Example');
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      await settle();
+    });
+
+    it('switches to another member while open, and keeps edits on a plain re-render', async () => {
+      const { rerender } = await render(modal(true, existing));
+      type('Full Name *', 'Changed Name');
+      rerender(modal(true, existing));
+      expect(screen.getByLabelText('Full Name *')).toHaveValue('Changed Name');
+
+      rerender(modal(true, other));
+      expect(screen.getByLabelText('Full Name *')).toHaveValue('Bo Other');
+      await settle();
+    });
+  });
 });

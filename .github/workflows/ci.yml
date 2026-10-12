@@ -36,12 +36,16 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      # Supply-chain gates: no high or critical advisory in the production dependencies.
+      - run: npm audit --omit=dev --audit-level=high
+      # Verifies the registry signatures and provenance attestations of the installed packages.
+      - run: npm audit signatures
       # The backend imports @embrace/shared from its compiled dist.
       - run: npm run build:shared
       - run: npm run -w @embrace/shared typecheck
@@ -57,21 +61,24 @@ jobs:
         run: node backend/dist/prisma/seed.js
         env:
           DATABASE_URL: postgresql://church:church@localhost:5432/church_test?schema=public
+      # Replays the migrations into the shadow database (wiped first; never the DATABASE_URL
+      # database) and compares the result with schema.prisma. Exit code 2 means drift.
       - name: Migrations match schema.prisma
         run: >-
           npx -w backend prisma migrate diff
           --from-migrations prisma/migrations
-          --to-schema-datamodel prisma/schema.prisma
-          --shadow-database-url postgresql://church:church@localhost:5432/church_test
+          --to-schema prisma/schema.prisma
           --exit-code
+        env:
+          SHADOW_DATABASE_URL: postgresql://church:church@localhost:5432/church_test
 
   frontend:
     name: Frontend
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -109,8 +116,8 @@ jobs:
       SEED_ADMIN_NAME: E2E Admin
       LOG_LEVEL: warn
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -131,9 +138,126 @@ jobs:
       # Seeds the admin (global setup), starts both dev servers and runs every spec in
       # frontend/e2e (smoke, attendance flow).
       - run: npm run -w frontend test:e2e
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: failure()
         with:
           name: playwright-report
           path: frontend/playwright-report/
           retention-days: 7
+      # Restore drill (decision P4-D7): back up church_dev (migrated, seeded and used by the e2e
+      # run) with scripts/db-backup.sh, restore it into a fresh database with
+      # scripts/db-restore.sh, then check the migration history and every table's row count.
+      - name: Backup and restore drill
+        shell: bash
+        run: |
+          pg_dump --version
+          backup_dir="$RUNNER_TEMP/backups"
+          scripts/db-backup.sh "$backup_dir"
+          dump="$(find "$backup_dir" -name 'church-*.dump' | sort | tail -n 1)"
+          server=postgresql://church:church@localhost:5432
+          psql "$server/church_dev" -v ON_ERROR_STOP=1 -c 'CREATE DATABASE church_restore'
+          scripts/db-restore.sh "$dump" church_restore
+          DATABASE_URL="$server/church_restore?schema=public" npx -w backend prisma migrate status \
+            | tee "$RUNNER_TEMP/migrate-status"
+          grep -q 'Database schema is up to date' "$RUNNER_TEMP/migrate-status"
+          # Exact row counts of every table, the migration history included.
+          row_counts() {
+            psql "$1" -At -v ON_ERROR_STOP=1 \
+              -c "SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY 1" \
+              | while read -r table; do
+                  count="$(psql "$1" -At -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM public.\"$table\"")"
+                  echo "$table $count"
+                done
+          }
+          row_counts "$server/church_dev" >"$RUNNER_TEMP/rows-source"
+          row_counts "$server/church_restore" >"$RUNNER_TEMP/rows-restored"
+          cat "$RUNNER_TEMP/rows-source"
+          grep -Eq '^users [1-9]' "$RUNNER_TEMP/rows-source"
+          diff "$RUNNER_TEMP/rows-source" "$RUNNER_TEMP/rows-restored"
+          echo "restore drill passed"
+
+  images:
+    name: Images and compose smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # The runner's default builder (docker driver) keeps the layers, so the compose build
+      # below reuses them. API_URL matches the build argument in docker-compose.yml.
+      - name: Build the API image
+        run: docker buildx build --file backend/Dockerfile --tag church-network-api:ci .
+      - name: Build the web image
+        run: >-
+          docker buildx build --file frontend/Dockerfile
+          --build-arg API_URL=http://api:5000 --tag church-network-web:ci .
+      # The api service reads backend/.env (docker-compose.yml env_file): a throwaway secret and
+      # seed admin, as the README tells operators to set up.
+      - name: Throwaway JWT secret and seed admin
+        run: |
+          jwt_secret="$(openssl rand -hex 32)"
+          admin_password="$(openssl rand -hex 16)"
+          echo "::add-mask::$jwt_secret"
+          echo "::add-mask::$admin_password"
+          umask 077
+          {
+            echo "JWT_SECRET=$jwt_secret"
+            echo "SEED_ADMIN_EMAIL=ci-admin@example.com"
+            echo "SEED_ADMIN_PASSWORD=$admin_password"
+          } >backend/.env
+          echo "SEED_ADMIN_PASSWORD=$admin_password" >>"$GITHUB_ENV"
+      # --wait returns once db, api and web report healthy (each has a healthcheck), and fails
+      # if one does not within the timeout.
+      - name: Start the compose stack
+        run: docker compose up -d --build --wait --wait-timeout 300
+      - name: API health, login page and sign-in through the web app
+        shell: bash
+        run: |
+          curl --fail --silent --show-error --max-time 10 http://127.0.0.1:5000/health \
+            | tee "$RUNNER_TEMP/health.json"
+          echo
+          grep -q '"status":"OK"' "$RUNNER_TEMP/health.json"
+          curl --fail --silent --show-error --max-time 10 --output /dev/null \
+            http://127.0.0.1:3000/login
+          # The seeded admin signs in through the Next.js /api rewrite to the api service.
+          printf '{"email":"ci-admin@example.com","password":"%s"}' "$SEED_ADMIN_PASSWORD" \
+            | curl --fail --silent --show-error --max-time 10 --output /dev/null \
+              --header 'Content-Type: application/json' --data-binary @- \
+              http://127.0.0.1:3000/api/auth/login
+      - name: Refresh CLI in the api image
+        run: docker compose run --rm -T --entrypoint node api dist/jobs/refresh-engagement.js
+      # The backup scripts' compose mode (DATABASE_URL unset): pg_dump and pg_restore run inside
+      # the db service, so the host needs no PostgreSQL client tools.
+      - name: Backup and restore through docker compose
+        shell: bash
+        env:
+          DATABASE_URL: ''
+        run: |
+          scripts/db-backup.sh "$RUNNER_TEMP/backups"
+          dumps=("$RUNNER_TEMP"/backups/church-*.dump)
+          test "${#dumps[@]}" -eq 1
+          psql_db() {
+            docker compose exec -T db psql -U church -At -v ON_ERROR_STOP=1 "$@"
+          }
+          psql_db -d church_dev -c 'CREATE DATABASE church_restore'
+          scripts/db-restore.sh "${dumps[0]}" church_restore
+          source_users="$(psql_db -d church_dev -c 'SELECT count(*) FROM public.users')"
+          restored_users="$(psql_db -d church_restore -c 'SELECT count(*) FROM public.users')"
+          echo "users: church_dev $source_users, church_restore $restored_users"
+          test "$source_users" -ge 1
+          test "$source_users" = "$restored_users"
+      - name: /health answers 503 within 10 seconds of the database stopping
+        shell: bash
+        run: |
+          docker compose stop db
+          code="$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 10 \
+            http://127.0.0.1:5000/health || true)"
+          echo "GET /health after stopping db: $code"
+          test "$code" = 503
+      - name: Compose state and logs
+        if: failure()
+        run: |
+          docker compose ps --all
+          docker compose logs --no-color --tail 200
+      - name: Remove the stack
+        if: always()
+        run: docker compose down --volumes

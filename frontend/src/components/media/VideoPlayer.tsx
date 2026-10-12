@@ -47,6 +47,14 @@ export default function VideoPlayer({
   const helpId = useId();
   const { listen, togglePlay } = useYouTubePlayer(iframeRef);
 
+  const toggleFullscreen = useCallback(() => {
+    if (!document.fullscreenElement) {
+      playerRef.current?.requestFullscreen();
+    } else {
+      document.exitFullscreen();
+    }
+  }, []);
+
   // Escape is handled by the Dialog (onEscape below); these are the player's own shortcuts.
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -72,16 +80,8 @@ export default function VideoPlayer({
           break;
       }
     },
-    [onPlayNext, onPlayPrevious, currentIndex, playlist.length, togglePlay],
+    [onPlayNext, onPlayPrevious, currentIndex, playlist.length, togglePlay, toggleFullscreen],
   );
-
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      playerRef.current?.requestFullscreen();
-    } else {
-      document.exitFullscreen();
-    }
-  };
 
   const exitFullscreen = () => {
     if (document.fullscreenElement) {

@@ -1,11 +1,11 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
 import { NextRequest } from 'next/server';
-import { config, middleware } from './middleware';
+import { config, proxy } from './proxy';
 
 function run(path: string, withCookie: boolean) {
   const headers = withCookie ? { cookie: 'embrace_session=jwt-value' } : undefined;
-  return middleware(new NextRequest(`http://localhost:3000${path}`, { headers }));
+  return proxy(new NextRequest(`http://localhost:3000${path}`, { headers }));
 }
 
 function redirectTarget(response: Response): string | null {
@@ -15,7 +15,7 @@ function redirectTarget(response: Response): string | null {
   return url.pathname + url.search;
 }
 
-describe('middleware', () => {
+describe('proxy', () => {
   it('redirects a request without the session cookie to /login with next', () => {
     expect(redirectTarget(run('/', false))).toBe('/login?next=%2F');
     expect(redirectTarget(run('/members?page=2', false))).toBe('/login?next=%2Fmembers%3Fpage%3D2');

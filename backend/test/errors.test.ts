@@ -9,7 +9,7 @@ import { z } from 'zod';
 import { app, bearer, createUser, login, resetDatabase } from './helpers';
 import { HttpError } from '../src/lib/http-error';
 import { loggerOptions } from '../src/lib/logger';
-import { requestLogger } from '../src/lib/request-logger';
+import { createRequestLogger, requestLogger } from '../src/lib/request-logger';
 import { errorHandler } from '../src/middleware/error-handler';
 import { notFound } from '../src/middleware/not-found';
 
@@ -78,6 +78,12 @@ describe('error handler', () => {
     expect((await request(throwing(known('P1001'))).get('/boom')).status).toBe(500);
   });
 
+  // The pg adapter reports a deadlock (40P01) as P2034. It is not the caller's fault, so it stays
+  // an unhandled 500 that is logged, as under Prisma 6.
+  it('answers a deadlock (P2034) with 500', async () => {
+    expect((await request(throwing(known('P2034'))).get('/boom')).status).toBe(500);
+  });
+
   it('maps a missing record in the real app to 404', async () => {
     await resetDatabase();
     await createUser({ email: 'errors-admin@errors.test.local', role: 'admin' });
@@ -97,6 +103,35 @@ describe('error handler', () => {
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: 'Not found' });
     expect(res.headers['x-request-id']).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it('logs one JSON line per request under the id sent in X-Request-Id', async () => {
+    const lines: string[] = [];
+    const sink = new Writable({
+      write(chunk: Buffer, _enc, done) {
+        lines.push(chunk.toString());
+        done();
+      },
+    });
+    const mini = express();
+    mini.use(
+      createRequestLogger(pino({ ...loggerOptions, level: 'info', transport: undefined }, sink)),
+    );
+    mini.get('/ok', (_req, res) => {
+      res.json({ ok: true });
+    });
+    mini.use(notFound);
+    mini.use(errorHandler);
+
+    const first = await request(mini).get('/ok?email=someone%40example.com');
+    const second = await request(mini).get('/missing');
+    const logged = lines.map((line) => JSON.parse(line) as { req: { id: string; path: string } });
+    expect(logged.map((entry) => [entry.req.id, entry.req.path])).toEqual([
+      [first.headers['x-request-id'], '/ok'],
+      [second.headers['x-request-id'], '/missing'],
+    ]);
+    expect(first.headers['x-request-id']).not.toBe(second.headers['x-request-id']);
+    expect(lines.join('')).not.toContain('someone');
   });
 });
 

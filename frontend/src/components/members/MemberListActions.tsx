@@ -12,7 +12,8 @@ export const PANEL_IDS: Record<OpenPanel, string> = {
 interface MemberListActionsProps {
   panel: SearchPanel;
   /** The toggle buttons; focus returns to the one that opened a panel when it closes. */
-  toggleRefs: Record<OpenPanel, RefObject<HTMLButtonElement | null>>;
+  advancedToggleRef: RefObject<HTMLButtonElement | null>;
+  savedToggleRef: RefObject<HTMLButtonElement | null>;
   onTogglePanel: (panel: OpenPanel) => void;
   selectedCount: number;
   onExport: () => void;
@@ -25,7 +26,8 @@ const open = 'bg-blue-600 text-white';
 /** Staff buttons beside the member search: advanced search, saved searches and export. */
 export default function MemberListActions({
   panel,
-  toggleRefs,
+  advancedToggleRef,
+  savedToggleRef,
   onTogglePanel,
   selectedCount,
   onExport,
@@ -34,7 +36,7 @@ export default function MemberListActions({
     <>
       <button
         type="button"
-        ref={toggleRefs.advanced}
+        ref={advancedToggleRef}
         aria-expanded={panel === 'advanced'}
         aria-controls={PANEL_IDS.advanced}
         onClick={() => onTogglePanel('advanced')}
@@ -44,7 +46,7 @@ export default function MemberListActions({
       </button>
       <button
         type="button"
-        ref={toggleRefs.saved}
+        ref={savedToggleRef}
         aria-expanded={panel === 'saved'}
         aria-controls={PANEL_IDS.saved}
         onClick={() => onTogglePanel('saved')}
