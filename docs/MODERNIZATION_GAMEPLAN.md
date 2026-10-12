@@ -1,6 +1,6 @@
 # Church Network App: Modernization Gameplan
 
-Date: 2026-10-03. Status: APPROVED 2026-10-04 (initial scope = Phase 0 + Phase 1). Phase 0 implemented on branch `modernize/phase-0`; Phases 0, 1 and 2 are merged into `main` (PRs #1, #2, #3, merged 2026-10-05). Phase 3 is merged into `main` (PR #9, merged 2026-10-07). Phase 4 is merged into `main` (PR #10, merged 2026-10-12). Phase 5 (features) is specified in `PHASE5_SPECS.md`, a draft awaiting the owner's decisions P5-D1 to P5-D12.
+Date: 2026-10-03. Status: APPROVED 2026-10-04 (initial scope = Phase 0 + Phase 1). Phase 0 implemented on branch `modernize/phase-0`; Phases 0, 1 and 2 are merged into `main` (PRs #1, #2, #3, merged 2026-10-05). Phase 3 is merged into `main` (PR #9, merged 2026-10-07). Phase 4 is merged into `main` (PR #10, merged 2026-10-12). Phase 5 (features) is specified in `PHASE5_SPECS.md` (approved 2026-10-12 with every recommendation) and is being implemented as PRs 5A, 5B and 5C.
 
 Owner decisions (2026-10-04): D1 Postgres, moved up to the start of Phase 1 (switching the Prisma provider regenerates the migration history, so it follows the Phase 0 security fixes rather than preceding them). D2 registration requires admin approval. D3 httpOnly cookie sessions. D6 delete the lifecycle-automation tables. Remaining decisions take the recommendation unless the owner says otherwise.
 
@@ -306,13 +306,13 @@ Adversarial reviews:
   - The compose-mode backup runs in CI.
   - The README now says how to restore into an empty database and in which order to revert upgrades.
 
-### Phase 5: features (about 3.5 weeks; draft, awaiting owner decisions)
+### Phase 5: features (about 3.5 weeks)
 
-Goal: deliver the features the README claims and that Phases 0 to 4 left as schema only, on the tested foundations above. Detailed items, contracts, the authorization matrix and decisions P5-D1 to P5-D12 are in `PHASE5_SPECS.md`. Three sequential PRs, each branched from `main` after the previous one merges (recommended P5-D1).
+Goal: deliver the features the README claims and that Phases 0 to 4 left as schema only, on the tested foundations above. Detailed items, contracts, the authorization matrix and decisions P5-D1 to P5-D12 are in `PHASE5_SPECS.md` (approved 2026-10-12 with every recommendation). Three sequential PRs, each branched from `main` after the previous one merges (P5-D1).
 
 - [ ] 5.1 (PR 5A, about 5 days) Organise people: an audit log with an admin page; member tags (manage, assign, filter, staff-only visibility); groups and ministries (directory for everyone, management and rosters for staff, `Group.leaderId` folded into roster roles); families (create, membership, head of family, relationship editing with a database check on pair order, members see their own family); tag, group and family search filters. F066. Spec G1 to G6.
 - [ ] 5.2 (PR 5B, about 3 days) Act on people and content: real bulk actions (tags, groups, activate, deactivate, export, select all matching); a pending-approval filter for registrations; the media approval workflow (member submissions, staff review queue, a `status` replacing `isApproved` and `isPublic`, unapproved items hidden by id). F036. Spec W1 to W3.
-- [ ] 5.3 (PR 5C, about 6 days) Communicate: SMTP mail with Mailpit in development and CI; a database outbox with a retrying, rate-limited worker; compose and history UI for staff; one-click unsubscribe and editable preferences; interaction logging from the profile; a communication score that counts only messages expecting a reply; approval and registration emails; password reset by email, with password changes ending other sessions. SMS deferred (recommended P5-D3). Spec M1 to M8.
+- [ ] 5.3 (PR 5C, about 6 days) Communicate: SMTP mail with Mailpit in development and CI; a database outbox with a retrying, rate-limited worker; compose and history UI for staff; one-click unsubscribe and editable preferences; interaction logging from the profile; a communication score that counts only messages expecting a reply; approval and registration emails; password reset by email, with password changes ending other sessions. SMS deferred (P5-D3). Spec M1 to M8.
 
 Exit criteria: each PR green in CI (including Playwright with axe on every new page and dialog), its migrations proven on a copy of the previous database with no drift and archived values replayed, an adversarial review with every finding fixed, the README updated, then merged into `main`.
 

@@ -1,6 +1,6 @@
 # Phase 5 implementation specifications: features
 
-Companion to `MODERNIZATION_GAMEPLAN.md` section 6, Phase 5. Written by the planner for the implementation agents (Claude Opus 5.5, medium effort). Status: DRAFT 2026-10-12, awaiting owner approval of decisions P5-D1 to P5-D12 (section 4).
+Companion to `MODERNIZATION_GAMEPLAN.md` section 6, Phase 5. Written by the planner for the implementation agents (Claude Opus 5.5, medium effort). Status: APPROVED 2026-10-12 with every recommendation (P5-D1 to P5-D12, section 4).
 
 Phase 5 builds the six features that the README claims and that Phases 0 to 4 left as schema only:
 - groups and ministries
@@ -529,7 +529,7 @@ The analytics job runner keeps its state in memory and runs one job at a time (`
    - 5C adds three lenses: security (tokens, header injection, unsubscribe and reset abuse, secrets in logs), worker correctness (crashes, concurrency, at-least-once delivery), and deliverability and compliance (footer, List-Unsubscribe, opt-out honoured).
 4. **Wrap-up.** Fix the findings and recheck them. Update the README and the gameplan. Push and open the PR into `main`. A final review of the whole PR runs before merge.
 
-## 4. Decisions (awaiting the owner)
+## 4. Decisions (taken 2026-10-12: all recommendations accepted)
 
 | Id | Decision | Options | Recommendation |
 |---|---|---|---|
