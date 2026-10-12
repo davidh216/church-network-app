@@ -45,6 +45,7 @@
     "esbuild": true,
     "prisma": true,
     "unrs-resolver": true,
-    "@prisma/engines": true
+    "@prisma/engines": true,
+    "fsevents": true
   }
 }
