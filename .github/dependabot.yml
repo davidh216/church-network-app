@@ -50,8 +50,9 @@ updates:
       github-actions:
         patterns: ['*']
 
-  # The node:<major>-alpine base images. A Node major is a planned upgrade (.nvmrc, engines,
-  # @types/node and CI move with it), so only minor and patch updates are proposed.
+  # The node:24-alpine base images, pinned by digest in both Dockerfiles: Dependabot proposes the
+  # new digest when the tag is rebuilt (Node patch releases, Alpine fixes). A Node major is a
+  # planned upgrade (.nvmrc, engines, @types/node and CI move with it), so it is never proposed.
   - package-ecosystem: docker
     directories:
       - /backend
@@ -64,3 +65,13 @@ updates:
     groups:
       node-images:
         patterns: [node]
+
+  # The postgres:16-alpine image in docker-compose.yml, pinned by digest the same way. A
+  # PostgreSQL major needs a dump and restore of the data volume, so it is never proposed.
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: postgres
+        update-types: ['version-update:semver-major']

@@ -2,7 +2,9 @@
 # Express API image. Build context is the repository root, because the npm workspace
 # lockfile lives there:  docker build -f backend/Dockerfile .
 
-FROM node:24-alpine AS build
+# Pinned by digest (the multi-arch index of node:24-alpine), so a rebuild uses the same base
+# image; Dependabot proposes new digests weekly (.github/dependabot.yml).
+FROM node:24-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS build
 # Prisma's engines need OpenSSL on Alpine.
 RUN apk add --no-cache openssl
 WORKDIR /app
@@ -21,7 +23,7 @@ COPY backend backend
 # prisma generate, then tsc for src/ (dist/) and prisma/seed.ts (dist/prisma/seed.js)
 RUN npm run -w backend build
 
-FROM node:24-alpine AS runtime
+FROM node:24-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS runtime
 RUN apk add --no-cache openssl
 ENV NODE_ENV=production
 WORKDIR /app
