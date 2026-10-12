@@ -18,8 +18,11 @@ updates:
       - dependency-name: typescript
         update-types: ['version-update:semver-major']
       # The root overrides.eslint has to move together with every workspace's eslint range, and
-      # Dependabot cannot update overrides, so an ESLint major is a manual upgrade.
+      # Dependabot cannot update overrides, so an ESLint major is a manual upgrade. @eslint/js
+      # releases its majors with ESLint's and moves with it.
       - dependency-name: eslint
+        update-types: ['version-update:semver-major']
+      - dependency-name: '@eslint/js'
         update-types: ['version-update:semver-major']
     # Each dependency goes into the first group that matches it, so the named groups (packages
     # that must move together) come before the catch-all.
