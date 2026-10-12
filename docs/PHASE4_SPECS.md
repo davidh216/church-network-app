@@ -119,7 +119,7 @@ The gameplan's exit criterion "a documented rollback for each" is met by this ta
   - Delete `test/setup-env.mts`, the Prisma `.env` block in `test/env-file.test.ts`, and the `setupFiles` entry; Prisma no longer loads `.env`.
   - Update the stale comments in `lib/prisma.ts`.
 - **CI drift check.** The new command, from the repo root, is `SHADOW_DATABASE_URL=postgresql://church:church@localhost:5432/church_test npx -w backend prisma migrate diff --from-migrations prisma/migrations --to-schema prisma/schema.prisma --exit-code`. `--to-schema-datamodel` and `--shadow-database-url` were removed. The shadow database is wiped before use, so `SHADOW_DATABASE_URL` must never equal `DATABASE_URL`. The planner updates the documented command in the specs and README.
-- **Search path (implementation note).** The adapter's `schema` option only qualifies the queries Prisma generates. Prisma 6 also set `search_path` from `?schema=`, so `pgAdapter` adds `options: -c search_path="<schema>"`. That keeps unqualified raw SQL (media search) on the URL's schema, and a migration test pins it. An `options=` parameter in the URL itself would take precedence.
+- **Search path (implementation note).** The adapter's `schema` option only qualifies the queries Prisma generates. Prisma 6 also set `search_path` from `?schema=`, so `pgAdapter` adds `options: -c search_path="<schema>"`. That keeps unqualified raw SQL (media search) on the URL's schema, and a migration test pins it. The schema's `search_path` is appended after any `options` already in the URL. The URL is read by `pgConfigFromUrl` (`backend/src/lib/pg-config.ts`), which keeps Prisma 6's meaning for SSL (libpq `sslmode`, `sslaccept`), pool size (`connection_limit`) and the connection wait (`connect_timeout`, default 5 s, or the larger of it and an explicit `pool_timeout`). A malformed URL stops start-up without echoing it.
 - **mysql2 override (implementation note).** The Prisma 7.10 CLI pins `mysql2` 3.15.3, which has two high advisories. A root `overrides.mysql2: ^3.23.1` keeps `npm audit --omit=dev` at 0. Drop it once Prisma ships a fixed version.
 - **Docker.**
   - Keep `apk add openssl`, which the schema engine needs for `migrate deploy`.
@@ -161,6 +161,10 @@ The gameplan's exit criterion "a documented rollback for each" is met by this ta
   - Restores also use `--no-owner --no-privileges --single-transaction`.
   - libpq rejects Prisma's `?schema=` parameter, so the scripts' helper strips it and passes the password through `PGPASSWORD`.
   - Run the seed and refresh CLI from `backend/`, so `backend/.env` is read.
+  - The TRUST_PROXY check also refuses `0.0.0.0/0` and `::/0`.
+  - The backup scripts pass only libpq parameters to the client tools.
+  - Compose-mode backups are checked inside the database container.
+  - Retention deletes only the script's own file names.
 
 ### U7 Supply chain (S)
 - **Pinned actions.** Pin every GitHub Action in `ci.yml` by commit SHA with a `# vX.Y.Z` comment; Dependabot keeps both current.
@@ -180,7 +184,10 @@ The gameplan's exit criterion "a documented rollback for each" is met by this ta
 - **Accept:** actionlint passes, Dependabot's configuration is valid (GitHub validates it on push), and CI is green.
 
 - **Implementation notes.**
-  - `npm audit signatures` is non-blocking until its first green run on GitHub (the sandbox cannot reach sigstore's CDN).
+  - `npm audit signatures` is blocking; it passed on GitHub's runners.
+  - The Node and PostgreSQL base images are pinned by digest, so Dependabot's docker and docker-compose entries can update them.
+  - Dependabot ignores `@eslint/js` majors together with ESLint's.
+  - `allowScripts` also lists fsevents for macOS.
   - The root `allowScripts` lists esbuild, prisma, @prisma/engines and unrs-resolver; npm 11.21 treats it as advisory.
   - Dependabot also ignores ESLint majors, because the root override must move with the workspace ranges.
 

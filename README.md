@@ -181,13 +181,24 @@ Staff can also start it from the Analytics page.
 **Configuration in production.** With `NODE_ENV=production` the API refuses to start when:
 - `CORS_ORIGIN` is unset, or any origin is not `https://`. Plain-HTTP origins are accepted only with `COOKIE_SECURE=false`, as the local compose stack sets.
 - `JWT_SECRET` is weak: one repeated character, fewer than 10 distinct characters, or containing `changeme`, `secret` or `example`. Generate one with `openssl rand -base64 48`.
-- `TRUST_PROXY=true`. Use a hop count or an address or subnet list instead.
+- `TRUST_PROXY` is `true` or names `0.0.0.0/0` or `::/0`. Use a hop count or the proxy's address or subnet instead.
+
+**DATABASE_URL.** The API reads it as Prisma 6 did, through the `pg` driver:
+- **SSL** follows libpq. `sslmode=require` and `prefer` encrypt without checking the certificate, and `verify-ca` and `verify-full` check it; `sslaccept=strict` or `accept_invalid_certs` override that. With no `sslmode` the connection is plain, so a server that only accepts TLS needs `sslmode=require` or stricter.
+- **Pool.** `connection_limit` sets the pool size (default CPUs × 2 + 1). Waiting for a connection is limited by `connect_timeout` (default 5 s), or by the larger of it and `pool_timeout` when that is set.
+- **Schema.** `schema` (default `public`) must be a plain identifier. `options` in the URL are kept. `socket_timeout`, `pgbouncer`, `statement_cache_size`, `sslidentity` and `sslpassword` are ignored.
+- **Malformed URLs.** A malformed URL stops start-up with a message that never shows it. Percent-encode special characters in the password.
 
 **Single instance.** Run one API instance: the engagement refresh job keeps its status in the API process.
 
 **Logs.** The API writes one JSON line per request to stdout, so collect stdout (`docker compose logs api` or your platform's log collector). Compose rotates the api and web logs (json-file, 5 files of 10 MB). Every response carries an `X-Request-Id` header. It equals the `req.id` of its log line and the `requestId` in a 500 body, so ask users for it when they report an error.
 
-**Backups.** `scripts/db-backup.sh <dir>` writes `church-<UTC timestamp>.dump` (`pg_dump -Fc`, file mode 600), checks that the dump can be read, and deletes backups older than `RETENTION_DAYS` (default 14). It uses `DATABASE_URL` when set, otherwise `docker compose exec db`. `pg_dump` on the host must be at least the server's major version. Run it nightly, for example from cron:
+**Backups.** `scripts/db-backup.sh <dir>` writes `church-<UTC timestamp>.dump` (`pg_dump -Fc`, file mode 600), checks that the dump can be read, and deletes backups older than `RETENTION_DAYS` (default 14). It uses `DATABASE_URL` when set, otherwise `docker compose exec db`.
+- **Host client.** With `DATABASE_URL`, the host's `pg_dump` and `pg_restore` must be at least the server's major version. Compose mode needs no client tools on the host.
+- **Password.** When the URL has no password, `PGPASSWORD` or `~/.pgpass` is used.
+- **What retention deletes.** Only the script's own file names, plus partial files older than a day, so other files in the directory are safe.
+
+Run it nightly, for example from cron:
 
 ```cron
 15 2 * * * cd /srv/church-network-app && scripts/db-backup.sh /var/backups/church >> /var/log/church-backup.log 2>&1
@@ -222,7 +233,7 @@ npm run format:check                                             # prettier
 npx -w frontend playwright install chromium                     # once; CI does this itself
 E2E_WEB_PORT=3111 E2E_API_PORT=5111 npm run -w frontend test:e2e # Playwright suite; starts both dev servers and needs SEED_ADMIN_* in backend/.env
 ```
-A husky pre-commit hook runs lint-staged (eslint --fix and prettier on staged files). CI (`.github/workflows/ci.yml`) runs on pull requests and on pushes to `main` and `modernize/**`. It runs typecheck, lint, format check, tests against a Postgres service, builds, the compiled seed, a migration drift check (`SHADOW_DATABASE_URL=... npx -w backend prisma migrate diff --from-migrations prisma/migrations --to-schema prisma/schema.prisma --exit-code`) and a production audit (`npm audit --omit=dev --audit-level=high`; `npm audit signatures` is non-blocking for now). It also runs the Playwright suite followed by a backup and restore drill, and an Images job that builds both Dockerfiles and smoke-tests the compose stack (health, login page, sign-in through the web app, refresh CLI, and 503 within 10 seconds of the database stopping). Actions are pinned by commit SHA. Dependabot updates them weekly together with npm (7-day cooldown, 14 days for majors) and the Node base images.
+A husky pre-commit hook runs lint-staged (eslint --fix and prettier on staged files). CI (`.github/workflows/ci.yml`) runs on pull requests and on pushes to `main` and `modernize/**`. It runs typecheck, lint, format check, tests against a Postgres service, builds, the compiled seed, a migration drift check (`SHADOW_DATABASE_URL=... npx -w backend prisma migrate diff --from-migrations prisma/migrations --to-schema prisma/schema.prisma --exit-code`) and a production audit (`npm audit --omit=dev --audit-level=high`; `npm audit signatures`). It also runs the Playwright suite followed by a backup and restore drill, and an Images job that builds both Dockerfiles and smoke-tests the compose stack (health, login page, sign-in through the web app, refresh CLI, and 503 within 10 seconds of the database stopping). Actions are pinned by commit SHA. Dependabot updates them weekly together with npm (7-day cooldown, 14 days for majors) and the digest-pinned Node and PostgreSQL images.
 
 ## 📁 Project Structure
 
