@@ -1,3 +1,4 @@
+import proxyaddr from 'proxy-addr';
 import { z } from 'zod';
 import { DatabaseUrlError, INVALID_DATABASE_URL, pgConfigFromUrl } from '../lib/pg-config';
 
@@ -51,8 +52,14 @@ const fields = z.object({
 });
 
 const DEV_CORS_ORIGIN = 'http://localhost:3000';
-// Subnets that cover every address: in TRUST_PROXY they trust any client.
-const TRUST_EVERYONE = ['0.0.0.0/0', '::/0'];
+// Public addresses from both halves of an address family (IPv4; IPv6; an IPv4-mapped IPv6
+// address with an IPv4 one). A TRUST_PROXY list that trusts both of a pair trusts (nearly) every
+// client, such as 0.0.0.0/1,128.0.0.0/1 or ::ffff:0:0/96.
+const PUBLIC_ADDRESS_PAIRS = [
+  ['1.1.1.1', '129.0.0.1'],
+  ['2001:db8::1', '8000::1'],
+  ['::ffff:8.8.8.8', '129.0.0.1'],
+] as const;
 
 export function splitOrigins(value: string): string[] {
   return value
@@ -98,21 +105,30 @@ function productionRules(config: Fields, ctx: z.RefinementCtx) {
     issue('JWT_SECRET', `JWT_SECRET ${weak}; use a random value, e.g. openssl rand -base64 48`);
   }
 
-  if (config.TRUST_PROXY.toLowerCase() === 'true') {
+  const trustProxy = config.TRUST_PROXY;
+  if (trustProxy.toLowerCase() === 'true') {
     issue(
       'TRUST_PROXY',
       'TRUST_PROXY=true trusts any client-sent X-Forwarded-For; set a hop count or an address/subnet list',
     );
-  }
-  // The same as true for every IPv4 or IPv6 client, wherever they appear in the list.
-  const everyone = config.TRUST_PROXY.split(',')
-    .map((entry) => entry.trim())
-    .filter((entry) => TRUST_EVERYONE.includes(entry));
-  if (everyone.length > 0) {
-    issue(
-      'TRUST_PROXY',
-      `TRUST_PROXY ${everyone.join(', ')} trusts any client-sent X-Forwarded-For; list only the proxies' addresses or subnets`,
-    );
+  } else if (typeof parseTrustProxy(trustProxy) === 'string') {
+    // Compiled the way Express compiles it at app.set('trust proxy'), so a value it rejects is a
+    // configuration error here rather than a crash at start-up.
+    let trusts: ((addr: string, i: number) => boolean) | undefined;
+    try {
+      trusts = proxyaddr.compile(trustProxy.split(',').map((entry) => entry.trim()));
+    } catch (error) {
+      issue(
+        'TRUST_PROXY',
+        `TRUST_PROXY must be a hop count or a list of addresses, subnets or loopback, linklocal, uniquelocal (${(error as Error).message})`,
+      );
+    }
+    if (trusts && PUBLIC_ADDRESS_PAIRS.some((pair) => pair.every((addr) => trusts(addr, 0)))) {
+      issue(
+        'TRUST_PROXY',
+        "TRUST_PROXY trusts (nearly) every address; list only your proxy's address or subnet",
+      );
+    }
   }
 }
 

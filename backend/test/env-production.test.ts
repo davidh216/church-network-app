@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 
 // PHASE4_SPECS.md U6: under NODE_ENV=production, env.ts refuses a missing or plain-HTTP
-// CORS_ORIGIN, a weak JWT_SECRET and TRUST_PROXY=true (or a list naming 0.0.0.0/0 or ::/0), and
-// exits with the usual message. Each test stubs the environment and loads env.ts afresh;
+// CORS_ORIGIN, a weak JWT_SECRET, TRUST_PROXY=true, a TRUST_PROXY value Express cannot compile and
+// one that trusts (nearly) every address, and exits with the usual message. Each test stubs the environment and loads env.ts afresh;
 // backend/.env is not read (loadEnvFile is mocked), so a developer's own settings cannot change
 // the outcome.
 const STRONG_SECRET = 'q8Vb3NfLr0Tz7WcYp2HdKm5XsJ9aGu4E';
@@ -135,20 +135,42 @@ describe('production configuration', () => {
     }
   });
 
-  it.each(['0.0.0.0/0', '::/0', 'loopback, 0.0.0.0/0', ' ::/0 ,10.0.0.0/8', '0.0.0.0/0,::/0'])(
-    'refuses a TRUST_PROXY list that trusts every address (%j)',
+  it.each([
+    '::ffff:0:0/96',
+    '0.0.0.0/1,128.0.0.0/1',
+    '::/1,8000::/1',
+    'loopback, ::ffff:0.0.0.0/97, 128.0.0.0/1',
+  ])('refuses a TRUST_PROXY list that trusts (nearly) every address (%j)', async (value) => {
+    const message = await refused({ ...COMPOSE, TRUST_PROXY: value });
+    expect(message).toContain(
+      "TRUST_PROXY trusts (nearly) every address; list only your proxy's address or subnet",
+    );
+    expect(message).toContain('→ at TRUST_PROXY');
+  });
+
+  it.each(['0.0.0.0/0', '::/0', 'loopback,', '10.0.0.0/33', 'proxy.example.org', 'FALSE'])(
+    'refuses a TRUST_PROXY value Express cannot compile (%j) instead of crashing later',
     async (value) => {
       const message = await refused({ ...COMPOSE, TRUST_PROXY: value });
-      expect(message).toContain('trusts any client-sent X-Forwarded-For');
+      expect(message).toContain('TRUST_PROXY must be a hop count or a list of addresses');
       expect(message).toContain('→ at TRUST_PROXY');
     },
   );
 
-  it('accepts subnets that only look like the catch-all ones', async () => {
-    for (const value of ['10.0.0.0/8', '0.0.0.0/8', '::1/128', 'fd00::/8']) {
+  it('accepts private subnets, a CDN-style list of public ranges and a hop count', async () => {
+    for (const [value, expected] of [
+      ['10.0.0.0/8', '10.0.0.0/8'],
+      ['loopback, uniquelocal', 'loopback, uniquelocal'],
+      [
+        '173.245.48.0/20, 104.16.0.0/13, 172.64.0.0/13, 2606:4700::/32',
+        '173.245.48.0/20, 104.16.0.0/13, 172.64.0.0/13, 2606:4700::/32',
+      ],
+      ['0.0.0.0/8, ::1/128, fd00::/8', '0.0.0.0/8, ::1/128, fd00::/8'],
+      ['1', 1],
+    ] as const) {
       vi.resetModules();
       const { trustProxy } = await loadEnv({ ...COMPOSE, TRUST_PROXY: value });
-      expect(trustProxy).toBe(value);
+      expect(trustProxy).toBe(expected);
     }
     expect(exit).not.toHaveBeenCalled();
   });
