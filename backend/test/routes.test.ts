@@ -421,6 +421,14 @@ const ROUTES: Route[] = [
     body: () => ({ present: [ids.member], absent: [ids.other] }),
     status: 200,
   },
+
+  {
+    route: 'GET /api/audit',
+    access: 'admin',
+    as: 'admin',
+    url: () => '/api/audit?action=user_role_changed&from=2026-01-01',
+    status: 200,
+  },
 ];
 
 const methodOf = (r: Route) =>

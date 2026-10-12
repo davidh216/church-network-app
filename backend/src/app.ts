@@ -19,6 +19,7 @@ import memberDetailsRoutes, {
   selfRouter as memberSelfRoutes,
 } from './modules/member-details/router';
 import servicesRoutes from './modules/services/router';
+import auditRoutes from './modules/audit/router';
 
 // package.json sits one level above both src/ (tsx) and dist/ (node).
 const { version } = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8')) as {
@@ -69,6 +70,8 @@ export function createApp() {
     memberDetailsRoutes,
   );
   app.use('/api/services', authenticate, requireRole(...STAFF), servicesRoutes);
+  // The audit log is admin-only (PHASE5_SPECS.md 1.2).
+  app.use('/api/audit', authenticate, requireRole('admin'), auditRoutes);
 
   app.use(notFound);
   app.use(errorHandler);

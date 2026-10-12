@@ -91,7 +91,7 @@ router.post(
   requireRole('admin'),
   validate({ params: idParams, body: resetPasswordInput }),
   async (req, res) => {
-    await users.resetPassword(req.params.id, req.body.newPassword);
+    await users.resetPassword(req.user!, req.params.id, req.body.newPassword);
     res.json({ success: true, message: 'Password reset.' });
   },
 );

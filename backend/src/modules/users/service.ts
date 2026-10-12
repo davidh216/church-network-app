@@ -7,6 +7,7 @@ import type {
   searchQuery,
   updateUserInput,
 } from '@embrace/shared';
+import { audit } from '../../lib/audit';
 import { prisma } from '../../lib/prisma';
 import { HttpError } from '../../lib/http-error';
 import { assertPasswordNotEmail } from '../../lib/password-policy';
@@ -154,20 +155,20 @@ export function toCsv(rows: ExportRow[]): string {
 
 // Resolves requested role ids (defaulting to `member`). Staff may create members,
 // but only an admin may grant any role other than `member`.
-async function resolveRoleIds(
+async function resolveRoles(
   roleIds: string[] | undefined,
   requesterIsAdmin: boolean,
-): Promise<string[]> {
+): Promise<{ id: string; name: string }[]> {
   if (!roleIds || roleIds.length === 0) {
     const member = await prisma.role.findUnique({ where: { name: 'member' } });
-    return member ? [member.id] : [];
+    return member ? [{ id: member.id, name: member.name }] : [];
   }
   const roles = await prisma.role.findMany({ where: { id: { in: roleIds } } });
   if (roles.length !== new Set(roleIds).size) throw new HttpError(400, 'Unknown role id');
   if (!requesterIsAdmin && roles.some((r) => r.name !== 'member')) {
     throw new HttpError(403, 'Only an admin can grant staff roles');
   }
-  return roles.map((r) => r.id);
+  return roles.map((r) => ({ id: r.id, name: r.name }));
 }
 
 // Staff create members directly (active by default, roles assigned).
@@ -179,7 +180,7 @@ export async function createUser(
   if (await prisma.user.findUnique({ where: { email }, select: { id: true } })) {
     throw new HttpError(409, 'A user with this email already exists');
   }
-  const roleIds = await resolveRoleIds(body.roleIds, isAdmin(requester));
+  const roleIds = (await resolveRoles(body.roleIds, isAdmin(requester))).map((r) => r.id);
   return prisma.user.create({
     data: {
       name: body.name,
@@ -239,7 +240,11 @@ export async function updateUser(
 
   const target = await prisma.user.findUnique({
     where: { id },
-    select: { id: true, roles: { select: { role: { select: { name: true } } } } },
+    select: {
+      id: true,
+      isActive: true,
+      roles: { select: { role: { select: { id: true, name: true } } } },
+    },
   });
   if (!target) throw new HttpError(404, 'User not found');
   if (!admin && !self && target.roles.some((ur) => STAFF_ROLE_NAMES.includes(ur.role.name))) {
@@ -248,41 +253,64 @@ export async function updateUser(
   if (admin && self && body.isActive === false)
     throw new HttpError(403, 'You cannot lock yourself out');
 
-  let roleIds: string[] | undefined;
+  let roles: { id: string; name: string }[] | undefined;
   if (body.roleIds !== undefined) {
-    roleIds = await resolveRoleIds(body.roleIds, admin);
+    roles = await resolveRoles(body.roleIds, admin);
     const ownAdminRoleId = adminRoleId(requester);
-    if (admin && self && (!ownAdminRoleId || !roleIds.includes(ownAdminRoleId))) {
+    if (admin && self && (!ownAdminRoleId || !roles.some((r) => r.id === ownAdminRoleId))) {
       throw new HttpError(403, 'You cannot lock yourself out');
     }
   }
+  const roleIds = roles?.map((r) => r.id);
 
-  return prisma.user.update({
-    where: { id },
-    data: {
-      name: body.name,
-      firstName: body.firstName,
-      lastName: body.lastName,
-      phone: body.phone,
-      bio: body.bio,
-      volunteerSkills: body.volunteerSkills,
-      interests: body.interests,
-      isActive: body.isActive,
-      roles: roleIds
-        ? { deleteMany: {}, create: roleIds.map((roleId) => ({ roleId })) }
-        : undefined,
-    },
-    // A non-staff requester can only update themself and gets the self projection back.
-    select: isStaff(requester) ? staffSelect : selfSelect,
+  // Audited (PHASE5_SPECS.md 1.3): a change of roles and a change of account status.
+  const oldRoleNames = target.roles.map((ur) => ur.role.name).sort();
+  const newRoleNames = roles?.map((r) => r.name).sort();
+  const rolesChanged = !!newRoleNames && newRoleNames.join() !== oldRoleNames.join();
+  const statusChanged = body.isActive !== undefined && body.isActive !== target.isActive;
+
+  return prisma.$transaction(async (tx) => {
+    const user = await tx.user.update({
+      where: { id },
+      data: {
+        name: body.name,
+        firstName: body.firstName,
+        lastName: body.lastName,
+        phone: body.phone,
+        bio: body.bio,
+        volunteerSkills: body.volunteerSkills,
+        interests: body.interests,
+        isActive: body.isActive,
+        roles: roleIds
+          ? { deleteMany: {}, create: roleIds.map((roleId) => ({ roleId })) }
+          : undefined,
+      },
+      // A non-staff requester can only update themself and gets the self projection back.
+      select: isStaff(requester) ? staffSelect : selfSelect,
+    });
+    const subject = { type: 'user', id } as const;
+    if (rolesChanged)
+      await audit(tx, requester, 'user_role_changed', subject, {
+        metadata: { from: oldRoleNames, to: newRoleNames },
+      });
+    if (statusChanged)
+      await audit(tx, requester, body.isActive ? 'user_activated' : 'user_deactivated', subject);
+    return user;
   });
 }
 
-export async function resetPassword(id: string, newPassword: string): Promise<void> {
+// An admin sets a new password for another account; audited without any password data.
+export async function resetPassword(
+  requester: AuthenticatedUser,
+  id: string,
+  newPassword: string,
+): Promise<void> {
   const user = await prisma.user.findUnique({ where: { id }, select: { email: true } });
   if (!user) throw new HttpError(404, 'User not found');
   assertPasswordNotEmail(newPassword, user.email, 'newPassword');
-  await prisma.user.update({
-    where: { id },
-    data: { password: await bcrypt.hash(newPassword, 10) },
+  const password = await bcrypt.hash(newPassword, 10);
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({ where: { id }, data: { password } });
+    await audit(tx, requester, 'user_password_reset_by_admin', { type: 'user', id });
   });
 }
