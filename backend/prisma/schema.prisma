@@ -453,6 +453,7 @@ model MemberTag {
   
   // Timestamps
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
   
   // Relations
   memberTags UserTag[]

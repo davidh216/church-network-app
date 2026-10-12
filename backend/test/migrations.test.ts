@@ -1778,3 +1778,58 @@ describe('a Phase 2 database upgraded by prisma migrate deploy (whole chain)', (
     }
   });
 });
+
+describe('20261012010000_member_tag_updated_at (G2)', () => {
+  const schema = 'fixture_g2_tag_updated_at';
+  const rows = <T>(sql: string) => prisma.$queryRawUnsafe<T[]>(sql.replaceAll('$s', schema));
+
+  beforeAll(() => {
+    migrateFixture(
+      schema,
+      '20261012010000_member_tag_updated_at',
+      `
+      INSERT INTO "member_tags" ("id", "name", "color", "category", "isActive", "createdAt") VALUES
+        ('t1', 'Choir', '#112233', 'ministry', true, '2025-01-02 03:04:05.678'),
+        ('t2', 'Retired', '#3B82F6', 'status', false, '2024-06-30 00:00:00');
+      `,
+    );
+  }, 60_000);
+
+  afterAll(() => dropSchema(schema));
+
+  it('starts every existing tag with updatedAt = createdAt and keeps the other values', async () => {
+    expect(
+      await rows(
+        `SELECT "id", "name", "color", "category"::text AS category, "isActive",
+                "updatedAt" = "createdAt" AS same
+         FROM "$s"."member_tags" ORDER BY "id"`,
+      ),
+    ).toEqual([
+      {
+        id: 't1',
+        name: 'Choir',
+        color: '#112233',
+        category: 'ministry',
+        isActive: true,
+        same: true,
+      },
+      {
+        id: 't2',
+        name: 'Retired',
+        color: '#3B82F6',
+        category: 'status',
+        isActive: false,
+        same: true,
+      },
+    ]);
+  });
+
+  it('leaves no default on the column (Prisma sets it on every write)', async () => {
+    expect(
+      await rows(
+        `SELECT column_default, is_nullable FROM information_schema.columns
+         WHERE table_schema = '$s' AND table_name = 'member_tags' AND column_name = 'updatedAt'`,
+      ),
+    ).toEqual([{ column_default: null, is_nullable: 'NO' }]);
+  });
+});
