@@ -20,6 +20,8 @@ const fields = z.object({
     .string()
     .min(1, 'DATABASE_URL is required')
     .superRefine((url, ctx) => {
+      // An empty value is already reported by min(1).
+      if (!url) return;
       try {
         pgConfigFromUrl(url);
       } catch (error) {

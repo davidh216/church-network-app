@@ -55,6 +55,21 @@ describe('DATABASE_URL', () => {
     expect(stderr).toContain('schema must be a plain identifier');
   });
 
+  it('reports an empty DATABASE_URL once', async () => {
+    await expect(loadWith('')).rejects.toThrow(Exit);
+    expect(stderr).toContain('DATABASE_URL is required');
+    expect(stderr.match(/→ at DATABASE_URL/g)).toHaveLength(1);
+  });
+
+  it('refuses an unencoded # without printing the password', async () => {
+    await expect(
+      loadWith('postgresql://church:Sup3r#S3cret@db.example.org:5432/church'),
+    ).rejects.toThrow(Exit);
+    expect(stderr).toContain('percent-encode # in the password');
+    expect(stderr).not.toContain('Sup3r');
+    expect(stderr).not.toContain('S3cret');
+  });
+
   it('accepts a unix-socket URL', async () => {
     const { env } = await loadWith('postgresql://church@/church_dev?host=/var/run/postgresql');
     expect(env.DATABASE_URL).toBe('postgresql://church@/church_dev?host=/var/run/postgresql');
