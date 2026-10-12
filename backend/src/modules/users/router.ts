@@ -1,5 +1,6 @@
 import express from 'express';
 import {
+  assignTagInput,
   createUserInput,
   listUsersQuery,
   resetPasswordInput,
@@ -11,7 +12,8 @@ import { isAdmin, isStaff, requireRole, STAFF } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
 import { HttpError } from '../../lib/http-error';
 import savedSearchRoutes from '../saved-searches/router';
-import { exportQuery, idParams, summaryQuery } from './schemas';
+import { assignTag, unassignTag } from '../tags/service';
+import { exportQuery, idParams, summaryQuery, userTagParams } from './schemas';
 import * as users from './service';
 
 const router = express.Router();
@@ -93,6 +95,29 @@ router.post(
   async (req, res) => {
     await users.resetPassword(req.user!, req.params.id, req.body.newPassword);
     res.json({ success: true, message: 'Password reset.' });
+  },
+);
+
+// Tag assignment (staff, PHASE5_SPECS.md G2). Assigning is idempotent (`added` says whether
+// anything changed); both answer with the member's tags.
+router.post(
+  '/:id/tags',
+  requireRole(...STAFF),
+  validate({ params: idParams, body: assignTagInput }),
+  async (req, res) => {
+    res.json({ success: true, ...(await assignTag(req.user!, req.params.id, req.body.tagId)) });
+  },
+);
+
+router.delete(
+  '/:id/tags/:tagId',
+  requireRole(...STAFF),
+  validate({ params: userTagParams }),
+  async (req, res) => {
+    res.json({
+      success: true,
+      ...(await unassignTag(req.user!, req.params.id, req.params.tagId)),
+    });
   },
 );
 

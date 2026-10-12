@@ -35,9 +35,14 @@ export const selfSelect = {
   roles: { include: { role: true } },
 } satisfies Prisma.UserSelect;
 
-// What admins and leaders see (and what the member list is built around).
+// What admins and leaders see (and what the member list is built around). Tags are staff-only
+// (P5-D12): never add them to selfSelect or directorySelect.
 export const staffSelect = {
   ...selfSelect,
+  memberTags: {
+    select: { tag: { select: { id: true, name: true, color: true, isActive: true } } },
+    orderBy: [{ tag: { name: 'asc' } }, { id: 'asc' }],
+  },
   engagement: {
     select: {
       engagementScore: true,

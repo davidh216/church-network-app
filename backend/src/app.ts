@@ -20,6 +20,7 @@ import memberDetailsRoutes, {
 } from './modules/member-details/router';
 import servicesRoutes from './modules/services/router';
 import auditRoutes from './modules/audit/router';
+import tagsRoutes from './modules/tags/router';
 
 // package.json sits one level above both src/ (tsx) and dist/ (node).
 const { version } = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8')) as {
@@ -70,6 +71,8 @@ export function createApp() {
     memberDetailsRoutes,
   );
   app.use('/api/services', authenticate, requireRole(...STAFF), servicesRoutes);
+  // Tags are staff-only, members never see them (P5-D12).
+  app.use('/api/tags', authenticate, requireRole(...STAFF), tagsRoutes);
   // The audit log is admin-only (PHASE5_SPECS.md 1.2).
   app.use('/api/audit', authenticate, requireRole('admin'), auditRoutes);
 

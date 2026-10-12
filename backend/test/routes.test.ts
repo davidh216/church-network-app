@@ -68,7 +68,10 @@ const ids = {} as Record<
   | 'searchToDelete'
   | 'service'
   | 'serviceToDelete'
-  | 'job',
+  | 'job'
+  | 'tag'
+  | 'tagToDelete'
+  | 'assignedTag',
   string
 >;
 
@@ -422,6 +425,46 @@ const ROUTES: Route[] = [
     status: 200,
   },
 
+  { route: 'GET /api/tags', access: 'staff', as: 'leader', url: () => '/api/tags', status: 200 },
+  {
+    route: 'POST /api/tags',
+    access: 'staff',
+    as: 'leader',
+    url: () => '/api/tags',
+    body: () => ({ name: 'Youth', color: '#10B981', category: 'demographic' }),
+    status: 201,
+  },
+  {
+    route: 'PATCH /api/tags/:id',
+    access: 'staff',
+    as: 'leader',
+    url: () => `/api/tags/${ids.tag}`,
+    body: () => ({ color: '#EF4444' }),
+    status: 200,
+  },
+  {
+    route: 'DELETE /api/tags/:id',
+    access: 'admin',
+    as: 'admin',
+    url: () => `/api/tags/${ids.tagToDelete}`,
+    status: 200,
+  },
+  {
+    route: 'POST /api/users/:id/tags',
+    access: 'staff',
+    as: 'leader',
+    url: () => `/api/users/${ids.member}/tags`,
+    body: () => ({ tagId: ids.tag }),
+    status: 200,
+  },
+  {
+    route: 'DELETE /api/users/:id/tags/:tagId',
+    access: 'staff',
+    as: 'leader',
+    url: () => `/api/users/${ids.member}/tags/${ids.assignedTag}`,
+    status: 200,
+  },
+
   {
     route: 'GET /api/audit',
     access: 'admin',
@@ -432,7 +475,7 @@ const ROUTES: Route[] = [
 ];
 
 const methodOf = (r: Route) =>
-  r.route.split(' ')[0]!.toLowerCase() as 'get' | 'post' | 'put' | 'delete';
+  r.route.split(' ')[0]!.toLowerCase() as 'get' | 'post' | 'put' | 'patch' | 'delete';
 
 let app: Express;
 
@@ -493,6 +536,10 @@ describe('route matrix', () => {
         data: { date: new Date('2026-08-30T00:00:00.000Z'), type: 'sunday_service' },
       })
     ).id;
+    ids.tag = (await prisma.memberTag.create({ data: { name: 'Choir' } })).id;
+    ids.tagToDelete = (await prisma.memberTag.create({ data: { name: 'Doomed tag' } })).id;
+    ids.assignedTag = (await prisma.memberTag.create({ data: { name: 'Assigned' } })).id;
+    await prisma.userTag.create({ data: { userId: ids.member, tagId: ids.assignedTag } });
     const jobs = await import('../src/modules/analytics/jobs.js');
     ids.job = jobs.startEngagementRefresh().job.jobId;
     await jobs.engagementRefreshIdle();

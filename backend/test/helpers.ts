@@ -13,6 +13,8 @@ export async function resetDatabase() {
   // A refresh-all job started by an earlier test must not write while the tables are emptied.
   await engagementRefreshIdle();
   await prisma.auditEvent.deleteMany();
+  await prisma.userTag.deleteMany();
+  await prisma.memberTag.deleteMany();
   await prisma.engagementSnapshot.deleteMany();
   await prisma.memberNote.deleteMany();
   await prisma.memberInteraction.deleteMany();

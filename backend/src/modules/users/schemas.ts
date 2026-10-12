@@ -4,6 +4,8 @@ import { idParams } from '../../lib/schemas';
 
 export { idParams };
 
+export const userTagParams = z.object({ id: cuid, tagId: cuid });
+
 export const exportQuery = z.object({
   format: z.enum(['csv', 'json']).default('csv'),
   // Comma-separated member ids; without it every active member is exported.

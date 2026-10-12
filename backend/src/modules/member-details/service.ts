@@ -92,7 +92,11 @@ export async function getMemberDetails(id: string, viewer: AuthenticatedUser) {
         take: 20,
         include: { author: person },
       },
-      memberTags: { include: { tag: true } },
+      // Staff only (P5-D12); archived tags stay listed with isActive false.
+      memberTags: {
+        orderBy: [{ tag: { name: 'asc' } }, { id: 'asc' }],
+        include: { tag: true, addedBy: person },
+      },
     },
   });
   if (!user) throw new HttpError(404, 'User not found');
