@@ -49,6 +49,8 @@ const fields = z.object({
 });
 
 const DEV_CORS_ORIGIN = 'http://localhost:3000';
+// Subnets that cover every address: in TRUST_PROXY they trust any client.
+const TRUST_EVERYONE = ['0.0.0.0/0', '::/0'];
 
 export function splitOrigins(value: string): string[] {
   return value
@@ -98,6 +100,16 @@ function productionRules(config: Fields, ctx: z.RefinementCtx) {
     issue(
       'TRUST_PROXY',
       'TRUST_PROXY=true trusts any client-sent X-Forwarded-For; set a hop count or an address/subnet list',
+    );
+  }
+  // The same as true for every IPv4 or IPv6 client, wherever they appear in the list.
+  const everyone = config.TRUST_PROXY.split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => TRUST_EVERYONE.includes(entry));
+  if (everyone.length > 0) {
+    issue(
+      'TRUST_PROXY',
+      `TRUST_PROXY ${everyone.join(', ')} trusts any client-sent X-Forwarded-For; list only the proxies' addresses or subnets`,
     );
   }
 }

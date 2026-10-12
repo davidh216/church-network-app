@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 
 // PHASE4_SPECS.md U6: under NODE_ENV=production, env.ts refuses a missing or plain-HTTP
-// CORS_ORIGIN, a weak JWT_SECRET and TRUST_PROXY=true, and exits with the usual message. Each test
-// stubs the environment and loads env.ts afresh; backend/.env is not read (loadEnvFile is mocked),
-// so a developer's own settings cannot change the outcome.
+// CORS_ORIGIN, a weak JWT_SECRET and TRUST_PROXY=true (or a list naming 0.0.0.0/0 or ::/0), and
+// exits with the usual message. Each test stubs the environment and loads env.ts afresh;
+// backend/.env is not read (loadEnvFile is mocked), so a developer's own settings cannot change
+// the outcome.
 const STRONG_SECRET = 'q8Vb3NfLr0Tz7WcYp2HdKm5XsJ9aGu4E';
 
 // What the compose stack sets for the api service (docker-compose.yml), plus a generated secret.
@@ -132,6 +133,24 @@ describe('production configuration', () => {
       const { trustProxy } = await loadEnv({ ...COMPOSE, TRUST_PROXY: value });
       expect(trustProxy).toBe(expected);
     }
+  });
+
+  it.each(['0.0.0.0/0', '::/0', 'loopback, 0.0.0.0/0', ' ::/0 ,10.0.0.0/8', '0.0.0.0/0,::/0'])(
+    'refuses a TRUST_PROXY list that trusts every address (%j)',
+    async (value) => {
+      const message = await refused({ ...COMPOSE, TRUST_PROXY: value });
+      expect(message).toContain('trusts any client-sent X-Forwarded-For');
+      expect(message).toContain('→ at TRUST_PROXY');
+    },
+  );
+
+  it('accepts subnets that only look like the catch-all ones', async () => {
+    for (const value of ['10.0.0.0/8', '0.0.0.0/8', '::1/128', 'fd00::/8']) {
+      vi.resetModules();
+      const { trustProxy } = await loadEnv({ ...COMPOSE, TRUST_PROXY: value });
+      expect(trustProxy).toBe(value);
+    }
+    expect(exit).not.toHaveBeenCalled();
   });
 
   it('reports every failing rule at once', async () => {
