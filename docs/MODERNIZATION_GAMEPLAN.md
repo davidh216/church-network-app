@@ -281,7 +281,7 @@ Exit criteria: CI green on the new majors, including the image build and compose
 
 Verified 2026-10-12 on `modernize/phase-4` with Node 24.21 and npm 11.21:
 - **Root checks.** `npm run typecheck`, `npm run lint` (jsx-a11y, max-lines and the React Compiler rules as errors, ESLint 10), `npm run format:check` and `npm run build` (Next 16.4 with Turbopack) all pass.
-- **Tests.** `npm test` passes 137 shared, 684 backend and 467 frontend tests.
+- **Tests.** `npm test` passes 137 shared, 714 backend and 467 frontend tests.
 - **No drift.** The Prisma 7 drift check reports no difference.
 - **Tooling.** `docker compose config`, actionlint (with shellcheck), shellcheck on the scripts and the Playwright suite all pass.
 - **Upgrade and rollback.** Prisma 7.10 found nothing to apply on the Phase 3 dev database. The rollback drill ran the Prisma 6 build (the U4 head) against that same database afterwards: migrate status up to date, seed and refresh CLI clean, `/health` OK.
@@ -299,6 +299,12 @@ Adversarial reviews:
   - a malformed URL that would print the database password;
   - backup scripts that failed on Prisma-only URL parameters and on servers without a host client;
   - retention deleting other files that shared the prefix.
+- **Final pre-merge review** of the fix commits, the docs and the whole PR. No blockers. Every finding is fixed:
+  - SSL modes and certificate files are now checked explicitly under pg, so unknown modes, `sslaccept` without `sslmode`, and a lone `sslcert` are refused rather than misread.
+  - TRUST_PROXY catch-alls are detected with proxy-addr.
+  - The backup scripts keep `user` and `password`.
+  - The compose-mode backup runs in CI.
+  - The README now says how to restore into an empty database and in which order to revert upgrades.
 
 ### Phase 5 and beyond (out of this plan's estimates)
 
