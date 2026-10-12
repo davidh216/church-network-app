@@ -15,6 +15,8 @@ export async function resetDatabase() {
   await prisma.auditEvent.deleteMany();
   await prisma.userTag.deleteMany();
   await prisma.memberTag.deleteMany();
+  await prisma.groupMember.deleteMany();
+  await prisma.group.deleteMany();
   await prisma.engagementSnapshot.deleteMany();
   await prisma.memberNote.deleteMany();
   await prisma.memberInteraction.deleteMany();

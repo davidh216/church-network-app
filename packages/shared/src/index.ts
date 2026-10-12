@@ -13,3 +13,4 @@ export * from './search.js';
 export * from './services.js';
 export * from './audit.js';
 export * from './tags.js';
+export * from './groups.js';

@@ -13,6 +13,7 @@ import { isAdmin } from '../../middleware/auth';
 import type { AuthenticatedUser } from '../../types/auth';
 import type { interactionsQuery, milestonesQuery, notesQuery } from './schemas';
 import { today } from '../services/service';
+import { memberGroups } from '../groups/service';
 
 // Private notes are visible only to their author and to admins.
 function visibleNotes(viewer: AuthenticatedUser): Prisma.MemberNoteWhereInput {
@@ -70,7 +71,7 @@ export function setFamilyRelationship(familyId: string, pair: FamilyPair, isActi
 }
 
 // The full CRM profile of a member: roles, engagement, family, recent interactions,
-// milestones, notes the viewer may see and tags (the timeline has its own paged endpoint). Never the password hash.
+// milestones, notes the viewer may see, tags and group memberships (the timeline has its own paged endpoint). Never the password hash.
 export async function getMemberDetails(id: string, viewer: AuthenticatedUser) {
   const user = await prisma.user.findUnique({
     where: { id },
@@ -133,7 +134,16 @@ export async function getMemberDetails(id: string, viewer: AuthenticatedUser) {
   // Head of family is derived from the family row (users.isHeadOfFamily was dropped in P3-D3).
   const isHeadOfFamily = user.family?.headOfFamilyId === user.id;
 
-  return { ...user, lastAttended, isHeadOfFamily, familyMembers: uniqueFamilyMembers };
+  // Staff only, like the whole profile: every membership, archived groups and inactive rows too.
+  const groupMemberships = await memberGroups(id);
+
+  return {
+    ...user,
+    lastAttended,
+    isHeadOfFamily,
+    familyMembers: uniqueFamilyMembers,
+    groupMemberships,
+  };
 }
 
 // "call_made" -> "Call made"

@@ -480,4 +480,93 @@ describe('authorization', () => {
       expect(stored.roles.map((r) => r.role.name)).toEqual(['admin']);
     });
   });
+
+  // PHASE5_SPECS.md 1.2: members see active groups with public fields and leader names only.
+  describe('groups (G3)', () => {
+    let activeId: string;
+    let archivedId: string;
+    const asMember = () => bearer(memberToken);
+
+    beforeAll(async () => {
+      activeId = (
+        await prisma.group.create({
+          data: {
+            name: 'Authz Choir',
+            type: 'ministry',
+            members: {
+              create: [
+                { userId: leaderId, role: 'leader' },
+                { userId: otherMemberId, role: 'member' },
+                { userId: memberId, role: 'member' },
+              ],
+            },
+          },
+        })
+      ).id;
+      archivedId = (
+        await prisma.group.create({
+          data: {
+            name: 'Authz Archived',
+            type: 'committee',
+            isActive: false,
+            members: { create: [{ userId: memberId, role: 'leader' }] },
+          },
+        })
+      ).id;
+    });
+
+    it('a member never receives rosters, member counts or archived groups', async () => {
+      const list = await request(app).get('/api/groups').set(asMember());
+      const one = await request(app).get(`/api/groups/${activeId}`).set(asMember());
+      const mine = await request(app).get('/api/groups?mine=true').set(asMember());
+      for (const res of [list, one, mine]) {
+        expect(res.status).toBe(200);
+        // The plain member on the roster is never named; neither is the archived group.
+        expect(res.text).not.toContain('Other Person');
+        expect(res.text).not.toContain(otherMemberId);
+        expect(res.text).not.toContain('Authz Archived');
+        expect(res.text).not.toMatch(/memberCount|roster|isActive|userId/);
+      }
+      const { name } = await prisma.user.findUniqueOrThrow({ where: { id: leaderId } });
+      expect(one.body.group.leaders).toEqual([{ name, role: 'leader' }]);
+      expect(mine.body.memberships.map((m: { role: string }) => m.role)).toEqual(['member']);
+    });
+
+    it('a member asking for an archived group gets 404, not 403', async () => {
+      const res = await request(app).get(`/api/groups/${archivedId}`).set(asMember());
+      expect(res.status).toBe(404);
+      expect((await request(app).get('/api/groups?status=inactive').set(asMember())).status).toBe(
+        403,
+      );
+    });
+
+    it('a member cannot create, edit, archive or delete groups, or change rosters', async () => {
+      const tries = [
+        request(app).post('/api/groups').send({ name: 'Mine', type: 'ministry' }),
+        request(app).patch(`/api/groups/${activeId}`).send({ isActive: false }),
+        request(app).delete(`/api/groups/${activeId}`),
+        request(app).post(`/api/groups/${activeId}/members`).send({ userId: memberId }),
+        request(app).patch(`/api/groups/${activeId}/members/${memberId}`).send({ role: 'leader' }),
+        request(app).delete(`/api/groups/${activeId}/members/${otherMemberId}`),
+      ];
+      for (const attempt of tries) expect((await attempt.set(asMember())).status).toBe(403);
+      const group = await prisma.group.findUniqueOrThrow({
+        where: { id: activeId },
+        include: { members: { orderBy: { userId: 'asc' } } },
+      });
+      expect(group.isActive).toBe(true);
+      expect(group.members).toHaveLength(3);
+      expect(group.members.find((m) => m.userId === memberId)?.role).toBe('member');
+      expect(await prisma.group.count({ where: { name: 'Mine' } })).toBe(0);
+    });
+
+    it('a leader sees the roster and counts but cannot delete a group', async () => {
+      const res = await request(app).get(`/api/groups/${activeId}`).set(bearer(leaderToken));
+      expect(res.body.group.memberCount).toBe(3);
+      expect(res.body.group.roster.map((r: { name: string }) => r.name)).toContain('Other Person');
+      const del = await request(app).delete(`/api/groups/${activeId}`).set(bearer(leaderToken));
+      expect(del.status).toBe(403);
+      expect(await prisma.group.count({ where: { id: activeId } })).toBe(1);
+    });
+  });
 });

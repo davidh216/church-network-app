@@ -71,7 +71,9 @@ const ids = {} as Record<
   | 'job'
   | 'tag'
   | 'tagToDelete'
-  | 'assignedTag',
+  | 'assignedTag'
+  | 'group'
+  | 'groupToDelete',
   string
 >;
 
@@ -465,6 +467,61 @@ const ROUTES: Route[] = [
     status: 200,
   },
 
+  { route: 'GET /api/groups', access: 'auth', as: 'member', url: () => '/api/groups', status: 200 },
+  {
+    route: 'POST /api/groups',
+    access: 'staff',
+    as: 'leader',
+    url: () => '/api/groups',
+    body: () => ({ name: 'Youth', type: 'small_group' }),
+    status: 201,
+  },
+  {
+    route: 'GET /api/groups/:id',
+    access: 'auth',
+    as: 'member',
+    url: () => `/api/groups/${ids.group}`,
+    status: 200,
+  },
+  {
+    route: 'PATCH /api/groups/:id',
+    access: 'staff',
+    as: 'leader',
+    url: () => `/api/groups/${ids.group}`,
+    body: () => ({ location: 'Hall' }),
+    status: 200,
+  },
+  {
+    route: 'DELETE /api/groups/:id',
+    access: 'admin',
+    as: 'admin',
+    url: () => `/api/groups/${ids.groupToDelete}`,
+    status: 200,
+  },
+  {
+    route: 'POST /api/groups/:id/members',
+    access: 'staff',
+    as: 'leader',
+    url: () => `/api/groups/${ids.group}/members`,
+    body: () => ({ userId: ids.other, role: 'co_leader' }),
+    status: 201,
+  },
+  {
+    route: 'PATCH /api/groups/:id/members/:userId',
+    access: 'staff',
+    as: 'leader',
+    url: () => `/api/groups/${ids.group}/members/${ids.member}`,
+    body: () => ({ role: 'leader' }),
+    status: 200,
+  },
+  {
+    route: 'DELETE /api/groups/:id/members/:userId',
+    access: 'staff',
+    as: 'leader',
+    url: () => `/api/groups/${ids.group}/members/${ids.resetTarget}`,
+    status: 200,
+  },
+
   {
     route: 'GET /api/audit',
     access: 'admin',
@@ -540,6 +597,18 @@ describe('route matrix', () => {
     ids.tagToDelete = (await prisma.memberTag.create({ data: { name: 'Doomed tag' } })).id;
     ids.assignedTag = (await prisma.memberTag.create({ data: { name: 'Assigned' } })).id;
     await prisma.userTag.create({ data: { userId: ids.member, tagId: ids.assignedTag } });
+    ids.group = (
+      await prisma.group.create({
+        data: {
+          name: 'Choir',
+          type: 'ministry',
+          members: { create: [{ userId: ids.member }, { userId: ids.resetTarget }] },
+        },
+      })
+    ).id;
+    ids.groupToDelete = (
+      await prisma.group.create({ data: { name: 'Doomed', type: 'committee' } })
+    ).id;
     const jobs = await import('../src/modules/analytics/jobs.js');
     ids.job = jobs.startEngagementRefresh().job.jobId;
     await jobs.engagementRefreshIdle();
