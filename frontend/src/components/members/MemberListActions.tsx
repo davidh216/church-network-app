@@ -17,13 +17,14 @@ interface MemberListActionsProps {
   onTogglePanel: (panel: OpenPanel) => void;
   selectedCount: number;
   onExport: () => void;
+  onManageTags: () => void;
 }
 
 const buttonClass = 'px-4 py-2 text-sm font-medium rounded-md transition-colors';
 const idle = 'bg-gray-100 text-gray-700 hover:bg-gray-200';
 const open = 'bg-blue-600 text-white';
 
-/** Staff buttons beside the member search: advanced search, saved searches and export. */
+/** Staff buttons beside the member search: advanced search, saved searches, tags and export. */
 export default function MemberListActions({
   panel,
   advancedToggleRef,
@@ -31,6 +32,7 @@ export default function MemberListActions({
   onTogglePanel,
   selectedCount,
   onExport,
+  onManageTags,
 }: MemberListActionsProps) {
   return (
     <>
@@ -53,6 +55,9 @@ export default function MemberListActions({
         className={`${buttonClass} ${panel === 'saved' ? open : idle}`}
       >
         Saved Searches
+      </button>
+      <button type="button" onClick={onManageTags} className={`${buttonClass} ${idle}`}>
+        Manage Tags
       </button>
       {selectedCount > 0 && (
         <button

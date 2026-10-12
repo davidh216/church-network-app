@@ -3,6 +3,7 @@ import type { MemberSort } from '@/lib/members/filters';
 import { formatLocalDate } from '@/lib/format/date';
 import type { Member } from '@/types/domain';
 import { EngagementBadge, MemberAvatar, RoleBadges, StageBadge, StatusBadge } from './MemberBadges';
+import { MemberTagChips } from '@/components/tags/TagChips';
 import MemberRowActions from './MemberRowActions';
 import SortableHeader from './SortableHeader';
 
@@ -115,6 +116,7 @@ export default function MemberTable({
                     {member.bio && (
                       <div className="text-sm text-gray-500 truncate max-w-xs">{member.bio}</div>
                     )}
+                    {canManage && <MemberTagChips tags={member.memberTags?.map((t) => t.tag)} />}
                   </div>
                 </div>
               </td>

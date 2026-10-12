@@ -21,6 +21,8 @@ import type {
   RelationshipType,
   RiskLevel,
   SearchQuery,
+  TagCategory,
+  TagChip,
 } from '@embrace/shared';
 
 export type {
@@ -98,6 +100,8 @@ export interface Member {
   interests?: string[];
   roles: UserRole[];
   engagement?: Engagement | null;
+  /** Staff projections only: members never receive tags (P5-D12). Archived tags have isActive false. */
+  memberTags?: Array<{ tag: TagChip }>;
 }
 
 export interface MediaItem {
@@ -245,6 +249,14 @@ export interface MemberDetails {
     impact: Impact;
     isPublic: boolean;
     celebrated: boolean;
+  }>;
+  /** The member's tags by name; archived ones stay listed with `tag.isActive` false. */
+  memberTags?: Array<{
+    id: string;
+    addedAt: string;
+    tag: TagChip & { category: TagCategory };
+    /** Who added it; null when unknown or the account is gone. */
+    addedBy?: { id: string; name: string } | null;
   }>;
   memberNotes?: Array<{
     id: string;

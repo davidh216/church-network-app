@@ -46,6 +46,10 @@ export const queryKeys = {
   /** Outside `analytics` so invalidating the analytics after a job does not refetch the job. */
   engagementJobs: { detail: (id: string) => ['engagement-jobs', id] as const },
   roles: { all: ['roles'] as const },
+  tags: {
+    all: ['tags'] as const,
+    list: (includeArchived: boolean) => ['tags', 'list', { includeArchived }] as const,
+  },
   /** Every audited change invalidates `audit.all`, so the log never shows a stale page. */
   audit: {
     all: ['audit'] as const,

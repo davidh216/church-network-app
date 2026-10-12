@@ -16,6 +16,13 @@ vi.mock('@/lib/api/memberDetails', () => detailsApi);
 const rolesApi = vi.hoisted(() => ({ listRoles: vi.fn() }));
 vi.mock('@/lib/api/roles', () => rolesApi);
 
+const tagsApi = vi.hoisted(() => ({
+  listTags: vi.fn(),
+  assignTag: vi.fn(),
+  unassignTag: vi.fn(),
+}));
+vi.mock('@/lib/api/tags', () => tagsApi);
+
 const details = {
   id: 'u1',
   name: 'Ada Lovelace',
@@ -58,6 +65,7 @@ const details = {
 beforeEach(() => {
   vi.resetAllMocks();
   rolesApi.listRoles.mockResolvedValue([]);
+  tagsApi.listTags.mockResolvedValue([]);
   detailsApi.getMemberTimeline.mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 20 });
 });
 
@@ -228,17 +236,21 @@ describe('MemberProfile', () => {
     await screen.findByRole('heading', { level: 1 });
     fireEvent.click(screen.getByRole('tab', { name: /Attendance/ }));
     const sentence = await screen.findByText(/attended\s+of/);
-    expect(screen.getByRole('status')).toHaveTextContent('');
+    expect(within(screen.getByRole('tabpanel')).getByRole('status')).toHaveTextContent('');
     expect(sentence).toHaveAttribute('aria-live', 'polite');
 
     fireEvent.change(screen.getByLabelText('Period'), { target: { value: '3' } });
     await settle();
-    expect(screen.getByRole('status')).toHaveTextContent('Updating attendance…');
+    expect(within(screen.getByRole('tabpanel')).getByRole('status')).toHaveTextContent(
+      'Updating attendance…',
+    );
     const region = screen.getByRole('region', { name: 'Attendance summary' });
     expect(region).toHaveAttribute('aria-busy', 'true');
 
     resolveNext({ ...summary, months: 3, serviceCount: 1, attendedCount: 1 });
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(''));
+    await waitFor(() =>
+      expect(within(screen.getByRole('tabpanel')).getByRole('status')).toHaveTextContent(''),
+    );
     expect(region).toHaveAttribute('aria-busy', 'false');
     expect(screen.getByText(/attended\s+of/)).toHaveTextContent(/attended 1 of 1 /);
   });

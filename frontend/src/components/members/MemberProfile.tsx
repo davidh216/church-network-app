@@ -18,6 +18,7 @@ import Notes from './profile/Notes';
 import PersonalInfo from './profile/PersonalInfo';
 import ProfileHeader, { backLinkClass } from './profile/ProfileHeader';
 import Tabs, { panelId, tabId, type ProfileTabId } from './profile/Tabs';
+import TagsSection from './profile/TagsSection';
 import Timeline from './profile/Timeline';
 
 interface MemberProfileProps {
@@ -74,6 +75,7 @@ export default function MemberProfile({ memberId }: MemberProfileProps) {
     <div>
       <div className={cardClass}>
         <ProfileHeader member={member} onEdit={() => setEditing(true)} />
+        <TagsSection member={member} />
         <Tabs active={activeTab} onChange={setActiveTab} />
         <div
           role="tabpanel"

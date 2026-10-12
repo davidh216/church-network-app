@@ -8,6 +8,7 @@ import * as memberDetails from './memberDetails';
 import * as roles from './roles';
 import * as savedSearches from './savedSearches';
 import * as services from './services';
+import * as tags from './tags';
 import * as users from './users';
 
 const fetchMock = vi.fn<typeof fetch>();
@@ -414,5 +415,41 @@ describe('audit endpoint', () => {
       method: 'GET',
       body: undefined,
     });
+  });
+});
+
+describe('tags endpoints', () => {
+  it('listTags asks for archived tags only when wanted', async () => {
+    respond({ success: true, tags: [] });
+    respond({ success: true, tags: [{ id: 't1' }] });
+    await expect(tags.listTags()).resolves.toEqual([]);
+    await expect(tags.listTags(true)).resolves.toEqual([{ id: 't1' }]);
+    expect(call(0).url).toBe('/api/tags');
+    expect(call(1).url).toBe('/api/tags?includeArchived=true');
+  });
+
+  it('create, update and delete send the right method, path and body', async () => {
+    respond({ success: true, tag: { id: 't1' } }, { status: 201 });
+    respond({ success: true, tag: { id: 't1' } });
+    respond({ success: true, removed: 2 });
+    await tags.createTag({ name: 'Choir' });
+    await tags.updateTag('t1', { isActive: false });
+    await expect(tags.deleteTag('t1')).resolves.toEqual({ removed: 2 });
+    expect([call(0), call(1), call(2)]).toEqual([
+      { url: '/api/tags', method: 'POST', body: { name: 'Choir' } },
+      { url: '/api/tags/t1', method: 'PATCH', body: { isActive: false } },
+      { url: '/api/tags/t1', method: 'DELETE', body: undefined },
+    ]);
+  });
+
+  it('assigns and unassigns under the member', async () => {
+    respond({ success: true, added: true, memberTags: [] });
+    respond({ success: true, memberTags: [] });
+    await expect(tags.assignTag('u1', 't1')).resolves.toEqual({ added: true, memberTags: [] });
+    await expect(tags.unassignTag('u1', 't1')).resolves.toEqual({ memberTags: [] });
+    expect([call(0), call(1)]).toEqual([
+      { url: '/api/users/u1/tags', method: 'POST', body: { tagId: 't1' } },
+      { url: '/api/users/u1/tags/t1', method: 'DELETE', body: undefined },
+    ]);
   });
 });

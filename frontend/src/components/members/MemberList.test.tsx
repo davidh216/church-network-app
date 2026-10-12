@@ -38,6 +38,14 @@ vi.mock('@/lib/api/savedSearches', () => savedApi);
 const rolesApi = vi.hoisted(() => ({ listRoles: vi.fn() }));
 vi.mock('@/lib/api/roles', () => rolesApi);
 
+const tagsApi = vi.hoisted(() => ({
+  listTags: vi.fn(),
+  createTag: vi.fn(),
+  updateTag: vi.fn(),
+  deleteTag: vi.fn(),
+}));
+vi.mock('@/lib/api/tags', () => tagsApi);
+
 function member(id: string, name: string, roleName: string, extra: Partial<Member> = {}): Member {
   return {
     id,
@@ -667,5 +675,33 @@ describe('MemberList', () => {
     expect(screen.queryByText('(0 total)')).toBeNull();
     await act(async () => resolveSearch(page([staffRows[1]!], 1)));
     expect(await screen.findByText('(1 total)')).toBeInTheDocument();
+  });
+
+  it('shows staff up to three tag chips per row and opens Manage Tags; members get neither', async () => {
+    const chip = (id: string, isActive = true) => ({
+      tag: { id, name: `Tag ${id}`, color: '#123456', isActive },
+    });
+    usersApi.listUsers.mockResolvedValue(
+      page([
+        { ...staffRows[0]!, memberTags: ['a', 'b', 'c', 'd'].map((id) => chip(id)) },
+        { ...staffRows[1]!, memberTags: [chip('z', false)] },
+      ]),
+    );
+    tagsApi.listTags.mockResolvedValue([]);
+    await renderAs(['leader']);
+    const lists = screen.getAllByRole('list', { name: 'Tags' });
+    expect(lists.map((list) => list.textContent)).toEqual([
+      'Tag aTag bTag c+1and 1 more: Tag d',
+      'Tag z (archived)',
+    ]);
+    fireEvent.click(screen.getByRole('button', { name: 'Manage Tags' }));
+    expect(await screen.findByRole('dialog', { name: 'Manage Tags' })).toBeInTheDocument();
+    expect(tagsApi.listTags).toHaveBeenCalledWith(true, expect.anything());
+  });
+
+  it('gives members no Manage Tags button', async () => {
+    await renderAs(['member']);
+    expect(screen.queryByRole('button', { name: 'Manage Tags' })).toBeNull();
+    expect(screen.queryByRole('list', { name: 'Tags' })).toBeNull();
   });
 });

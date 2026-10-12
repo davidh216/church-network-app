@@ -9,6 +9,7 @@ import { queryKeys } from './keys';
 import { useCreateMedia, useMedia } from './media';
 import { useMemberAttendance, useMemberDetails, useOwnAttendance } from './memberDetails';
 import { useRoles } from './roles';
+import { useAssignTag, useCreateTag, useDeleteTag, useUnassignTag, useUpdateTag } from './tags';
 import {
   useCreateService,
   useDeleteService,
@@ -66,6 +67,15 @@ const savedApi = vi.hoisted(() => ({
   useSavedSearch: vi.fn(),
 }));
 vi.mock('@/lib/api/savedSearches', () => savedApi);
+const tagsApi = vi.hoisted(() => ({
+  listTags: vi.fn(),
+  createTag: vi.fn(),
+  updateTag: vi.fn(),
+  deleteTag: vi.fn(),
+  assignTag: vi.fn(),
+  unassignTag: vi.fn(),
+}));
+vi.mock('@/lib/api/tags', () => tagsApi);
 
 const failure = new ApiError(500, 'Server exploded');
 const stageQuery = {
@@ -389,6 +399,71 @@ const mutationCases: MutationCase[] = [
     variables: 's1',
     args: ['s1'],
     invalidates: [queryKeys.savedSearches.all],
+  },
+  {
+    name: 'useCreateTag',
+    api: tagsApi.createTag,
+    useHook: useCreateTag,
+    variables: { name: 'Choir' },
+    args: [{ name: 'Choir' }],
+    invalidates: [
+      queryKeys.tags.all,
+      queryKeys.users.all,
+      queryKeys.memberDetails.all,
+      queryKeys.audit.all,
+    ],
+  },
+  {
+    name: 'useUpdateTag',
+    api: tagsApi.updateTag,
+    useHook: useUpdateTag,
+    variables: { id: 't1', input: { isActive: false } },
+    args: ['t1', { isActive: false }],
+    invalidates: [
+      queryKeys.tags.all,
+      queryKeys.users.all,
+      queryKeys.memberDetails.all,
+      queryKeys.audit.all,
+    ],
+  },
+  {
+    name: 'useDeleteTag',
+    api: tagsApi.deleteTag,
+    useHook: useDeleteTag,
+    variables: 't1',
+    args: ['t1'],
+    invalidates: [
+      queryKeys.tags.all,
+      queryKeys.users.all,
+      queryKeys.memberDetails.all,
+      queryKeys.audit.all,
+    ],
+  },
+  {
+    name: 'useAssignTag',
+    api: tagsApi.assignTag,
+    useHook: useAssignTag,
+    variables: { userId: 'u1', tagId: 't1' },
+    args: ['u1', 't1'],
+    invalidates: [
+      queryKeys.tags.all,
+      queryKeys.users.all,
+      queryKeys.memberDetails.all,
+      queryKeys.audit.all,
+    ],
+  },
+  {
+    name: 'useUnassignTag',
+    api: tagsApi.unassignTag,
+    useHook: useUnassignTag,
+    variables: { userId: 'u1', tagId: 't1' },
+    args: ['u1', 't1'],
+    invalidates: [
+      queryKeys.tags.all,
+      queryKeys.users.all,
+      queryKeys.memberDetails.all,
+      queryKeys.audit.all,
+    ],
   },
 ];
 

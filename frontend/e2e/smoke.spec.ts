@@ -85,6 +85,18 @@ test('admin navigates the dashboard, members, a profile, media, analytics and th
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
   await expect(addMember).toBeFocused();
+  // Manage Tags (staff) passes axe while open, with the form shown too; nothing is saved.
+  const manageTags = page.getByRole('button', { name: 'Manage Tags' });
+  await manageTags.click();
+  const tagsDialog = page.getByRole('dialog', { name: 'Manage Tags' });
+  await expect(tagsDialog.getByRole('status', { name: 'Loading tags' })).toHaveCount(0);
+  await expectNoSeriousA11yViolations(page, '/members with the Manage Tags dialog');
+  await tagsDialog.getByRole('button', { name: 'New Tag' }).click();
+  await expect(tagsDialog.getByLabel('Name *')).toBeFocused();
+  await expectNoSeriousA11yViolations(page, '/members with the new tag form');
+  await page.keyboard.press('Escape');
+  await expect(tagsDialog).toHaveCount(0);
+  await expect(manageTags).toBeFocused();
   const row = page.getByRole('row').filter({ hasText: admin.email });
   await row.getByRole('link', { name: 'View', exact: true }).click();
   await expect(page).toHaveURL(/\/members\/[^/]+$/);
