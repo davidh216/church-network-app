@@ -35,7 +35,6 @@ const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_$]*$/;
 
 /** Prisma 6's defaults: num_cpus * 2 + 1 connections, 5 s to connect, 10 s to wait for one. */
 export const DEFAULT_CONNECT_TIMEOUT_SECONDS = 5;
-export const DEFAULT_POOL_TIMEOUT_SECONDS = 10;
 export const IDLE_TIMEOUT_MILLIS = 300_000;
 export const defaultPoolSize = () => availableParallelism() * 2 + 1;
 
@@ -59,8 +58,9 @@ function seconds(value: unknown, key: string, fallback: number): number {
  *   accepts TLS needs `sslmode=require` (or stricter) in the URL.
  * - `connection_limit` is the pool size (default: available CPUs * 2 + 1, as in Prisma 6).
  * - Prisma 6 waited `connect_timeout` (default 5 s) for a new connection and `pool_timeout`
- *   (default 10 s) for a free one. pg has one setting for both, so it gets the larger of the two
- *   (10 s by default). Idle connections close after 5 minutes.
+ *   (default 10 s) for a free one. pg has one setting for both. It is `connect_timeout` (5 s by
+ *   default, so /health answers 503 promptly when the database stops responding), or the larger
+ *   of the two when the URL sets `pool_timeout`. Idle connections close after 5 minutes.
  * - `schema` (default `public`) is returned for the adapter, which names it in the queries Prisma
  *   generates, and is appended to the URL's own `options` as `-c search_path=...`, as Prisma 6 set
  *   it, so raw SQL sees the same tables. It must be a plain identifier.
@@ -113,7 +113,9 @@ export function pgConfigFromUrl(url: string): { config: PoolConfig; schema: stri
     'connect_timeout',
     DEFAULT_CONNECT_TIMEOUT_SECONDS,
   );
-  const poolTimeout = seconds(parsed.pool_timeout, 'pool_timeout', DEFAULT_POOL_TIMEOUT_SECONDS);
+  // Only an explicit pool_timeout lengthens the wait; by default the 5 s connect timeout keeps
+  // /health prompt when the database host stops answering.
+  const poolTimeout = seconds(parsed.pool_timeout, 'pool_timeout', 0);
 
   const sslaccept = parsed.sslaccept;
   if (sslaccept !== undefined && sslaccept !== 'strict' && sslaccept !== 'accept_invalid_certs') {

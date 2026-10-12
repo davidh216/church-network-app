@@ -73,8 +73,8 @@ describe('pgConfigFromUrl', () => {
       expect(refusal(`${BASE}?connection_limit=many`)).toContain('connection_limit');
     });
 
-    it('waits the larger of connect_timeout (5 s) and pool_timeout (10 s), in milliseconds', () => {
-      expect(read().config.connectionTimeoutMillis).toBe(10_000);
+    it('waits connect_timeout (5 s by default), or the larger of it and an explicit pool_timeout', () => {
+      expect(read().config.connectionTimeoutMillis).toBe(5_000);
       expect(read('connect_timeout=20').config.connectionTimeoutMillis).toBe(20_000);
       expect(read('pool_timeout=30').config.connectionTimeoutMillis).toBe(30_000);
       expect(read('connect_timeout=2&pool_timeout=3').config.connectionTimeoutMillis).toBe(3_000);
