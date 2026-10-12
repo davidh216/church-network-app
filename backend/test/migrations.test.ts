@@ -1962,3 +1962,182 @@ describe('20261012020000_group_leaders_to_members (G3)', () => {
     ).toEqual([]);
   });
 });
+
+describe('20261012030000_family_integrity (G4)', () => {
+  const schema = 'fixture_g4_family_integrity';
+  const migration = '20261012030000_family_integrity';
+  const rows = <T>(sql: string) => prisma.$queryRawUnsafe<T[]>(sql.replaceAll('$s', schema));
+
+  beforeAll(() => {
+    migrateFixture(
+      schema,
+      migration,
+      `
+      INSERT INTO "users" ("id", "email", "password", "name", "updatedAt") VALUES
+        ('ua', 'ua@g4.test', 'x', 'Ann', now()), ('ub', 'ub@g4.test', 'x', 'Ben', now()),
+        ('uc', 'uc@g4.test', 'x', 'Cy', now()), ('ud', 'ud@g4.test', 'x', 'Di', now()),
+        ('ue', 'ue@g4.test', 'x', 'Ed', now()), ('uf', 'uf@g4.test', 'x', 'Fay', now()),
+        ('Ux', 'ux@g4.test', 'x', 'Upper', now());
+      -- f1: head is a member; f2: head without a family; f3: head in another family (f1);
+      -- f4 and f5: one head without a family heading both (f5 is older); f6: no head.
+      INSERT INTO "families" ("id", "familyName", "headOfFamilyId", "createdAt", "updatedAt") VALUES
+        ('f1', 'Doe', 'ua', '2025-01-01', now()),
+        ('f2', 'Roe', 'ub', '2025-01-01', now()),
+        ('f3', 'Poe', 'uc', '2025-01-01', now()),
+        ('f4', 'Loe', 'ud', '2025-02-01', now()),
+        ('f5', 'Moe', 'ud', '2025-01-01', now()),
+        ('f6', 'Noe', NULL, '2025-01-01', now());
+      UPDATE "users" SET "familyId" = 'f1' WHERE "id" IN ('ua', 'uc', 'ue', 'uf', 'Ux');
+      -- r1: reversed; r2/r3: a mirrored pair (r2 active wins); r4/r5: a mirrored pair, both
+      -- active (r5, in canonical order, wins); r6: a user with themself; r7: canonical;
+      -- r8: canonical under a linguistic collation, reversed in byte order ('U' < 'u').
+      INSERT INTO "family_relationships" ("id", "primaryUserId", "relatedUserId", "relationshipType", "isActive", "familyId", "createdAt", "updatedAt") VALUES
+        ('r1', 'ue', 'ua', 'parent', true, 'f1', '2026-01-01', now()),
+        ('r2', 'ua', 'uc', 'spouse', true, 'f1', '2026-01-02', now()),
+        ('r3', 'uc', 'ua', 'spouse', false, 'f1', '2026-01-01', now()),
+        ('r4', 'uf', 'ue', 'sibling', true, 'f1', '2026-01-01', now()),
+        ('r5', 'ue', 'uf', 'sibling', true, 'f1', '2026-01-02', now()),
+        ('r6', 'uf', 'uf', 'other', true, 'f1', '2026-01-01', now()),
+        ('r7', 'ua', 'uf', 'grandparent', true, 'f1', '2026-01-01', now()),
+        ('r8', 'ua', 'Ux', 'parent', true, 'f1', '2026-01-01', now());
+      `,
+    );
+  }, 60_000);
+
+  afterAll(() => dropSchema(schema));
+
+  it('stores each pair once in byte order, swapping reversed rows with the type inverted', async () => {
+    expect(
+      await rows(
+        `SELECT "id", "primaryUserId" AS p, "relatedUserId" AS r, "relationshipType"::text AS t,
+                "isActive" AS active
+         FROM "$s"."family_relationships" ORDER BY "id"`,
+      ),
+    ).toEqual([
+      { id: 'r1', p: 'ua', r: 'ue', t: 'child', active: true },
+      { id: 'r2', p: 'ua', r: 'uc', t: 'spouse', active: true },
+      { id: 'r5', p: 'ue', r: 'uf', t: 'sibling', active: true },
+      { id: 'r7', p: 'ua', r: 'uf', t: 'grandparent', active: true },
+      { id: 'r8', p: 'Ux', r: 'ua', t: 'child', active: true },
+    ]);
+  });
+
+  it('archives every deleted or swapped row as it was', async () => {
+    const archived = await prisma.$queryRawUnsafe<
+      { id: string; row: Record<string, unknown>; migration: string; reason: string }[]
+    >(
+      `SELECT "id", "row", "migration", "reason" FROM "phase5_archive"."family_relationships"
+       WHERE "sourceSchema" = $1 ORDER BY "id"`,
+      schema,
+    );
+    const swapped =
+      'swapped into canonical order (type inverted; the row shows it before the swap)';
+    expect(
+      archived.map((a) => [
+        a.id,
+        a.row.primaryUserId,
+        a.row.relatedUserId,
+        a.row.relationshipType,
+        a.reason,
+        a.migration,
+      ]),
+    ).toEqual([
+      ['r1', 'ue', 'ua', 'parent', swapped, migration],
+      [
+        'r3',
+        'uc',
+        'ua',
+        'spouse',
+        'collapsed into family_relationships row r2 (same pair)',
+        migration,
+      ],
+      [
+        'r4',
+        'uf',
+        'ue',
+        'sibling',
+        'collapsed into family_relationships row r5 (same pair)',
+        migration,
+      ],
+      ['r6', 'uf', 'uf', 'other', 'deleted (a user paired with themself)', migration],
+      ['r8', 'ua', 'Ux', 'parent', swapped, migration],
+    ]);
+  });
+
+  it('refuses a reversed pair or a user paired with themself afterwards', async () => {
+    const insert = (id: string, p: string, r: string) =>
+      prisma.$executeRawUnsafe(
+        `INSERT INTO "${schema}"."family_relationships"
+           ("id", "primaryUserId", "relatedUserId", "relationshipType", "familyId", "updatedAt")
+         VALUES ('${id}', '${p}', '${r}', 'sibling', 'f1', now())`,
+      );
+    await expect(insert('bad1', 'uf', 'uc')).rejects.toThrow(
+      /family_relationships_pair_order_check/,
+    );
+    await expect(insert('bad2', 'uc', 'uc')).rejects.toThrow(
+      /family_relationships_pair_order_check/,
+    );
+    await expect(insert('bad3', 'ua', 'Ux')).rejects.toThrow(
+      /family_relationships_pair_order_check/,
+    );
+    await insert('ok1', 'uc', 'uf');
+    expect(
+      await rows(`SELECT count(*)::int AS n FROM "$s"."family_relationships" WHERE "id" = 'ok1'`),
+    ).toEqual([{ n: 1 }]);
+  });
+
+  it('makes every head a member of their family, or clears the head', async () => {
+    expect(
+      await rows(`SELECT "id", "headOfFamilyId" AS head FROM "$s"."families" ORDER BY "id"`),
+    ).toEqual([
+      { id: 'f1', head: 'ua' },
+      { id: 'f2', head: 'ub' },
+      { id: 'f3', head: null },
+      { id: 'f4', head: null },
+      { id: 'f5', head: 'ud' },
+      { id: 'f6', head: null },
+    ]);
+    expect(
+      await rows(`SELECT "id", "familyId" FROM "$s"."users" ORDER BY "id" COLLATE "C"`),
+    ).toEqual([
+      { id: 'Ux', familyId: 'f1' },
+      { id: 'ua', familyId: 'f1' },
+      { id: 'ub', familyId: 'f2' },
+      { id: 'uc', familyId: 'f1' },
+      { id: 'ud', familyId: 'f5' },
+      { id: 'ue', familyId: 'f1' },
+      { id: 'uf', familyId: 'f1' },
+    ]);
+    const changes = await prisma.$queryRawUnsafe<
+      { change: string; migration: string; reason: string }[]
+    >(
+      `SELECT "tableName" || '.' || "columnName" || ':' || "rowId" || ' ' ||
+              coalesce("oldValue", 'null') || ' -> ' || coalesce("newValue", 'null') AS change,
+              "migration", "reason"
+       FROM "phase5_archive"."value_changes" WHERE "sourceSchema" = $1 ORDER BY 1`,
+      schema,
+    );
+    expect(changes).toEqual([
+      {
+        change: 'families.headOfFamilyId:f3 uc -> null',
+        migration,
+        reason: 'set to NULL (the head belongs to another family)',
+      },
+      {
+        change: 'families.headOfFamilyId:f4 ud -> null',
+        migration,
+        reason: 'set to NULL (the head belongs to another family)',
+      },
+      {
+        change: 'users.familyId:ub null -> f2',
+        migration,
+        reason: 'head of family with no family joined the family they head',
+      },
+      {
+        change: 'users.familyId:ud null -> f5',
+        migration,
+        reason: 'head of family with no family joined the family they head',
+      },
+    ]);
+  });
+});

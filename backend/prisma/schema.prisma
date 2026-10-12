@@ -195,7 +195,9 @@ model FamilyRelationship {
   familyId        String
   
   // One row per pair, stored with primaryUserId < relatedUserId; relationshipType is the
-  // primary's relation to the related user (PHASE3_SPECS.md 1.2).
+  // primary's relation to the related user (PHASE3_SPECS.md 1.2). The order is byte order, enforced
+  // by the CHECK constraint family_relationships_pair_order_check (migration
+  // 20261012030000_family_integrity), which Prisma does not model.
   @@unique([primaryUserId, relatedUserId])
   @@index([relatedUserId])
   @@index([familyId])
