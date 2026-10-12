@@ -81,12 +81,11 @@ model User {
   familyRelationships     FamilyRelationship[] @relation("UserAsPrimary")
   relatedFamilyMembers    FamilyRelationship[] @relation("UserAsRelated")
 
-  // Rows this user authored, owns or leads (PHASE3_SPECS.md 1.2)
+  // Rows this user authored, owns or heads (PHASE3_SPECS.md 1.2)
   authoredNotes     MemberNote[]        @relation("NoteAuthor")
   staffInteractions MemberInteraction[] @relation("InteractionStaff")
   savedSearches     SavedSearch[]
   tagsAdded         UserTag[]           @relation("TagAddedBy")
-  ledGroups         Group[]
   headedFamilies    Family[]            @relation("FamilyHead")
   servicesCreated   Service[]           @relation("ServiceCreatedBy")
   attendanceRecorded Attendance[]       @relation("AttendanceRecordedBy")
@@ -213,9 +212,7 @@ model Group {
   meetingTime String?
   location    String?
   
-  // Leadership
-  leaderId    String?
-  leader      User?   @relation(fields: [leaderId], references: [id], onDelete: SetNull)
+  // Leaders are the members with role leader or co_leader (PHASE5_SPECS.md 1.4, P5-D8).
   
   // Timestamps
   createdAt   DateTime @default(now())
@@ -224,7 +221,6 @@ model Group {
   // Relations
   members     GroupMember[]
   
-  @@index([leaderId])
   @@map("groups")
 }
 

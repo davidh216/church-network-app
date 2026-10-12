@@ -40,15 +40,17 @@ function execute(sql: string) {
   });
 }
 
-// The Phase 3 migrations record what they delete, repoint or remap in the shared schema
-// "phase3_archive", tagged with the schema they ran in. Each fixture clears its own rows there
-// before it is built and when it is dropped; other rows in the archive are left alone.
+// The Phase 3 and Phase 5 migrations record what they delete, repoint or remap in the shared
+// schemas "phase3_archive" and "phase5_archive", tagged with the schema they ran in. Each fixture
+// clears its own rows there before it is built and when it is dropped; other rows in the
+// archives are left alone.
 const clearArchive = (schema: string) => `
   DO $$
-  DECLARE t TEXT;
+  DECLARE t RECORD;
   BEGIN
-    FOR t IN SELECT table_name FROM information_schema.tables WHERE table_schema = 'phase3_archive' LOOP
-      EXECUTE format('DELETE FROM "phase3_archive".%I WHERE "sourceSchema" = %L', t, '${schema}');
+    FOR t IN SELECT table_schema, table_name FROM information_schema.tables
+             WHERE table_schema IN ('phase3_archive', 'phase5_archive') LOOP
+      EXECUTE format('DELETE FROM %I.%I WHERE "sourceSchema" = %L', t.table_schema, t.table_name, '${schema}');
     END LOOP;
   END $$;`;
 
@@ -100,6 +102,22 @@ const archivedRows = (schema: string, table: string) =>
   );
 
 /** The references and enum values `schema`'s migrations changed, as "table.column:id old -> new". */
+/** The (group, leader) pairs `schema`'s G3 migration archived before dropping groups.leaderId. */
+const archivedGroupLeaders = (schema: string) =>
+  prisma.$queryRawUnsafe<
+    {
+      groupId: string;
+      groupName: string;
+      leaderId: string;
+      membership: string;
+      migration: string;
+    }[]
+  >(
+    `SELECT "groupId", "groupName", "leaderId", "membership", "migration"
+     FROM "phase5_archive"."group_leaders" WHERE "sourceSchema" = $1 ORDER BY "groupId"`,
+    schema,
+  );
+
 const valueChanges = async (schema: string) =>
   (
     await prisma.$queryRawUnsafe<ValueChange[]>(
@@ -1604,7 +1622,14 @@ describe('a Phase 2 database upgraded by prisma migrate deploy (whole chain)', (
 
   it('repoints references: head of family, dangling ids and orphaned note authors', async () => {
     expect(await column('families', 'headOfFamilyId')).toEqual({ f1: 'u1', f2: null });
-    expect(await column('groups', 'leaderId')).toEqual({ g1: 'u1', g2: null });
+    // groups.leaderId is gone (G3); g1's leader u1 was already its co-leader (gm1) and stays so.
+    expect(await archivedGroupLeaders(schema)).toEqual([
+      expect.objectContaining({
+        groupId: 'g1',
+        leaderId: 'u1',
+        membership: 'kept as co_leader (row gm1)',
+      }),
+    ]);
     expect(await column('member_notes', 'authorId')).toEqual({ n1: 'admin', n2: 'admin' });
     expect(await column('member_interactions', 'staffMemberId')).toEqual({
       i1: 'admin',
@@ -1831,5 +1856,109 @@ describe('20261012010000_member_tag_updated_at (G2)', () => {
          WHERE table_schema = '$s' AND table_name = 'member_tags' AND column_name = 'updatedAt'`,
       ),
     ).toEqual([{ column_default: null, is_nullable: 'NO' }]);
+  });
+});
+
+describe('20261012020000_group_leaders_to_members (G3)', () => {
+  const schema = 'fixture_g3_group_leaders';
+  const rows = <T>(sql: string) => prisma.$queryRawUnsafe<T[]>(sql.replaceAll('$s', schema));
+
+  beforeAll(() => {
+    migrateFixture(
+      schema,
+      '20261012020000_group_leaders_to_members',
+      `
+      INSERT INTO "users" ("id", "email", "password", "name", "updatedAt") VALUES
+        ('u1', 'u1@g3.test', 'x', 'Ann', now()), ('u2', 'u2@g3.test', 'x', 'Ben', now()),
+        ('u3', 'u3@g3.test', 'x', 'Cy', now()), ('u4', 'u4@g3.test', 'x', 'Di', now());
+      -- g1: a leader without a roster row; g2: a leader with an (inactive) member row; g3: a
+      -- leader already co-leader; g4: no leader; g5: a leader already leader.
+      INSERT INTO "groups" ("id", "name", "type", "leaderId", "createdAt", "updatedAt") VALUES
+        ('g1', 'Choir', 'ministry', 'u1', '2025-03-04 05:06:07', now()),
+        ('g2', 'Youth', 'small_group', 'u2', '2025-01-01', now()),
+        ('g3', 'Ushers', 'service_team', 'u3', '2025-01-01', now()),
+        ('g4', 'Finance', 'committee', NULL, '2025-01-01', now()),
+        ('g5', 'Prayer', 'small_group', 'u4', '2025-01-01', now());
+      INSERT INTO "group_members" ("id", "userId", "groupId", "role", "joinDate", "isActive") VALUES
+        ('gm1', 'u2', 'g2', 'member', '2024-06-01', false),
+        ('gm2', 'u3', 'g2', 'member', '2024-06-01', true),
+        ('gm3', 'u3', 'g3', 'co_leader', '2024-06-01', true),
+        ('gm4', 'u1', 'g4', 'member', '2024-06-01', true),
+        ('gm5', 'u4', 'g5', 'leader', '2024-06-01', true);
+      `,
+    );
+  }, 60_000);
+
+  afterAll(() => dropSchema(schema));
+
+  it('folds each leader into the roster without touching other rows', async () => {
+    const roster = await rows<{
+      id: string;
+      userId: string;
+      groupId: string;
+      role: string;
+      joinDate: Date;
+      isActive: boolean;
+    }>(
+      `SELECT "id", "userId", "groupId", "role"::text AS role, "joinDate", "isActive"
+       FROM "$s"."group_members" ORDER BY "groupId", "userId"`,
+    );
+    expect(roster.map((r) => [r.groupId, r.userId, r.role, r.isActive])).toEqual([
+      ['g1', 'u1', 'leader', true],
+      ['g2', 'u2', 'leader', false],
+      ['g2', 'u3', 'member', true],
+      ['g3', 'u3', 'co_leader', true],
+      ['g4', 'u1', 'member', true],
+      ['g5', 'u4', 'leader', true],
+    ]);
+    // The inserted row has a cuid-shaped id and joined when the group was created.
+    expect(roster[0]!.id).toMatch(/^c[0-9a-f]{24}$/);
+    expect(roster[0]!.joinDate.toISOString()).toBe('2025-03-04T05:06:07.000Z');
+    expect(roster.slice(1).map((r) => r.id)).toEqual(['gm1', 'gm2', 'gm3', 'gm4', 'gm5']);
+  });
+
+  it('archives every original leader, then drops the column and its index', async () => {
+    const migration = '20261012020000_group_leaders_to_members';
+    expect(await archivedGroupLeaders(schema)).toEqual([
+      {
+        groupId: 'g1',
+        groupName: 'Choir',
+        leaderId: 'u1',
+        membership: 'inserted as leader',
+        migration,
+      },
+      {
+        groupId: 'g2',
+        groupName: 'Youth',
+        leaderId: 'u2',
+        membership: 'raised from member to leader (row gm1)',
+        migration,
+      },
+      {
+        groupId: 'g3',
+        groupName: 'Ushers',
+        leaderId: 'u3',
+        membership: 'kept as co_leader (row gm3)',
+        migration,
+      },
+      {
+        groupId: 'g5',
+        groupName: 'Prayer',
+        leaderId: 'u4',
+        membership: 'kept as leader (row gm5)',
+        migration,
+      },
+    ]);
+    expect(
+      await rows(
+        `SELECT column_name FROM information_schema.columns
+         WHERE table_schema = '$s' AND table_name = 'groups' AND column_name = 'leaderId'`,
+      ),
+    ).toEqual([]);
+    expect(
+      await rows(
+        `SELECT indexname FROM pg_indexes WHERE schemaname = '$s' AND indexname = 'groups_leaderId_idx'`,
+      ),
+    ).toEqual([]);
   });
 });
