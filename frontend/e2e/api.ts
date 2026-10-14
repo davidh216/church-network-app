@@ -86,6 +86,32 @@ export async function ensureE2eMember(admin: APIRequestContext): Promise<{ id: s
   return { id };
 }
 
+/**
+ * A second fixed member that never signs in (so it costs no login attempts): specs that need
+ * someone other than the admin and E2E_MEMBER use it, so they do not depend on what else
+ * church_dev holds. CI starts from a database with only the admin.
+ */
+export const E2E_OTHER = {
+  name: 'E2E Other Member',
+  email: 'e2e-other@example.test',
+  password: 'E2e-other-fixed-password',
+};
+
+export async function ensureE2eOther(
+  admin: APIRequestContext,
+): Promise<{ id: string; name: string }> {
+  const created = await admin.post('/api/users', { data: { ...E2E_OTHER, isActive: true } });
+  if (created.status() === 201) {
+    const { user } = (await created.json()) as { user: { id: string } };
+    return { id: user.id, name: E2E_OTHER.name };
+  }
+  expect(created.status()).toBe(409);
+  const id = await userIdByEmail(admin, E2E_OTHER.email);
+  const data = { isActive: true, name: E2E_OTHER.name };
+  expect((await admin.put(`/api/users/${id}`, { data })).ok()).toBe(true);
+  return { id, name: E2E_OTHER.name };
+}
+
 async function memberId(admin: APIRequestContext): Promise<string> {
   const found = await admin.get('/api/users', { params: { q: E2E_MEMBER.email } });
   expect(found.ok()).toBe(true);

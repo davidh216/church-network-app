@@ -9,6 +9,7 @@ import {
   deleteSavedSearches,
   E2E_MEMBER,
   ensureE2eMember,
+  ensureE2eOther,
   ensureOneVideo,
   userIdByEmail,
 } from './api';
@@ -332,9 +333,6 @@ test('admin opens a group page and a family page with their dialogs, then delete
   // which unlinks their members again.
   const nav = page.getByRole('navigation', { name: 'Main' });
   const memberId = await userIdByEmail(page.request, E2E_MEMBER.email);
-  const users = (await (
-    await page.request.get('/api/users', { params: { status: 'active', pageSize: 50 } })
-  ).json()) as { users: { id: string; name: string; email?: string }[] };
   // Each family below is created around someone who has none: a member already in a family would
   // be refused (409) or, for the third, would make the move confirmation name another family.
   const familyOf = async (id: string) => {
@@ -343,22 +341,12 @@ test('admin opens a group page and a family page with their dialogs, then delete
     const body = (await res.json()) as { user: { family?: { familyName: string } | null } };
     return body.user.family?.familyName ?? null;
   };
-  for (const id of [me.user.id, memberId]) {
+  // The third person is a fixed e2e account, so the test does not depend on church_dev's data.
+  const third = await ensureE2eOther(page.request);
+  for (const id of [me.user.id, memberId, third.id]) {
     const family = await familyOf(id);
     if (family) throw new Error(`User ${id} already belongs to the family "${family}"`);
   }
-  let third: { id: string; name: string } | undefined;
-  for (const u of users.users) {
-    if (u.id === me.user.id || u.id === memberId || !/^[\w ]+$/.test(u.name)) continue;
-    if ((await familyOf(u.id)) === null) {
-      third = u;
-      break;
-    }
-  }
-  if (!third)
-    throw new Error(
-      'church_dev needs a third active member (name of letters, digits and spaces) without a family',
-    );
   const familyId = await createFamilyWithHead(page.request, FAMILY_NAME, me.user.id);
   expect(
     (
