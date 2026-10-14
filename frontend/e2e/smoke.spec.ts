@@ -415,7 +415,7 @@ test('admin opens a group page and a family page with their dialogs, then delete
     .first()
     .click();
   const move = page.getByRole('dialog', { name: `Move ${third.name}?` });
-  await expect(move).toContainText(`the ${OTHER_FAMILY_NAME} family`);
+  await expect(move).toContainText(`already belongs to the ${OTHER_FAMILY_NAME}.`);
   await expectNoSeriousA11yViolations(page, '/families/[id] with the move confirmation');
   await move.getByRole('button', { name: 'Cancel' }).click();
   await expect(move).toHaveCount(0);
