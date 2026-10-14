@@ -27,7 +27,11 @@ async function findPage<S extends Prisma.UserSelect>(
   pageSize: number | undefined,
 ) {
   const p = paging(page, pageSize);
-  const [users, total] = await prisma.$transaction([
+  // Two independent reads, not a batch transaction: at READ COMMITTED a transaction would not
+  // make the count and the page agree anyway, and inside one Prisma loads the staff row's
+  // relations (roles, tags, engagement) concurrently on a single connection, which pg deprecates
+  // ("client.query() when the client is already executing a query").
+  const [users, total] = await Promise.all([
     prisma.user.findMany({ where, select, orderBy: sortBy, skip: p.skip, take: p.take }),
     prisma.user.count({ where }),
   ]);
@@ -181,7 +185,7 @@ export async function createUser(
     throw new HttpError(409, 'A user with this email already exists');
   }
   const roleIds = (await resolveRoles(body.roleIds, isAdmin(requester))).map((r) => r.id);
-  return prisma.user.create({
+  const { id } = await prisma.user.create({
     data: {
       name: body.name,
       firstName: body.firstName ?? null,
@@ -197,8 +201,10 @@ export async function createUser(
       // Every account has an engagement row (defaults: score 0, visitor, low risk).
       engagement: { create: {} },
     },
-    select: staffSelect,
+    select: { id: true },
   });
+  // Read back outside the create's implicit transaction (see updateUser).
+  return prisma.user.findUniqueOrThrow({ where: { id }, select: staffSelect });
 }
 
 // Who is reading a user: staff get the staff projection (engagement included) for every
@@ -269,8 +275,8 @@ export async function updateUser(
   const rolesChanged = !!newRoleNames && newRoleNames.join() !== oldRoleNames.join();
   const statusChanged = body.isActive !== undefined && body.isActive !== target.isActive;
 
-  return prisma.$transaction(async (tx) => {
-    const user = await tx.user.update({
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({
       where: { id },
       data: {
         name: body.name,
@@ -285,8 +291,7 @@ export async function updateUser(
           ? { deleteMany: {}, create: roleIds.map((roleId) => ({ roleId })) }
           : undefined,
       },
-      // A non-staff requester can only update themself and gets the self projection back.
-      select: isStaff(requester) ? staffSelect : selfSelect,
+      select: { id: true },
     });
     const subject = { type: 'user', id } as const;
     if (rolesChanged)
@@ -295,7 +300,13 @@ export async function updateUser(
       });
     if (statusChanged)
       await audit(tx, requester, body.isActive ? 'user_activated' : 'user_deactivated', subject);
-    return user;
+  });
+  // Read back after the commit: inside the transaction Prisma would load the staff projection's
+  // relations concurrently on one connection, which pg deprecates. A non-staff requester can only
+  // update themself and gets the self projection back.
+  return prisma.user.findUniqueOrThrow({
+    where: { id },
+    select: isStaff(requester) ? staffSelect : selfSelect,
   });
 }
 
