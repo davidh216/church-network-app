@@ -4,6 +4,7 @@ import {
   MAX_PAGE,
   MAX_PAGE_SIZE,
   MAX_QUERY_TEXT,
+  cuid,
   optionalQueryText,
   requiredText,
   type WithNumericPaging,
@@ -83,6 +84,34 @@ const activeCondition = z.object({
   value: z.boolean({ error: 'Choose active or inactive' }),
 });
 
+// Tag and group conditions take ids (PHASE5_SPECS.md G5). An id that names no tag or group (one
+// deleted since the search was saved) matches no member: the condition never fails because of it.
+export const MAX_REFERENCE_IDS = 20;
+const referenceIds = (label: string) =>
+  z
+    .array(cuid)
+    .min(1, `Choose at least one ${label}`)
+    .max(MAX_REFERENCE_IDS, `Choose at most ${MAX_REFERENCE_IDS} ${label}s`);
+
+const tagsCondition = z.object({
+  field: z.literal('tags'),
+  operator: z.enum(['includesAny', 'includesAll', 'excludesAll']),
+  value: referenceIds('tag'),
+});
+
+// Only active memberships of active groups count.
+const groupsCondition = z.object({
+  field: z.literal('groups'),
+  operator: z.enum(['includesAny', 'excludesAll']),
+  value: referenceIds('group'),
+});
+
+// Whether the member belongs to a family; takes no value.
+const familyCondition = z.object({
+  field: z.literal('family'),
+  operator: z.enum(['isEmpty', 'isNotEmpty']),
+});
+
 export const searchCondition = z.discriminatedUnion('field', [
   textCondition,
   rolesCondition,
@@ -91,6 +120,9 @@ export const searchCondition = z.discriminatedUnion('field', [
   riskCondition,
   dateCondition,
   activeCondition,
+  tagsCondition,
+  groupsCondition,
+  familyCondition,
 ]);
 
 // Every field the search accepts and the operators allowed on it.
@@ -106,6 +138,9 @@ export const SEARCH_FIELD_OPERATORS = {
   createdAt: ['before', 'after', 'between'],
   lastLoginAt: ['before', 'after', 'between'],
   isActive: ['equals'],
+  tags: ['includesAny', 'includesAll', 'excludesAll'],
+  groups: ['includesAny', 'excludesAll'],
+  family: ['isEmpty', 'isNotEmpty'],
 } as const satisfies Record<SearchCondition['field'], readonly SearchCondition['operator'][]>;
 
 // Sort keys for the member list and the search.
@@ -144,6 +179,9 @@ export const listUsersQuery = z.object({
   // Inclusive calendar dates (UTC) of the account's creation.
   joinedFrom: z.iso.date().optional(),
   joinedTo: z.iso.date().optional(),
+  // Members who have this tag, or an active membership of this group (an active group).
+  tagId: cuid.optional(),
+  groupId: cuid.optional(),
   sort: userSortField.optional(),
   order: sortOrder.optional(),
   page: z.coerce.number().int().min(1).max(MAX_PAGE).default(1),
@@ -158,6 +196,8 @@ export const STAFF_ONLY_LIST_FILTERS = [
   'risk',
   'joinedFrom',
   'joinedTo',
+  'tagId',
+  'groupId',
 ] as const satisfies readonly (keyof z.infer<typeof listUsersQuery>)[];
 
 export type SearchCondition = z.infer<typeof searchCondition>;

@@ -3,11 +3,16 @@ import {
   BETWEEN_ORDER_MESSAGE,
   listUsersQuery,
   MAX_PAGE,
+  MAX_REFERENCE_IDS,
+  STAFF_ONLY_LIST_FILTERS,
   SEARCH_FIELD_OPERATORS,
   searchCondition,
   searchQuery,
   type SearchField,
 } from '../src';
+
+const ID_A = 'clh3am8hi0000qwer1234abcd';
+const ID_B = 'clh3am8hi0001qwer1234abcd';
 
 // A valid value for every field/operator pair the search allows.
 const VALID: Record<SearchField, Record<string, unknown>> = {
@@ -30,6 +35,9 @@ const VALID: Record<SearchField, Record<string, unknown>> = {
     between: ['2026-09-01', '2026-10-01'],
   },
   isActive: { equals: true },
+  tags: { includesAny: [ID_A], includesAll: [ID_A, ID_B], excludesAll: [ID_B] },
+  groups: { includesAny: [ID_A, ID_B], excludesAll: [ID_A] },
+  family: { isEmpty: undefined, isNotEmpty: undefined },
 };
 
 const fields = Object.keys(SEARCH_FIELD_OPERATORS) as SearchField[];
@@ -79,8 +87,35 @@ describe('searchCondition', () => {
     { field: 'createdAt', operator: 'before', value: 'last week' },
     { field: 'createdAt', operator: 'between', value: ['2026-01-01'] },
     { field: 'isActive', operator: 'equals', value: 'true' },
+    { field: 'tags', operator: 'includesAny', value: [] },
+    { field: 'tags', operator: 'includesAny', value: ID_A },
+    { field: 'tags', operator: 'includesAll', value: ['not-an-id'] },
+    { field: 'tags', operator: 'excludesAll', value: Array(MAX_REFERENCE_IDS + 1).fill(ID_A) },
+    { field: 'groups', operator: 'includesAll', value: [ID_A] },
+    { field: 'groups', operator: 'excludesAll', value: [] },
+    { field: 'groups', operator: 'includesAny', value: Array(MAX_REFERENCE_IDS + 1).fill(ID_A) },
+    { field: 'family', operator: 'equals', value: true },
   ])('rejects a wrongly typed value: $field $operator $value', (condition) => {
     expect(searchCondition.safeParse(condition).success).toBe(false);
+  });
+});
+
+describe('tag and group ids', () => {
+  it('accepts up to 20 ids', () => {
+    const value = Array(MAX_REFERENCE_IDS).fill(ID_A);
+    expect(
+      searchCondition.safeParse({ field: 'tags', operator: 'includesAll', value }).success,
+    ).toBe(true);
+    expect(
+      searchCondition.safeParse({ field: 'groups', operator: 'excludesAll', value }).success,
+    ).toBe(true);
+  });
+
+  it('drops a value sent with a family condition', () => {
+    expect(searchCondition.parse({ field: 'family', operator: 'isNotEmpty', value: 'x' })).toEqual({
+      field: 'family',
+      operator: 'isNotEmpty',
+    });
   });
 });
 
@@ -183,6 +218,8 @@ describe('listUsersQuery', () => {
         risk: 'high',
         joinedFrom: '2026-01-01',
         joinedTo: '2026-01-31',
+        tagId: ID_A,
+        groupId: ID_B,
         sort: 'engagementScore',
         order: 'desc',
         page: '3',
@@ -196,6 +233,8 @@ describe('listUsersQuery', () => {
       risk: 'high',
       joinedFrom: '2026-01-01',
       joinedTo: '2026-01-31',
+      tagId: ID_A,
+      groupId: ID_B,
       sort: 'engagementScore',
       order: 'desc',
       page: 3,
@@ -228,7 +267,18 @@ describe('listUsersQuery', () => {
     { page: '100001' },
     { pageSize: '101' },
     { q: ['a', 'b'] },
+    { tagId: 'not-an-id' },
+    { groupId: '' },
+    { tagId: [ID_A, ID_B] },
   ])('rejects %o', (query) => {
     expect(listUsersQuery.safeParse(query).success).toBe(false);
+  });
+});
+
+describe('STAFF_ONLY_LIST_FILTERS', () => {
+  it('names every list filter but q, sort, order and paging', () => {
+    const open = ['q', 'sort', 'order', 'page', 'pageSize'];
+    const all = Object.keys(listUsersQuery.shape).filter((key) => !open.includes(key));
+    expect([...STAFF_ONLY_LIST_FILTERS].sort()).toEqual(all.sort());
   });
 });

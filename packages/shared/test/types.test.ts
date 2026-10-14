@@ -22,6 +22,8 @@ describe('frontend-facing list parameter types', () => {
       risk?: RiskLevel | undefined;
       joinedFrom?: string | undefined;
       joinedTo?: string | undefined;
+      tagId?: string | undefined;
+      groupId?: string | undefined;
       sort?: UserSortField | undefined;
       order?: SortOrder | undefined;
       page?: number | undefined;
