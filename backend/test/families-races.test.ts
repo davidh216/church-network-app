@@ -193,11 +193,10 @@ describe('family write races', () => {
     const atGate = new Promise<void>((resolve) => (reached = resolve));
     const gate = new Promise<void>((resolve) => (release = resolve));
     // createFamily has read Cy (no family) and created the family; it waits at family_created.
-    vi.mocked(audit).mockImplementationOnce(async (...args) => {
+    vi.mocked(audit).mockImplementationOnce(((...args: Parameters<typeof audit>) => {
       reached();
-      await gate;
-      return realAudit(...args);
-    });
+      return gate.then(() => realAudit(...args));
+    }) as unknown as typeof audit);
     const creating = request(app)
       .post('/api/families')
       .set(admin)
