@@ -187,6 +187,42 @@ describe('tags (G2)', () => {
     ]);
   });
 
+  it('does not assign a tag that is being archived at the same moment', async () => {
+    const tag = (await create({ name: 'Closing' })).body.tag;
+    const { audit: realAudit } =
+      await vi.importActual<typeof import('../src/lib/audit')>('../src/lib/audit');
+    let reached!: () => void;
+    let release!: () => void;
+    const atGate = new Promise<void>((resolve) => (reached = resolve));
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    // The archive has updated the row and waits, uncommitted, at its audit call.
+    vi.mocked(audit).mockImplementationOnce(((...args: Parameters<typeof audit>) => {
+      reached();
+      return gate.then(() => realAudit(...args));
+    }) as unknown as typeof audit);
+    const archiving = request(app)
+      .patch(`/api/tags/${tag.id}`)
+      .set(leader)
+      .send({ isActive: false })
+      .then((res) => res);
+    await atGate;
+    const assigning = assign(memberId, tag.id).then((res) => res);
+    // Let the assignment reach the tag row: it waits there for the archive (at most 2 s).
+    for (let i = 0; i < 40; i++) {
+      const [row] = await prisma.$queryRaw<{ waiting: number }[]>`
+        SELECT count(*)::int AS waiting FROM pg_stat_activity
+        WHERE datname = current_database() AND wait_event_type = 'Lock'`;
+      if (row!.waiting > 0) break;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    release();
+    expect((await archiving).status).toBe(200);
+    const refused = await assigning;
+    expect(refused.status).toBe(400);
+    expect(refused.body.code).toBe('TAG_ARCHIVED');
+    expect(await prisma.userTag.count({ where: { tagId: tag.id } })).toBe(0);
+  });
+
   it('assigns idempotently, unassigns, and audits each change once', async () => {
     const tag = (await create({ name: 'Greeter' })).body.tag;
     const first = await assign(memberId, tag.id);

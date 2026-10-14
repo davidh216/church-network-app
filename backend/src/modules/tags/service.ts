@@ -188,10 +188,10 @@ async function assertUser(tx: Prisma.TransactionClient, userId: string) {
 export async function assignTag(actor: AuditActor, userId: string, tagId: string) {
   const added = await prisma.$transaction(async (tx) => {
     await assertUser(tx, userId);
-    const tag = await tx.memberTag.findUnique({
-      where: { id: tagId },
-      select: { id: true, name: true, isActive: true },
-    });
+    // FOR SHARE: an archive running now (an UPDATE of this row) commits first, or waits for this
+    // assignment to commit, so a tag is never assigned after it was archived.
+    const [tag] = await tx.$queryRaw<{ id: string; name: string; isActive: boolean }[]>`
+      SELECT "id", "name", "isActive" FROM "member_tags" WHERE "id" = ${tagId} FOR SHARE`;
     if (!tag) throw new HttpError(404, TAG_NOT_FOUND);
     const existing = await tx.userTag.findUnique({
       where: { userId_tagId: { userId, tagId } },
