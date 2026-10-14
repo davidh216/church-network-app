@@ -335,10 +335,30 @@ test('admin opens a group page and a family page with their dialogs, then delete
   const users = (await (
     await page.request.get('/api/users', { params: { status: 'active', pageSize: 50 } })
   ).json()) as { users: { id: string; name: string; email?: string }[] };
-  const third = users.users.find(
-    (u) => u.id !== me.user.id && u.id !== memberId && /^[\w ]+$/.test(u.name),
-  );
-  if (!third) throw new Error('church_dev needs a third active member');
+  // Each family below is created around someone who has none: a member already in a family would
+  // be refused (409) or, for the third, would make the move confirmation name another family.
+  const familyOf = async (id: string) => {
+    const res = await page.request.get(`/api/member-details/${id}`);
+    expect(res.ok()).toBe(true);
+    const body = (await res.json()) as { user: { family?: { familyName: string } | null } };
+    return body.user.family?.familyName ?? null;
+  };
+  for (const id of [me.user.id, memberId]) {
+    const family = await familyOf(id);
+    if (family) throw new Error(`User ${id} already belongs to the family "${family}"`);
+  }
+  let third: { id: string; name: string } | undefined;
+  for (const u of users.users) {
+    if (u.id === me.user.id || u.id === memberId || !/^[\w ]+$/.test(u.name)) continue;
+    if ((await familyOf(u.id)) === null) {
+      third = u;
+      break;
+    }
+  }
+  if (!third)
+    throw new Error(
+      'church_dev needs a third active member (name of letters, digits and spaces) without a family',
+    );
   const familyId = await createFamilyWithHead(page.request, FAMILY_NAME, me.user.id);
   expect(
     (
@@ -363,7 +383,8 @@ test('admin opens a group page and a family page with their dialogs, then delete
   await page.getByLabel('Search by name').fill(FAMILY_NAME);
   await page.getByRole('link', { name: FAMILY_NAME, exact: true }).click();
   await expect(
-    page.getByRole('heading', { level: 1, name: `${FAMILY_NAME} family` }),
+    // The name already ends with "family", so the heading does not repeat it.
+    page.getByRole('heading', { level: 1, name: FAMILY_NAME, exact: true }),
   ).toBeVisible();
   const members = page.getByRole('region', { name: 'Members (2)' });
   await expect(members.getByLabel('Head of family')).toHaveValue(me.user.id);
