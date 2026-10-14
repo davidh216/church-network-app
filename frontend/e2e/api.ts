@@ -1,3 +1,5 @@
+import { existsSync, mkdirSync } from 'node:fs';
+import path from 'node:path';
 import { expect, request, type APIRequestContext } from '@playwright/test';
 import { seededAdmin } from './admin';
 
@@ -16,11 +18,33 @@ export async function signedInRequest(credentials: {
   return null;
 }
 
-/** An API client signed in as the seeded admin. */
-export async function adminRequest(): Promise<APIRequestContext> {
+// The admin's session, saved once per run under the output directory (which Playwright empties
+// at the start of every run). The login limit counts every sign-in (10 per address and email in
+// 15 minutes), so the API helpers and the specs that need no login form share this one session.
+const ADMIN_STATE = path.join(__dirname, '..', 'test-results', '.auth', 'admin.json');
+
+/**
+ * The path of a storage state signed in as the seeded admin (for `request.newContext` or a
+ * browser context). Signs in only when no saved session exists or the saved one no longer works.
+ */
+export async function adminStorageState(): Promise<string> {
+  if (existsSync(ADMIN_STATE)) {
+    const saved = await request.newContext({ baseURL, storageState: ADMIN_STATE });
+    const valid = (await saved.get('/api/auth/me')).ok();
+    await saved.dispose();
+    if (valid) return ADMIN_STATE;
+  }
   const context = await signedInRequest(seededAdmin());
   if (!context) throw new Error('The seeded admin could not sign in');
-  return context;
+  mkdirSync(path.dirname(ADMIN_STATE), { recursive: true });
+  await context.storageState({ path: ADMIN_STATE });
+  await context.dispose();
+  return ADMIN_STATE;
+}
+
+/** An API client signed in as the seeded admin (the run's shared session). */
+export async function adminRequest(): Promise<APIRequestContext> {
+  return request.newContext({ baseURL, storageState: await adminStorageState() });
 }
 
 /**
@@ -88,6 +112,16 @@ export async function deleteGroups(admin: APIRequestContext, name: string) {
   const { groups } = (await list.json()) as { groups: { id: string; name: string }[] };
   for (const group of groups.filter((g) => g.name === name)) {
     expect((await admin.delete(`/api/groups/${group.id}`)).ok()).toBe(true);
+  }
+}
+
+/** Deletes every tag (archived ones too) named `name`, with its assignments. */
+export async function deleteTags(admin: APIRequestContext, name: string) {
+  const list = await admin.get('/api/tags', { params: { includeArchived: 'true' } });
+  expect(list.ok()).toBe(true);
+  const { tags } = (await list.json()) as { tags: { id: string; name: string }[] };
+  for (const tag of tags.filter((t) => t.name === name)) {
+    expect((await admin.delete(`/api/tags/${tag.id}`)).ok()).toBe(true);
   }
 }
 
