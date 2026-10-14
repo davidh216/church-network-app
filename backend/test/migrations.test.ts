@@ -2141,3 +2141,106 @@ describe('20261012030000_family_integrity (G4)', () => {
     ]);
   });
 });
+
+describe('20261012040000_family_relationship_cleanup (G4 review)', () => {
+  const schema = 'fixture_g4_relationship_cleanup';
+  const migration = '20261012040000_family_relationship_cleanup';
+
+  beforeAll(() => {
+    migrateFixture(
+      schema,
+      migration,
+      `
+      INSERT INTO "users" ("id", "email", "password", "name", "updatedAt") VALUES
+        ('ua', 'ua@g4c.test', 'x', 'Ann', now()), ('ub', 'ub@g4c.test', 'x', 'Ben', now()),
+        ('uc', 'uc@g4c.test', 'x', 'Cy', now()), ('ud', 'ud@g4c.test', 'x', 'Di', now());
+      INSERT INTO "families" ("id", "familyName", "updatedAt") VALUES
+        ('f1', 'Doe', now()), ('f2', 'Roe', now());
+      UPDATE "users" SET "familyId" = 'f1' WHERE "id" IN ('ua', 'ub');
+      UPDATE "users" SET "familyId" = 'f2' WHERE "id" = 'uc';
+      -- k1: both in f1, kept; x1: the related user is in f2; x2: neither is in f1 (uc in f2,
+      -- ud in no family); x3: the primary is in f1, not f2; x4: inactive, the related user has
+      -- no family.
+      INSERT INTO "family_relationships" ("id", "primaryUserId", "relatedUserId", "relationshipType", "isActive", "familyId", "updatedAt") VALUES
+        ('k1', 'ua', 'ub', 'spouse', true, 'f1', now()),
+        ('x1', 'ua', 'uc', 'sibling', true, 'f1', now()),
+        ('x2', 'uc', 'ud', 'parent', true, 'f1', now()),
+        ('x3', 'ub', 'uc', 'other', true, 'f2', now()),
+        ('x4', 'ua', 'ud', 'child', false, 'f1', now());
+      `,
+    );
+  }, 60_000);
+
+  afterAll(() => dropSchema(schema));
+
+  it('keeps only relationships between two members of their family', async () => {
+    expect(
+      await prisma.$queryRawUnsafe(
+        `SELECT "id" FROM "${schema}"."family_relationships" ORDER BY "id"`,
+      ),
+    ).toEqual([{ id: 'k1' }]);
+  });
+
+  it('archives every deleted row as it was, with the reason', async () => {
+    const archived = await prisma.$queryRawUnsafe<
+      { id: string; row: Record<string, unknown>; migration: string; reason: string }[]
+    >(
+      `SELECT "id", "row", "migration", "reason" FROM "phase5_archive"."family_relationships"
+       WHERE "sourceSchema" = $1 ORDER BY "id"`,
+      schema,
+    );
+    expect(
+      archived.map((a) => [
+        a.id,
+        a.row.primaryUserId,
+        a.row.relatedUserId,
+        a.row.relationshipType,
+        a.row.familyId,
+        a.row.isActive,
+        a.reason,
+        a.migration,
+      ]),
+    ).toEqual([
+      [
+        'x1',
+        'ua',
+        'uc',
+        'sibling',
+        'f1',
+        true,
+        "deleted (the related user is not in the relationship's family)",
+        migration,
+      ],
+      [
+        'x2',
+        'uc',
+        'ud',
+        'parent',
+        'f1',
+        true,
+        "deleted (neither user is in the relationship's family)",
+        migration,
+      ],
+      [
+        'x3',
+        'ub',
+        'uc',
+        'other',
+        'f2',
+        true,
+        "deleted (the primary user is not in the relationship's family)",
+        migration,
+      ],
+      [
+        'x4',
+        'ua',
+        'ud',
+        'child',
+        'f1',
+        false,
+        "deleted (the related user is not in the relationship's family)",
+        migration,
+      ],
+    ]);
+  });
+});
