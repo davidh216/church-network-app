@@ -95,6 +95,82 @@ describe('audit log (G1)', () => {
     });
   });
 
+  it('records the roles and the inactive status of an account staff create, nothing for a default one', async () => {
+    const create = (email: string, extra: object) =>
+      request(app)
+        .post('/api/users')
+        .set(admin)
+        .send({ name: email, email, password: 'a-long-enough-passphrase', ...extra });
+    const plain = await create('plain@audit.test.local', {});
+    expect(plain.status).toBe(201);
+    expect(await events()).toEqual([]);
+
+    const staff = await create('staff@audit.test.local', {
+      roleIds: [roleIds.member, roleIds.leader],
+      isActive: false,
+    });
+    expect(staff.status).toBe(201);
+    const staffId = staff.body.user.id;
+    expect((await events()).map((e) => [e.action, e.actorId, e.targetId, e.metadata])).toEqual([
+      ['user_role_changed', adminId, staffId, { from: [], to: ['leader', 'member'] }],
+      ['user_deactivated', adminId, staffId, null],
+    ]);
+    await prisma.auditEvent.deleteMany();
+    const inactive = await create('inactive@audit.test.local', { isActive: false });
+    expect((await events()).map((e) => [e.action, e.targetId])).toEqual([
+      ['user_deactivated', inactive.body.user.id],
+    ]);
+    await prisma.user.deleteMany({
+      where: {
+        email: { endsWith: '@audit.test.local' },
+        id: { notIn: [adminId, leaderId, memberId] },
+      },
+    });
+  });
+
+  it('creates no account when the audit write fails', async () => {
+    vi.mocked(audit).mockRejectedValueOnce(new Error('audit write failed'));
+    const res = await request(app).post('/api/users').set(admin).send({
+      name: 'Rolled back',
+      email: 'rolled-back@audit.test.local',
+      password: 'a-long-enough-passphrase',
+      isActive: false,
+    });
+    expect(res.status).toBe(500);
+    expect(await prisma.user.findUnique({ where: { email: 'rolled-back@audit.test.local' } })).toBe(
+      null,
+    );
+  });
+
+  it('records concurrent updates of one account as a chain of the values each one replaced', async () => {
+    const put = (roles: string[], isActive: boolean) =>
+      request(app).put(`/api/users/${memberId}`).set(admin).send({ roleIds: roles, isActive });
+    const results = await Promise.all([
+      put([roleIds.leader], false),
+      put([roleIds.member, roleIds.leader], false),
+      put([roleIds.leader], false),
+    ]);
+    expect(results.map((r) => r.status)).toEqual([200, 200, 200]);
+    const all = await events();
+    // One deactivation, however the three interleave.
+    expect(all.filter((e) => e.action === 'user_deactivated')).toHaveLength(1);
+    // Each role event starts where the previous one ended, and the last one ends at the stored roles.
+    const changes = all
+      .filter((e) => e.action === 'user_role_changed')
+      .map((e) => e.metadata as { from: string[]; to: string[] });
+    expect(changes[0]!.from).toEqual(['member']);
+    for (let i = 1; i < changes.length; i++) expect(changes[i]!.from).toEqual(changes[i - 1]!.to);
+    const stored = await prisma.userRole.findMany({
+      where: { userId: memberId },
+      select: { role: { select: { name: true } } },
+    });
+    expect(changes.at(-1)!.to).toEqual(stored.map((r) => r.role.name).sort());
+    await request(app)
+      .put(`/api/users/${memberId}`)
+      .set(admin)
+      .send({ roleIds: [roleIds.member] });
+  });
+
   it('rolls the change back when the audit write fails, and the event with a failed change', async () => {
     vi.mocked(audit).mockRejectedValueOnce(new Error('audit write failed'));
     const res = await request(app).put(`/api/users/${memberId}`).set(leader).send({

@@ -184,26 +184,40 @@ export async function createUser(
   if (await prisma.user.findUnique({ where: { email }, select: { id: true } })) {
     throw new HttpError(409, 'A user with this email already exists');
   }
-  const roleIds = (await resolveRoles(body.roleIds, isAdmin(requester))).map((r) => r.id);
-  const { id } = await prisma.user.create({
-    data: {
-      name: body.name,
-      firstName: body.firstName ?? null,
-      lastName: body.lastName ?? null,
-      email,
-      password: await bcrypt.hash(body.password, 10),
-      phone: body.phone ?? null,
-      bio: body.bio ?? null,
-      volunteerSkills: body.volunteerSkills ?? [],
-      interests: body.interests ?? [],
-      isActive: body.isActive ?? true,
-      roles: { create: roleIds.map((roleId) => ({ roleId })) },
-      // Every account has an engagement row (defaults: score 0, visitor, low risk).
-      engagement: { create: {} },
-    },
-    select: { id: true },
+  const roles = await resolveRoles(body.roleIds, isAdmin(requester));
+  const isActive = body.isActive ?? true;
+  const password = await bcrypt.hash(body.password, 10);
+  // Audited (PHASE5_SPECS.md 1.3) like the same change on an existing account: roles other than
+  // the default `member` are a role change from none, and an inactive account a deactivation.
+  const roleNames = roles.map((r) => r.name).sort();
+  const id = await prisma.$transaction(async (tx) => {
+    const { id } = await tx.user.create({
+      data: {
+        name: body.name,
+        firstName: body.firstName ?? null,
+        lastName: body.lastName ?? null,
+        email,
+        password,
+        phone: body.phone ?? null,
+        bio: body.bio ?? null,
+        volunteerSkills: body.volunteerSkills ?? [],
+        interests: body.interests ?? [],
+        isActive,
+        roles: { create: roles.map((r) => ({ roleId: r.id })) },
+        // Every account has an engagement row (defaults: score 0, visitor, low risk).
+        engagement: { create: {} },
+      },
+      select: { id: true },
+    });
+    const subject = { type: 'user', id } as const;
+    if (roleNames.join() !== 'member')
+      await audit(tx, requester, 'user_role_changed', subject, {
+        metadata: { from: [], to: roleNames },
+      });
+    if (!isActive) await audit(tx, requester, 'user_deactivated', subject);
+    return id;
   });
-  // Read back outside the create's implicit transaction (see updateUser).
+  // Read back after the commit (see updateUser).
   return prisma.user.findUniqueOrThrow({ where: { id }, select: staffSelect });
 }
 
@@ -244,38 +258,38 @@ export async function updateUser(
   const admin = isAdmin(requester);
   const self = requester.id === id;
 
-  const target = await prisma.user.findUnique({
-    where: { id },
-    select: {
-      id: true,
-      isActive: true,
-      roles: { select: { role: { select: { id: true, name: true } } } },
-    },
-  });
-  if (!target) throw new HttpError(404, 'User not found');
-  if (!admin && !self && target.roles.some((ur) => STAFF_ROLE_NAMES.includes(ur.role.name))) {
-    throw new HttpError(403, 'Only an admin can modify staff accounts');
-  }
-  if (admin && self && body.isActive === false)
-    throw new HttpError(403, 'You cannot lock yourself out');
-
-  let roles: { id: string; name: string }[] | undefined;
-  if (body.roleIds !== undefined) {
-    roles = await resolveRoles(body.roleIds, admin);
-    const ownAdminRoleId = adminRoleId(requester);
-    if (admin && self && (!ownAdminRoleId || !roles.some((r) => r.id === ownAdminRoleId))) {
-      throw new HttpError(403, 'You cannot lock yourself out');
-    }
-  }
-  const roleIds = roles?.map((r) => r.id);
-
-  // Audited (PHASE5_SPECS.md 1.3): a change of roles and a change of account status.
-  const oldRoleNames = target.roles.map((ur) => ur.role.name).sort();
-  const newRoleNames = roles?.map((r) => r.name).sort();
-  const rolesChanged = !!newRoleNames && newRoleNames.join() !== oldRoleNames.join();
-  const statusChanged = body.isActive !== undefined && body.isActive !== target.isActive;
-
   await prisma.$transaction(async (tx) => {
+    // The account row is locked before its roles and status are read, so a concurrent update
+    // waits and the audited "from" values are the ones this update replaces.
+    const locked = await tx.$queryRaw<{ id: string }[]>`
+      SELECT "id" FROM "users" WHERE "id" = ${id} FOR UPDATE`;
+    if (locked.length === 0) throw new HttpError(404, 'User not found');
+    const target = await tx.user.findUniqueOrThrow({
+      where: { id },
+      select: { isActive: true, roles: { select: { role: { select: { name: true } } } } },
+    });
+    const oldRoleNames = target.roles.map((ur) => ur.role.name).sort();
+    if (!admin && !self && oldRoleNames.some((name) => STAFF_ROLE_NAMES.includes(name))) {
+      throw new HttpError(403, 'Only an admin can modify staff accounts');
+    }
+    if (admin && self && body.isActive === false)
+      throw new HttpError(403, 'You cannot lock yourself out');
+
+    let roles: { id: string; name: string }[] | undefined;
+    if (body.roleIds !== undefined) {
+      roles = await resolveRoles(body.roleIds, admin);
+      const ownAdminRoleId = adminRoleId(requester);
+      if (admin && self && (!ownAdminRoleId || !roles.some((r) => r.id === ownAdminRoleId))) {
+        throw new HttpError(403, 'You cannot lock yourself out');
+      }
+    }
+    const roleIds = roles?.map((r) => r.id);
+    const newRoleNames = roles?.map((r) => r.name).sort();
+
+    // Audited (PHASE5_SPECS.md 1.3): a change of roles and a change of account status.
+    const rolesChanged = !!newRoleNames && newRoleNames.join() !== oldRoleNames.join();
+    const statusChanged = body.isActive !== undefined && body.isActive !== target.isActive;
+
     await tx.user.update({
       where: { id },
       data: {
