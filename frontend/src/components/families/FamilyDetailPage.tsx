@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { isApiError } from '@/lib/api/client';
 import { useHasRole } from '@/lib/auth/AuthProvider';
-import { addressText } from '@/lib/families/display';
+import { addressText, familyTitle } from '@/lib/families/display';
 import { useFamily } from '@/lib/queries/families';
 import InlineError from '@/components/ui/InlineError';
 import Skeleton from '@/components/ui/Skeleton';
@@ -67,7 +67,7 @@ export default function FamilyDetailPage({ id }: { id: string }) {
           tabIndex={-1}
           className="text-2xl font-bold text-gray-900 focus:outline-hidden"
         >
-          {family.familyName} family
+          {familyTitle(family.familyName)}
         </h1>
         <div className="flex flex-wrap items-center gap-2">
           <button type="button" className={outlineButton} onClick={() => setOpen('edit')}>

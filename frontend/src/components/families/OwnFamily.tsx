@@ -1,6 +1,6 @@
 'use client';
 
-import { relationshipLabel } from '@/lib/families/display';
+import { familyTitle, relationshipLabel } from '@/lib/families/display';
 import { useOwnFamily } from '@/lib/queries/families';
 import InlineError from '@/components/ui/InlineError';
 import Skeleton from '@/components/ui/Skeleton';
@@ -25,7 +25,7 @@ export default function OwnFamily({ headingId }: { headingId: string }) {
   } else {
     body = (
       <>
-        <p className="text-sm text-gray-900">The {data.familyName} family</p>
+        <p className="text-sm text-gray-900">The {familyTitle(data.familyName)}</p>
         {data.relatives.length === 0 ? (
           <p className="text-sm text-gray-600">Nobody else is in your family yet.</p>
         ) : (

@@ -1,5 +1,13 @@
 import { enumLabel, type FamilyDetail, type RelationshipType } from '@embrace/shared';
 
+/**
+ * How a family is named in a sentence or heading: "Smith" -> "Smith family", but a name that
+ * already ends with "family" (any case) is left alone, so never "Smith Family family".
+ */
+export function familyTitle(familyName: string): string {
+  return /\bfamily$/i.test(familyName.trim()) ? familyName : `${familyName} family`;
+}
+
 /** "grandparent" -> "Grandparent". */
 export const relationshipLabel = (type: RelationshipType): string => enumLabel(type);
 

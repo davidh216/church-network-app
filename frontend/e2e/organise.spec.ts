@@ -13,8 +13,8 @@ import { deleteAuditEvents } from './db';
 
 // PHASE5_SPECS.md G6: organise people. The admin creates a tag, tags the e2e member and filters
 // the list by it; creates a group with the member as co-leader, which the member then sees under
-// "My groups"; and creates a family of the admin and the member with a spouse relationship that
-// each profile shows from its own side. Everything it creates (the tag, the group, the family and
+// "My groups"; and creates a family of the admin and the member in which the member is the
+// admin's parent, which each profile shows from its own side (Parent on one, Child on the other). Everything it creates (the tag, the group, the family and
 // their audit events) is removed before and after the run, so church_dev ends as it started.
 const TAG_NAME = 'E2E organise tag';
 const GROUP_NAME = 'E2E organise group';
@@ -57,7 +57,7 @@ async function familyOf(page: Page, userId: string): Promise<string | null> {
   return body.user.family?.familyName ?? null;
 }
 
-test('admin tags, groups and families a member, who sees the group; each side sees the spouse', async ({
+test('admin tags, groups and families a member, who sees the group; each side sees the relation', async ({
   page,
   browser,
   baseURL,
@@ -94,10 +94,15 @@ test('admin tags, groups and families a member, who sees the group; each side se
   await page.goto(`/members/${member.id}`);
   await expect(page.getByRole('heading', { name: E2E_MEMBER.name })).toBeVisible();
   const tagInput = page.getByRole('combobox', { name: 'Tags (staff only)' });
+  // The picker is read-only until the tags have loaded.
+  await expect(tagInput).toHaveAttribute('placeholder', 'Type a tag name');
+  await expect(tagInput).toBeEditable();
   await tagInput.fill(TAG_NAME);
   await tagInput.press('Enter');
   await expect(page.getByRole('list', { name: 'Tags (staff only)' })).toContainText(TAG_NAME);
-  await expect(tagInput).toHaveAttribute('placeholder', 'Type a tag name');
+  await expect(page.getByText(`Added ${TAG_NAME}`)).toBeVisible();
+  await expect(tagInput).toHaveValue('');
+  await expect(tagInput).toBeEditable();
   await expectNoSeriousA11yViolations(page, '/members/[id] with a tag');
 
   await nav.getByRole('link', { name: 'Members' }).click();
@@ -152,7 +157,8 @@ test('admin tags, groups and families a member, who sees the group; each side se
   await expectNoSeriousA11yViolations(memberPage, '/groups as a member');
   await memberContext.close();
 
-  // 5. Create a family, add the admin and the member, and record that they are spouses.
+  // 5. Create a family, add the admin and the member, and record that the member is the admin's
+  // parent (a relation with a direction, unlike spouse, so a swapped side would show).
   await nav.getByRole('link', { name: 'Families' }).click();
   await expect(page).toHaveURL(/\/families$/);
   await page.getByRole('button', { name: 'New Family' }).click();
@@ -161,8 +167,9 @@ test('admin tags, groups and families a member, who sees the group; each side se
   await expectNoSeriousA11yViolations(page, '/families with the New Family dialog');
   await familyDialog.getByRole('button', { name: 'Create Family' }).click();
   await expect(page).toHaveURL(/\/families\/[^/]+$/);
+  // The name already ends with "family", so the heading does not repeat it.
   await expect(
-    page.getByRole('heading', { level: 1, name: `${FAMILY_NAME} family` }),
+    page.getByRole('heading', { level: 1, name: FAMILY_NAME, exact: true }),
   ).toBeVisible();
   const findMember = page.getByLabel('Find a member');
   const matches = page.getByRole('list', { name: 'Matching members' });
@@ -177,22 +184,25 @@ test('admin tags, groups and families a member, who sees the group; each side se
   await page.getByRole('button', { name: 'Set relationship' }).click();
   const relationship = page.getByRole('dialog', { name: 'Set Relationship' });
   await relationship.getByLabel('Person').selectOption(member.id);
-  await relationship.getByLabel('is the').selectOption('spouse');
+  await relationship.getByLabel('is the').selectOption('parent');
   await relationship.getByLabel('of', { exact: true }).selectOption(me.user.id);
-  await expect(relationship).toContainText(`${E2E_MEMBER.name} is the spouse of ${me.user.name}.`);
+  await expect(relationship).toContainText(`${E2E_MEMBER.name} is the parent of ${me.user.name}.`);
   await expectNoSeriousA11yViolations(page, '/families/[id] with the Set Relationship dialog');
   await relationship.getByRole('button', { name: 'Save Relationship' }).click();
   await expect(relationship).toHaveCount(0);
   // The pair is listed from the side stored first, then from the other side.
   const relationships = page.getByRole('region', { name: 'Relationships' });
-  await expect(relationships).toContainText(`${E2E_MEMBER.name} is the spouse of ${me.user.name}`);
-  await expect(relationships).toContainText(`${me.user.name} is the spouse of ${E2E_MEMBER.name}`);
+  await expect(relationships).toContainText(`${E2E_MEMBER.name} is the parent of ${me.user.name}`);
+  await expect(relationships).toContainText(`${me.user.name} is the child of ${E2E_MEMBER.name}`);
+  await expect(relationships).not.toContainText(`${me.user.name} is the parent of`);
   await expectNoSeriousA11yViolations(page, '/families/[id] with two members and a relationship');
 
-  // 6. Each profile's Family tab names the family and shows the other as their spouse.
-  for (const [self, other] of [
-    [me.user, { id: member.id, name: E2E_MEMBER.name }],
-    [{ id: member.id, name: E2E_MEMBER.name }, me.user],
+  // 6. Each profile's Family tab names the family and labels the other with their relation to
+  // the profile's owner: on the admin's, the member is the Parent; on the member's, the admin is
+  // the Child. The wrong label on either side would mean the direction was swapped.
+  for (const [self, other, label, wrong] of [
+    [me.user, { id: member.id, name: E2E_MEMBER.name }, 'Parent', 'Child'],
+    [{ id: member.id, name: E2E_MEMBER.name }, me.user, 'Child', 'Parent'],
   ] as const) {
     await page.goto(`/members/${self.id}`);
     await expect(page.getByRole('heading', { level: 1, name: self.name })).toBeVisible();
@@ -201,7 +211,8 @@ test('admin tags, groups and families a member, who sees the group; each side se
     await expect(panel.getByRole('link', { name: FAMILY_NAME })).toBeVisible();
     const relative = panel.getByRole('listitem').filter({ hasText: other.name });
     await expect(relative.getByRole('link', { name: other.name })).toBeVisible();
-    await expect(relative).toContainText('Spouse');
+    await expect(relative.getByText(label, { exact: true })).toBeVisible();
+    await expect(relative.getByText(wrong, { exact: true })).toHaveCount(0);
     await expectNoSeriousA11yViolations(page, `/members/[id] Family tab of ${self.name}`);
   }
   // afterAll deletes the tag, the group and the family, and their audit events.

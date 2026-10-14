@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { addressText, relationSentence, relationshipLabel } from './display';
+import { addressText, familyTitle, relationSentence, relationshipLabel } from './display';
 
 describe('family display', () => {
+  it('names a family without repeating "family"', () => {
+    expect(familyTitle('Smith')).toBe('Smith family');
+    expect(familyTitle('Smith Family')).toBe('Smith Family');
+    expect(familyTitle('The Ng FAMILY')).toBe('The Ng FAMILY');
+    expect(familyTitle('Familyson')).toBe('Familyson family');
+    expect(familyTitle('Superfamily')).toBe('Superfamily family');
+  });
+
   it('labels relationships and says them as sentences', () => {
     expect(relationshipLabel('grandchild')).toBe('Grandchild');
     expect(relationSentence('Ann', 'parent', 'Ben')).toBe('Ann is the parent of Ben');
