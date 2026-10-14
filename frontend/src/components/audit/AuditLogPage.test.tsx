@@ -85,6 +85,30 @@ describe('AuditLogPage', () => {
     expect(lastParams()).toMatchObject({ page: 1, pageSize: 50 });
   });
 
+  it('does not link a user, group or family that no longer exists, and marks it deleted', async () => {
+    const gone = (id: string, targetType: string, targetName: string): AuditEvent => ({
+      ...roleChange,
+      id,
+      action: 'group_updated',
+      targetType,
+      targetId: `${id}-target`,
+      targetName,
+      targetExists: false,
+      metadata: { name: targetName },
+    });
+    auditApi.listAudit.mockResolvedValue({
+      events: [gone('g', 'group', 'Youth'), gone('f', 'family', 'Smith'), gone('u', 'user', 'Al')],
+      total: 3,
+      page: 1,
+      pageSize: 50,
+    });
+    await renderAs(['admin']);
+    await screen.findByText('Youth (deleted)');
+    expect(screen.getByText('Smith (deleted)')).toBeTruthy();
+    expect(screen.getByText('Al (deleted)')).toBeTruthy();
+    expect(screen.getByRole('table').querySelectorAll('a')).toHaveLength(0);
+  });
+
   it('filters by action, actor and target, and removes a chip', async () => {
     await renderAs(['admin']);
     await screen.findByText('Ada Admin');

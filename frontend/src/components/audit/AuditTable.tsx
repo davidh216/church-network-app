@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import type { AuditEvent } from '@embrace/shared';
-import { actionLabel, describeDetails, targetHref, targetText } from '@/lib/audit/display';
+import { actionLabel, describeDetails, targetLink, targetText } from '@/lib/audit/display';
 import { formatLocalDateTime } from '@/lib/format/date';
 
 interface AuditTableProps {
@@ -42,7 +42,7 @@ export default function AuditTable({ events, onActor, onTarget }: AuditTableProp
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
           {events.map((event) => {
-            const href = targetHref(event.targetType, event.targetId);
+            const href = targetLink(event);
             const name = targetText(event);
             return (
               <tr key={event.id}>

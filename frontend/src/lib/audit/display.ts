@@ -22,10 +22,23 @@ export function targetHref(targetType: string, targetId: string | null): string 
   }
 }
 
-/** How the target is named in the log: its name, or what it was when it no longer exists. */
-export function targetText(event: Pick<AuditEvent, 'targetType' | 'targetName'>): string {
-  if (event.targetName) return event.targetName;
-  return `Deleted ${event.targetType}`;
+/**
+ * How the target is named in the log: its name, marked "(deleted)" once it no longer exists, or
+ * "Deleted <type>" when its name was never recorded.
+ */
+export function targetText(
+  event: Pick<AuditEvent, 'targetType' | 'targetId' | 'targetName' | 'targetExists'>,
+): string {
+  if (!event.targetName) return `Deleted ${event.targetType}`;
+  if (event.targetId && !event.targetExists) return `${event.targetName} (deleted)`;
+  return event.targetName;
+}
+
+/** The link to the target's page, only while the target still exists (a deleted one would 404). */
+export function targetLink(
+  event: Pick<AuditEvent, 'targetType' | 'targetId' | 'targetExists'>,
+): string | null {
+  return event.targetExists ? targetHref(event.targetType, event.targetId) : null;
 }
 
 const show = (value: unknown): string => {
