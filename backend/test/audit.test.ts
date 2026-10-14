@@ -244,6 +244,7 @@ describe('audit log (G1)', () => {
       expect(res.body.events[0]).toMatchObject({
         actor: null,
         targetName: 'Choir',
+        targetExists: false,
         count: 4,
         metadata: { name: 'Choir' },
       });
@@ -252,7 +253,60 @@ describe('audit log (G1)', () => {
         targetType: 'user',
         targetId: memberId,
         targetName: 'Mo',
+        targetExists: true,
       });
+    });
+
+    it('says whether each target still exists, for users, tags, groups and families', async () => {
+      const tag = await prisma.memberTag.create({ data: { name: 'Alive' } });
+      const group = await prisma.group.create({ data: { name: 'Alive', type: 'small_group' } });
+      const family = await prisma.family.create({ data: { familyName: 'Alive' } });
+      const gone = (n: number) => `ck00000000000000000gone${n}`;
+      const targets: [string, string][] = [
+        ['tag', tag.id],
+        ['group', group.id],
+        ['group', gone(1)],
+        ['family', family.id],
+        ['family', gone(2)],
+        ['user', gone(3)],
+      ];
+      await prisma.auditEvent.deleteMany();
+      await prisma.auditEvent.createMany({
+        data: [
+          ...targets.map(([targetType, targetId], i) => ({
+            action: 'tag_updated' as const,
+            targetType,
+            targetId,
+            createdAt: new Date(Date.UTC(2026, 4, 1 + i)),
+          })),
+          { action: 'tag_created', targetType: 'tag', targetId: null, createdAt: new Date(0) },
+          {
+            action: 'user_activated',
+            targetType: 'user',
+            targetId: memberId,
+            createdAt: new Date(1),
+          },
+        ],
+      });
+      const res = await list('');
+      expect(
+        res.body.events.map((e: { targetId: string | null; targetExists: boolean }) => [
+          e.targetId,
+          e.targetExists,
+        ]),
+      ).toEqual([
+        [gone(3), false],
+        [gone(2), false],
+        [family.id, true],
+        [gone(1), false],
+        [group.id, true],
+        [tag.id, true],
+        [memberId, true],
+        [null, false],
+      ]);
+      await prisma.memberTag.delete({ where: { id: tag.id } });
+      await prisma.group.delete({ where: { id: group.id } });
+      await prisma.family.delete({ where: { id: family.id } });
     });
 
     it('filters by actor, action, target and an inclusive date range, and pages', async () => {

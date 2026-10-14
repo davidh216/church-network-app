@@ -55,6 +55,11 @@ export interface AuditEvent {
    * (tags, groups and families keep theirs in `metadata.name`), else null.
    */
   targetName: string | null;
+  /**
+   * Whether the target (a user, tag, group or family) still exists, so a link to it would open.
+   * False once it has been deleted, and for an event without a target id.
+   */
+  targetExists: boolean;
   count: number | null;
   metadata: Record<string, unknown> | null;
   createdAt: string;
