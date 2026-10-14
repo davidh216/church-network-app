@@ -37,9 +37,12 @@ const chipClass =
 const chipButtonClass =
   'rounded-full px-1.5 hover:bg-blue-200 focus:outline-hidden focus:ring-2 focus:ring-blue-500';
 
+const DATES_HINT_ID = 'audit-dates-hint';
+
 /** The audit log's filters: action, target type, an inclusive date range and the chips. */
 export default function AuditFilters({ filters, onChange, dateError }: AuditFiltersProps) {
   const set = (patch: Partial<AuditFilterValues>) => onChange({ ...filters, ...patch });
+  const toA11y = fieldA11y('audit-to', dateError ?? undefined);
   return (
     <div className="px-4 py-4 border-b space-y-3">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -82,31 +85,37 @@ export default function AuditFilters({ filters, onChange, dateError }: AuditFilt
         </div>
         <div>
           <label htmlFor="audit-from" className={labelClass}>
-            From
+            From (UTC)
           </label>
           <input
             id="audit-from"
             type="date"
             value={filters.from}
+            aria-describedby={DATES_HINT_ID}
             onChange={(e) => set({ from: e.target.value })}
             className={inputClass}
           />
         </div>
         <div>
           <label htmlFor="audit-to" className={labelClass}>
-            To
+            To (UTC)
           </label>
           <input
             id="audit-to"
             type="date"
             value={filters.to}
-            {...fieldA11y('audit-to', dateError ?? undefined)}
+            {...toA11y}
+            aria-describedby={[DATES_HINT_ID, toA11y['aria-describedby']].filter(Boolean).join(' ')}
             onChange={(e) => set({ to: e.target.value })}
             className={inputClass}
           />
           <FieldError fieldId="audit-to" message={dateError ?? undefined} />
         </div>
       </div>
+      <p id={DATES_HINT_ID} className="text-xs text-gray-500">
+        The date range uses UTC days, while times in the log are local, so an event near midnight
+        may fall on the day before or after.
+      </p>
       {(filters.actor || filters.target) && (
         <ul aria-label="Applied filters" className="flex flex-wrap gap-2">
           {filters.actor && (

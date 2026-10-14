@@ -128,10 +128,19 @@ describe('AuditLogPage', () => {
     await renderAs(['admin']);
     await screen.findByText('Ada Admin');
     const calls = auditApi.listAudit.mock.calls.length;
-    fireEvent.change(screen.getByLabelText('From'), { target: { value: '2026-10-05' } });
-    fireEvent.change(screen.getByLabelText('To'), { target: { value: '2026-10-01' } });
+    fireEvent.change(screen.getByLabelText('From (UTC)'), { target: { value: '2026-10-05' } });
+    fireEvent.change(screen.getByLabelText('To (UTC)'), { target: { value: '2026-10-01' } });
     await settle();
     expect(screen.getByText('The end date must not be before the start date')).toBeTruthy();
+    // The range is in UTC days (the API's), and both inputs say so.
+    const to = screen.getByLabelText('To (UTC)');
+    const describedBy = to.getAttribute('aria-describedby')!.split(' ');
+    expect(describedBy).toContain('audit-dates-hint');
+    expect(document.getElementById('audit-dates-hint')!.textContent).toMatch(/UTC days/);
+    expect(screen.getByLabelText('From (UTC)').getAttribute('aria-describedby')).toBe(
+      'audit-dates-hint',
+    );
+    expect(describedBy.length).toBe(2);
     expect(auditApi.listAudit.mock.calls.length).toBe(calls + 1);
     expect(lastParams()).toMatchObject({ from: '2026-10-05' });
   });
