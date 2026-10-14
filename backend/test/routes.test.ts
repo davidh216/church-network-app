@@ -68,7 +68,16 @@ const ids = {} as Record<
   | 'searchToDelete'
   | 'service'
   | 'serviceToDelete'
-  | 'job',
+  | 'job'
+  | 'tag'
+  | 'tagToDelete'
+  | 'assignedTag'
+  | 'group'
+  | 'groupToDelete'
+  | 'family'
+  | 'familyToDelete'
+  | 'familyLeaver'
+  | 'familyRelationship',
   string
 >;
 
@@ -421,10 +430,187 @@ const ROUTES: Route[] = [
     body: () => ({ present: [ids.member], absent: [ids.other] }),
     status: 200,
   },
+
+  { route: 'GET /api/tags', access: 'staff', as: 'leader', url: () => '/api/tags', status: 200 },
+  {
+    route: 'POST /api/tags',
+    access: 'staff',
+    as: 'leader',
+    url: () => '/api/tags',
+    body: () => ({ name: 'Youth', color: '#10B981', category: 'demographic' }),
+    status: 201,
+  },
+  {
+    route: 'PATCH /api/tags/:id',
+    access: 'staff',
+    as: 'leader',
+    url: () => `/api/tags/${ids.tag}`,
+    body: () => ({ color: '#EF4444' }),
+    status: 200,
+  },
+  {
+    route: 'DELETE /api/tags/:id',
+    access: 'admin',
+    as: 'admin',
+    url: () => `/api/tags/${ids.tagToDelete}`,
+    status: 200,
+  },
+  {
+    route: 'POST /api/users/:id/tags',
+    access: 'staff',
+    as: 'leader',
+    url: () => `/api/users/${ids.member}/tags`,
+    body: () => ({ tagId: ids.tag }),
+    status: 200,
+  },
+  {
+    route: 'DELETE /api/users/:id/tags/:tagId',
+    access: 'staff',
+    as: 'leader',
+    url: () => `/api/users/${ids.member}/tags/${ids.assignedTag}`,
+    status: 200,
+  },
+
+  { route: 'GET /api/groups', access: 'auth', as: 'member', url: () => '/api/groups', status: 200 },
+  {
+    route: 'POST /api/groups',
+    access: 'staff',
+    as: 'leader',
+    url: () => '/api/groups',
+    body: () => ({ name: 'Youth', type: 'small_group' }),
+    status: 201,
+  },
+  {
+    route: 'GET /api/groups/:id',
+    access: 'auth',
+    as: 'member',
+    url: () => `/api/groups/${ids.group}`,
+    status: 200,
+  },
+  {
+    route: 'PATCH /api/groups/:id',
+    access: 'staff',
+    as: 'leader',
+    url: () => `/api/groups/${ids.group}`,
+    body: () => ({ location: 'Hall' }),
+    status: 200,
+  },
+  {
+    route: 'DELETE /api/groups/:id',
+    access: 'admin',
+    as: 'admin',
+    url: () => `/api/groups/${ids.groupToDelete}`,
+    status: 200,
+  },
+  {
+    route: 'POST /api/groups/:id/members',
+    access: 'staff',
+    as: 'leader',
+    url: () => `/api/groups/${ids.group}/members`,
+    body: () => ({ userId: ids.other, role: 'co_leader' }),
+    status: 201,
+  },
+  {
+    route: 'PATCH /api/groups/:id/members/:userId',
+    access: 'staff',
+    as: 'leader',
+    url: () => `/api/groups/${ids.group}/members/${ids.member}`,
+    body: () => ({ role: 'leader' }),
+    status: 200,
+  },
+  {
+    route: 'DELETE /api/groups/:id/members/:userId',
+    access: 'staff',
+    as: 'leader',
+    url: () => `/api/groups/${ids.group}/members/${ids.resetTarget}`,
+    status: 200,
+  },
+
+  {
+    route: 'GET /api/families/mine',
+    access: 'auth',
+    as: 'member',
+    url: () => '/api/families/mine',
+    status: 200,
+  },
+  {
+    route: 'GET /api/families',
+    access: 'staff',
+    as: 'leader',
+    url: () => '/api/families',
+    status: 200,
+  },
+  {
+    route: 'POST /api/families',
+    access: 'staff',
+    as: 'leader',
+    url: () => '/api/families',
+    body: () => ({ familyName: 'Smith' }),
+    status: 201,
+  },
+  {
+    route: 'GET /api/families/:id',
+    access: 'staff',
+    as: 'leader',
+    url: () => `/api/families/${ids.family}`,
+    status: 200,
+  },
+  {
+    route: 'PATCH /api/families/:id',
+    access: 'staff',
+    as: 'leader',
+    url: () => `/api/families/${ids.family}`,
+    body: () => ({ city: 'Springfield' }),
+    status: 200,
+  },
+  {
+    route: 'DELETE /api/families/:id',
+    access: 'admin',
+    as: 'admin',
+    url: () => `/api/families/${ids.familyToDelete}`,
+    status: 200,
+  },
+  {
+    route: 'PUT /api/families/:id/members/:userId',
+    access: 'staff',
+    as: 'leader',
+    url: () => `/api/families/${ids.family}/members/${ids.other}`,
+    status: 200,
+  },
+  {
+    route: 'DELETE /api/families/:id/members/:userId',
+    access: 'staff',
+    as: 'leader',
+    url: () => `/api/families/${ids.family}/members/${ids.familyLeaver}`,
+    status: 200,
+  },
+  {
+    route: 'PUT /api/families/:id/relationships',
+    access: 'staff',
+    as: 'leader',
+    url: () => `/api/families/${ids.family}/relationships`,
+    body: () => ({ userId: ids.member, relatedUserId: ids.resetTarget, type: 'sibling' }),
+    status: 200,
+  },
+  {
+    route: 'DELETE /api/families/:id/relationships/:relationshipId',
+    access: 'staff',
+    as: 'leader',
+    url: () => `/api/families/${ids.family}/relationships/${ids.familyRelationship}`,
+    status: 200,
+  },
+
+  {
+    route: 'GET /api/audit',
+    access: 'admin',
+    as: 'admin',
+    url: () => '/api/audit?action=user_role_changed&from=2026-01-01',
+    status: 200,
+  },
 ];
 
 const methodOf = (r: Route) =>
-  r.route.split(' ')[0]!.toLowerCase() as 'get' | 'post' | 'put' | 'delete';
+  r.route.split(' ')[0]!.toLowerCase() as 'get' | 'post' | 'put' | 'patch' | 'delete';
 
 let app: Express;
 
@@ -485,6 +671,47 @@ describe('route matrix', () => {
         data: { date: new Date('2026-08-30T00:00:00.000Z'), type: 'sunday_service' },
       })
     ).id;
+    ids.tag = (await prisma.memberTag.create({ data: { name: 'Choir' } })).id;
+    ids.tagToDelete = (await prisma.memberTag.create({ data: { name: 'Doomed tag' } })).id;
+    ids.assignedTag = (await prisma.memberTag.create({ data: { name: 'Assigned' } })).id;
+    await prisma.userTag.create({ data: { userId: ids.member, tagId: ids.assignedTag } });
+    ids.group = (
+      await prisma.group.create({
+        data: {
+          name: 'Choir',
+          type: 'ministry',
+          members: { create: [{ userId: ids.member }, { userId: ids.resetTarget }] },
+        },
+      })
+    ).id;
+    ids.groupToDelete = (
+      await prisma.group.create({ data: { name: 'Doomed', type: 'committee' } })
+    ).id;
+    ids.familyLeaver = (
+      await helpers.createUser({ email: 'routes-leaver@routes.test.local', role: 'member' })
+    ).id;
+    ids.family = (
+      await prisma.family.create({
+        data: {
+          familyName: 'Doe',
+          members: {
+            connect: [{ id: ids.member }, { id: ids.resetTarget }, { id: ids.familyLeaver }],
+          },
+        },
+      })
+    ).id;
+    const [low, high] = [ids.member, ids.resetTarget].sort();
+    ids.familyRelationship = (
+      await prisma.familyRelationship.create({
+        data: {
+          familyId: ids.family,
+          primaryUserId: low!,
+          relatedUserId: high!,
+          relationshipType: 'spouse',
+        },
+      })
+    ).id;
+    ids.familyToDelete = (await prisma.family.create({ data: { familyName: 'Doomed' } })).id;
     const jobs = await import('../src/modules/analytics/jobs.js');
     ids.job = jobs.startEngagementRefresh().job.jobId;
     await jobs.engagementRefreshIdle();

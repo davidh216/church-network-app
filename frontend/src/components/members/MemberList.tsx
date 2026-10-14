@@ -28,6 +28,7 @@ import MemberPagination from './MemberPagination';
 import MemberTable from './MemberTable';
 import MemberListHeader, { type ViewMode } from './MemberListHeader';
 import MemberListActions, { type SearchPanel } from './MemberListActions';
+import ManageTagsDialog from '@/components/tags/ManageTagsDialog';
 import ErrorToast from '@/components/ui/ErrorToast';
 import InlineError from '@/components/ui/InlineError';
 import Skeleton from '@/components/ui/Skeleton';
@@ -50,6 +51,7 @@ export default function MemberList() {
   const [selectedMembers, setSelectedMembers] = useState<Set<string>>(new Set());
   const [panel, setPanel] = useState<SearchPanel>(null);
   const [toast, setToast] = useState('');
+  const [managingTags, setManagingTags] = useState(false);
   // An applied advanced query (staff): the list then shows POST /api/users/search results.
   const [advancedQuery, setAdvancedQuery] = useState<SearchQuery | null>(null);
   // Focus targets: the panel toggles (when a panel closes) and the heading (when a dialog's
@@ -156,6 +158,7 @@ export default function MemberList() {
                 onTogglePanel={togglePanel}
                 selectedCount={selectedMembers.size}
                 onExport={() => void exportMembers()}
+                onManageTags={() => setManagingTags(true)}
               />
             )
           }
@@ -239,6 +242,10 @@ export default function MemberList() {
       </div>
 
       <ErrorToast message={toast} onDismiss={clearToast} />
+
+      {canManage && managingTags && (
+        <ManageTagsDialog onClose={() => setManagingTags(false)} fallbackFocus={headingRef} />
+      )}
 
       {canManage && (
         <AddEditMemberModal

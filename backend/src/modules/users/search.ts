@@ -33,6 +33,31 @@ function dateFilter(operator: 'before' | 'after' | 'between', value: string | [s
 
 const insensitive = 'insensitive' as const;
 
+// A membership counts while both the row and its group are active (PHASE5_SPECS.md G5).
+const activeMembership = { isActive: true, group: { isActive: true } } as const;
+
+const hasTag = (tagId: string): Prisma.UserWhereInput => ({ memberTags: { some: { tagId } } });
+const inGroup = (groupId: string): Prisma.UserWhereInput => ({
+  groupMembers: { some: { groupId, ...activeMembership } },
+});
+
+// Tag and group conditions compare ids, so an id that names no row (a tag or group deleted since
+// a search was saved) simply matches no member: `includesAny` and `includesAll` find no one
+// through it, and `excludesAll` excludes no one because of it.
+function tagsWhere(operator: 'includesAny' | 'includesAll' | 'excludesAll', ids: string[]) {
+  const unique = [...new Set(ids)];
+  if (operator === 'includesAll') return { AND: unique.map(hasTag) };
+  const some = { tagId: { in: unique } };
+  return operator === 'includesAny' ? { memberTags: { some } } : { memberTags: { none: some } };
+}
+
+function groupsWhere(operator: 'includesAny' | 'excludesAll', ids: string[]) {
+  const match = { groupId: { in: [...new Set(ids)] }, ...activeMembership };
+  return operator === 'includesAny'
+    ? { groupMembers: { some: match } }
+    : { groupMembers: { none: match } };
+}
+
 function conditionWhere(condition: SearchCondition): Prisma.UserWhereInput {
   switch (condition.field) {
     case 'name':
@@ -76,6 +101,12 @@ function conditionWhere(condition: SearchCondition): Prisma.UserWhereInput {
       return { [condition.field]: dateFilter(condition.operator, condition.value) };
     case 'isActive':
       return { isActive: condition.value };
+    case 'tags':
+      return tagsWhere(condition.operator, condition.value);
+    case 'groups':
+      return groupsWhere(condition.operator, condition.value);
+    case 'family':
+      return { familyId: condition.operator === 'isEmpty' ? null : { not: null } };
   }
 }
 
@@ -115,6 +146,8 @@ export function listWhere(listQuery: ListQuery, staff: boolean): Prisma.UserWher
   if (query.status) and.push({ isActive: query.status === 'active' });
   if (query.stage) and.push({ engagement: { is: { membershipStage: query.stage } } });
   if (query.risk) and.push({ engagement: { is: { riskLevel: query.risk } } });
+  if (query.tagId) and.push(hasTag(query.tagId));
+  if (query.groupId) and.push(inGroup(query.groupId));
   if (query.joinedFrom || query.joinedTo) {
     and.push({
       createdAt: {

@@ -34,7 +34,12 @@ describe('delete rules', () => {
     const member = await createUser({ email: email('member'), role: 'member' });
 
     const group = await prisma.group.create({
-      data: { name: 'relations-choir', type: 'ministry', leaderId: staff.id },
+      data: {
+        name: 'relations-choir',
+        type: 'ministry',
+        members: { create: { userId: staff.id, role: 'leader' } },
+      },
+      include: { members: true },
     });
     const family = await prisma.family.create({
       data: { familyName: 'relations-staff', headOfFamilyId: staff.id },
@@ -75,7 +80,9 @@ describe('delete rules', () => {
     await prisma.memberNote.delete({ where: { id: note.id } });
     await prisma.user.delete({ where: { id: staff.id } });
 
-    expect((await prisma.group.findUniqueOrThrow({ where: { id: group.id } })).leaderId).toBeNull();
+    // A leader is a roster row (G3): the group stays, the deleted user's membership goes with them.
+    expect(await prisma.groupMember.findUnique({ where: { id: group.members[0]!.id } })).toBeNull();
+    expect(await prisma.group.findUnique({ where: { id: group.id } })).not.toBeNull();
     expect(
       (await prisma.family.findUniqueOrThrow({ where: { id: family.id } })).headOfFamilyId,
     ).toBeNull();

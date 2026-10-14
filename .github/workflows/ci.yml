@@ -136,7 +136,7 @@ jobs:
       - run: npx -w frontend playwright install --with-deps chromium
       - run: npm run -w backend db:migrate
       # Seeds the admin (global setup), starts both dev servers and runs every spec in
-      # frontend/e2e (smoke, attendance flow).
+      # frontend/e2e (smoke, attendance, organise).
       - run: npm run -w frontend test:e2e
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: failure()

@@ -480,4 +480,240 @@ describe('authorization', () => {
       expect(stored.roles.map((r) => r.role.name)).toEqual(['admin']);
     });
   });
+
+  // PHASE5_SPECS.md 1.2: members see active groups with public fields and leader names only.
+  describe('groups (G3)', () => {
+    let activeId: string;
+    let archivedId: string;
+    const asMember = () => bearer(memberToken);
+
+    beforeAll(async () => {
+      activeId = (
+        await prisma.group.create({
+          data: {
+            name: 'Authz Choir',
+            type: 'ministry',
+            members: {
+              create: [
+                { userId: leaderId, role: 'leader' },
+                { userId: otherMemberId, role: 'member' },
+                { userId: memberId, role: 'member' },
+              ],
+            },
+          },
+        })
+      ).id;
+      archivedId = (
+        await prisma.group.create({
+          data: {
+            name: 'Authz Archived',
+            type: 'committee',
+            isActive: false,
+            members: { create: [{ userId: memberId, role: 'leader' }] },
+          },
+        })
+      ).id;
+    });
+
+    it('a member never receives rosters, member counts or archived groups', async () => {
+      const list = await request(app).get('/api/groups').set(asMember());
+      const one = await request(app).get(`/api/groups/${activeId}`).set(asMember());
+      const mine = await request(app).get('/api/groups?mine=true').set(asMember());
+      for (const res of [list, one, mine]) {
+        expect(res.status).toBe(200);
+        // The plain member on the roster is never named; neither is the archived group.
+        expect(res.text).not.toContain('Other Person');
+        expect(res.text).not.toContain(otherMemberId);
+        expect(res.text).not.toContain('Authz Archived');
+        expect(res.text).not.toMatch(/memberCount|roster|isActive|userId/);
+      }
+      const { name } = await prisma.user.findUniqueOrThrow({ where: { id: leaderId } });
+      expect(one.body.group.leaders).toEqual([{ name, role: 'leader' }]);
+      expect(mine.body.memberships.map((m: { role: string }) => m.role)).toEqual(['member']);
+    });
+
+    it('a member asking for an archived group gets 404, not 403', async () => {
+      const res = await request(app).get(`/api/groups/${archivedId}`).set(asMember());
+      expect(res.status).toBe(404);
+      expect((await request(app).get('/api/groups?status=inactive').set(asMember())).status).toBe(
+        403,
+      );
+    });
+
+    it('a member cannot create, edit, archive or delete groups, or change rosters', async () => {
+      const tries = [
+        request(app).post('/api/groups').send({ name: 'Mine', type: 'ministry' }),
+        request(app).patch(`/api/groups/${activeId}`).send({ isActive: false }),
+        request(app).delete(`/api/groups/${activeId}`),
+        request(app).post(`/api/groups/${activeId}/members`).send({ userId: memberId }),
+        request(app).patch(`/api/groups/${activeId}/members/${memberId}`).send({ role: 'leader' }),
+        request(app).delete(`/api/groups/${activeId}/members/${otherMemberId}`),
+      ];
+      for (const attempt of tries) expect((await attempt.set(asMember())).status).toBe(403);
+      const group = await prisma.group.findUniqueOrThrow({
+        where: { id: activeId },
+        include: { members: { orderBy: { userId: 'asc' } } },
+      });
+      expect(group.isActive).toBe(true);
+      expect(group.members).toHaveLength(3);
+      expect(group.members.find((m) => m.userId === memberId)?.role).toBe('member');
+      expect(await prisma.group.count({ where: { name: 'Mine' } })).toBe(0);
+    });
+
+    it('a leader sees the roster and counts but cannot delete a group', async () => {
+      const res = await request(app).get(`/api/groups/${activeId}`).set(bearer(leaderToken));
+      expect(res.body.group.memberCount).toBe(3);
+      expect(res.body.group.roster.map((r: { name: string }) => r.name)).toContain('Other Person');
+      const del = await request(app).delete(`/api/groups/${activeId}`).set(bearer(leaderToken));
+      expect(del.status).toBe(403);
+      expect(await prisma.group.count({ where: { id: activeId } })).toBe(1);
+    });
+  });
+
+  // PHASE5_SPECS.md 1.2: members read their own family (names and relationships) and nothing else.
+  describe('families (G4)', () => {
+    let familyId: string;
+    let otherFamilyId: string;
+    const asMember = () => bearer(memberToken);
+
+    beforeAll(async () => {
+      await prisma.user.update({
+        where: { id: otherMemberId },
+        data: { phone: '555-0199', address: '9 Hidden Road', city: 'Secretville' },
+      });
+      familyId = (
+        await prisma.family.create({
+          data: {
+            familyName: 'Authz Family',
+            address: '1 Private Lane',
+            zipCode: '99999',
+            headOfFamilyId: otherMemberId,
+            members: { connect: [{ id: memberId }, { id: otherMemberId }] },
+          },
+        })
+      ).id;
+      const [low, high] = [memberId, otherMemberId].sort();
+      await prisma.familyRelationship.create({
+        data: {
+          familyId,
+          primaryUserId: low!,
+          relatedUserId: high!,
+          relationshipType: 'sibling',
+        },
+      });
+      otherFamilyId = (
+        await prisma.family.create({
+          data: { familyName: 'Authz Elsewhere', members: { connect: [{ id: leaderId }] } },
+        })
+      ).id;
+    });
+
+    it("a member reads their own family's names and relationships, never contact details", async () => {
+      const res = await request(app).get('/api/families/mine').set(asMember());
+      expect(res.status).toBe(200);
+      expect(res.body.family).toEqual({
+        familyName: 'Authz Family',
+        relatives: [{ name: 'Other Person', relationship: 'sibling' }],
+      });
+      expect(res.text).not.toMatch(
+        /other@authorization|555-0199|Hidden Road|Secretville|Private Lane|99999|Authz Elsewhere/,
+      );
+      expect(res.text).not.toContain(otherMemberId);
+      expect(res.text).not.toContain(familyId);
+    });
+
+    it('a member cannot list, read or change families, whether they exist or not', async () => {
+      const missing = 'cmissingfamily000000000000';
+      const tries = [
+        request(app).get('/api/families'),
+        request(app).get(`/api/families/${familyId}`),
+        request(app).get(`/api/families/${otherFamilyId}`),
+        request(app).get(`/api/families/${missing}`),
+        request(app).post('/api/families').send({ familyName: 'Mine' }),
+        request(app).patch(`/api/families/${familyId}`).send({ headOfFamilyId: memberId }),
+        request(app).delete(`/api/families/${familyId}`),
+        request(app).put(`/api/families/${otherFamilyId}/members/${memberId}`).send({ move: true }),
+        request(app).delete(`/api/families/${familyId}/members/${otherMemberId}`),
+        request(app)
+          .put(`/api/families/${familyId}/relationships`)
+          .send({ userId: memberId, relatedUserId: otherMemberId, type: 'spouse' }),
+      ];
+      // The role gate answers before any lookup, so the status says nothing about existence.
+      for (const attempt of tries) {
+        const res = await attempt.set(asMember());
+        expect(res.status).toBe(403);
+        expect(res.body).toEqual({ error: 'Insufficient permissions' });
+      }
+      const family = await prisma.family.findUniqueOrThrow({
+        where: { id: familyId },
+        include: { members: true, relationships: true },
+      });
+      expect(family.headOfFamilyId).toBe(otherMemberId);
+      expect(family.members).toHaveLength(2);
+      expect(family.relationships.map((r) => r.relationshipType)).toEqual(['sibling']);
+      expect(await prisma.family.count({ where: { familyName: 'Mine' } })).toBe(0);
+    });
+
+    it('a leader reads and edits families but cannot delete one', async () => {
+      const res = await request(app).get(`/api/families/${familyId}`).set(bearer(leaderToken));
+      expect(res.status).toBe(200);
+      expect(res.body.family.members.map((m: { name: string }) => m.name)).toContain(
+        'Other Person',
+      );
+      const del = await request(app).delete(`/api/families/${familyId}`).set(bearer(leaderToken));
+      expect(del.status).toBe(403);
+      expect(await prisma.family.count({ where: { id: familyId } })).toBe(1);
+    });
+  });
+
+  // PHASE5_SPECS.md G5: filtering by tag or group is staff-only, and a member's attempt says
+  // nothing about whether the tag or group exists.
+  describe('tag and group filters (G5)', () => {
+    let tagId: string;
+    let groupId: string;
+    const missing = 'cmissingtag0000000000000000';
+
+    beforeAll(async () => {
+      tagId = (await prisma.memberTag.create({ data: { name: 'Authz Follow-up' } })).id;
+      await prisma.userTag.create({ data: { userId: otherMemberId, tagId } });
+      groupId = (
+        await prisma.group.create({
+          data: {
+            name: 'Authz Filter Group',
+            type: 'small_group',
+            members: { create: [{ userId: otherMemberId }] },
+          },
+        })
+      ).id;
+    });
+
+    it('a member gets the same 403 for an existing or a missing tag or group', async () => {
+      const bodies = new Set<string>();
+      for (const query of [`tagId=${tagId}`, `tagId=${missing}`, `groupId=${groupId}`]) {
+        const res = await request(app).get(`/api/users?${query}`).set(bearer(memberToken));
+        expect(res.status).toBe(403);
+        bodies.add(JSON.stringify(res.body).replace(/tagId|groupId/, 'filter'));
+      }
+      expect(bodies.size).toBe(1);
+      for (const [field, value] of [
+        ['tags', [tagId]],
+        ['groups', [groupId]],
+      ] as const) {
+        const res = await request(app)
+          .post('/api/users/search')
+          .set(bearer(memberToken))
+          .send({ conditions: [{ field, operator: 'includesAny', value }], logic: 'AND' });
+        expect(res.status).toBe(403);
+        expect(res.text).not.toContain('Other Person');
+      }
+    });
+
+    it('a leader filters by tag and group', async () => {
+      for (const query of [`tagId=${tagId}`, `groupId=${groupId}`]) {
+        const res = await request(app).get(`/api/users?${query}`).set(bearer(leaderToken));
+        expect(res.status).toBe(200);
+        expect(res.body.users.map((u: { id: string }) => u.id)).toEqual([otherMemberId]);
+      }
+    });
+  });
 });

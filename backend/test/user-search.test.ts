@@ -15,6 +15,12 @@ import { app, backfillEngagementRows, bearer, createUser, login, resetDatabase }
 //   Carol Cruz    +1 555 0303  ''                  member  20    at_risk      high   2026-03-05T18:00Z     2026-08-01
 //   Dan Diaz      555-0404     CHOIR director      admin   0     visitor      low    2026-03-31T23:30Z     2026-10-01T12:00Z
 // Dan was created without an engagement row; the backfill migration gives him the default row.
+//
+// Tags, groups and families (PHASE5_SPECS.md G5):
+//   tags     Choir: Alice, Dan; Follow-up: Alice, Carol; Retired (archived): Bob
+//   groups   Youth (active): Alice active, Bob inactive row; Old Choir (archived): Carol active;
+//            Men (active): Dan active
+//   family   Anders: Alice, Bob
 
 type Name = 'Alice Anders' | 'Bob Brown' | 'Carol Cruz' | 'Dan Diaz';
 const ALL: Name[] = ['Alice Anders', 'Bob Brown', 'Carol Cruz', 'Dan Diaz'];
@@ -23,6 +29,17 @@ const email = (first: string) => `${first}@search.test.local`;
 let adminToken: string;
 let leaderToken: string;
 let memberToken: string;
+// Tag and group ids by fixture name.
+const ids: Record<'choir' | 'followUp' | 'retired' | 'youth' | 'oldChoir' | 'men', string> = {
+  choir: '',
+  followUp: '',
+  retired: '',
+  youth: '',
+  oldChoir: '',
+  men: '',
+};
+// A well-formed id that names no row (a tag or group deleted since a search was saved).
+const MISSING_ID = 'clh3am8hi0000qwer1234abcd';
 
 beforeAll(async () => {
   await resetDatabase();
@@ -69,6 +86,31 @@ beforeAll(async () => {
     ],
   });
   expect(await backfillEngagementRows()).toBe(1);
+
+  const tag = async (name: string, userIds: string[], isActive = true) => {
+    const row = await prisma.memberTag.create({ data: { name, isActive } });
+    await prisma.userTag.createMany({ data: userIds.map((userId) => ({ userId, tagId: row.id })) });
+    return row.id;
+  };
+  ids.choir = await tag('Choir', [alice.id, dan.id]);
+  ids.followUp = await tag('Follow-up', [alice.id, carol.id]);
+  ids.retired = await tag('Retired', [bob.id], false);
+  const group = async (name: string, isActive: boolean, rows: [string, boolean][]) => {
+    const row = await prisma.group.create({ data: { name, type: 'ministry', isActive } });
+    await prisma.groupMember.createMany({
+      data: rows.map(([userId, active]) => ({ userId, groupId: row.id, isActive: active })),
+    });
+    return row.id;
+  };
+  ids.youth = await group('Youth', true, [
+    [alice.id, true],
+    [bob.id, false],
+  ]);
+  ids.oldChoir = await group('Old Choir', false, [[carol.id, true]]);
+  ids.men = await group('Men', true, [[dan.id, true]]);
+  await prisma.family.create({
+    data: { familyName: 'Anders', members: { connect: [{ id: alice.id }, { id: bob.id }] } },
+  });
 });
 
 const names = (body: { users: { name: string }[] }) => body.users.map((u) => u.name);
@@ -82,7 +124,8 @@ function list(query: string, token = adminToken) {
   return request(app).get(`/api/users?${query}`).set(bearer(token));
 }
 
-// Every allowed field/operator pair with a value and the users it must match.
+// Every allowed field/operator pair with a value and the users it must match. A function value
+// is read once the fixture has created the tag and group ids.
 const CASES: Record<SearchField, Record<string, { value?: unknown; matches: Name[] }>> = {
   name: {
     contains: { value: 'AN', matches: ['Alice Anders', 'Dan Diaz'] },
@@ -141,7 +184,31 @@ const CASES: Record<SearchField, Record<string, { value?: unknown; matches: Name
   isActive: {
     equals: { value: false, matches: ['Carol Cruz'] },
   },
+  // An archived tag's existing assignments still match.
+  tags: {
+    includesAny: {
+      value: () => [ids.followUp, ids.retired],
+      matches: ['Alice Anders', 'Bob Brown', 'Carol Cruz'],
+    },
+    includesAll: { value: () => [ids.choir, ids.followUp, ids.choir], matches: ['Alice Anders'] },
+    excludesAll: { value: () => [ids.choir], matches: ['Bob Brown', 'Carol Cruz'] },
+  },
+  // Only active rows in active groups count: Bob's Youth row is inactive, Old Choir is archived.
+  groups: {
+    includesAny: { value: () => [ids.youth, ids.oldChoir], matches: ['Alice Anders'] },
+    excludesAll: {
+      value: () => [ids.youth, ids.oldChoir],
+      matches: ['Bob Brown', 'Carol Cruz', 'Dan Diaz'],
+    },
+  },
+  family: {
+    isEmpty: { matches: ['Carol Cruz', 'Dan Diaz'] },
+    isNotEmpty: { matches: ['Alice Anders', 'Bob Brown'] },
+  },
 };
+
+const resolve = (value: unknown) =>
+  typeof value === 'function' ? (value as () => unknown)() : value;
 
 const PAIRS = (Object.keys(SEARCH_FIELD_OPERATORS) as SearchField[]).flatMap((field) =>
   SEARCH_FIELD_OPERATORS[field].map((operator) => ({ field, operator })),
@@ -155,7 +222,8 @@ describe('POST /api/users/search', () => {
   });
 
   it.each(PAIRS)('$field $operator', async ({ field, operator }) => {
-    const { value, matches } = CASES[field][operator]!;
+    const { value: raw, matches } = CASES[field][operator]!;
+    const value = resolve(raw);
     const condition = value === undefined ? { field, operator } : { field, operator, value };
     const res = await search({ conditions: [condition], logic: 'AND' });
     expect(res.status, JSON.stringify(res.body)).toBe(200);
@@ -519,6 +587,8 @@ describe('GET /api/users', () => {
       'risk=low',
       'joinedFrom=2026-01-01',
       'joinedTo=2026-12-31',
+      `tagId=${MISSING_ID}`,
+      `groupId=${MISSING_ID}`,
       'sort=email',
       'sort=engagementScore',
       'sort=lastLoginAt',
@@ -526,6 +596,166 @@ describe('GET /api/users', () => {
       const res = await list(query, memberToken);
       expect(res.status).toBe(403);
       expect(res.body.error).toMatch(/only staff/i);
+    });
+  });
+});
+
+describe('tags, groups and family (G5)', () => {
+  const one = (field: string, operator: string, value?: unknown) =>
+    search({
+      conditions: [value === undefined ? { field, operator } : { field, operator, value }],
+      logic: 'AND',
+    });
+
+  it('matches nothing through an unknown id and never fails', async () => {
+    const at = async (field: string, operator: string, value: string[]) => {
+      const res = await one(field, operator, value);
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      return sorted(res.body);
+    };
+    expect(await at('tags', 'includesAny', [MISSING_ID])).toEqual([]);
+    expect(await at('tags', 'includesAny', [MISSING_ID, ids.choir])).toEqual([
+      'Alice Anders',
+      'Dan Diaz',
+    ]);
+    expect(await at('tags', 'includesAll', [ids.choir, MISSING_ID])).toEqual([]);
+    expect(await at('tags', 'excludesAll', [MISSING_ID])).toEqual(ALL);
+    expect(await at('tags', 'excludesAll', [MISSING_ID, ids.choir])).toEqual([
+      'Bob Brown',
+      'Carol Cruz',
+    ]);
+    expect(await at('groups', 'includesAny', [MISSING_ID])).toEqual([]);
+    expect(await at('groups', 'excludesAll', [MISSING_ID])).toEqual(ALL);
+  });
+
+  it('combines with the other conditions', async () => {
+    const res = await search({
+      conditions: [
+        { field: 'family', operator: 'isNotEmpty' },
+        { field: 'tags', operator: 'excludesAll', value: [ids.followUp] },
+      ],
+      logic: 'AND',
+    });
+    expect(names(res.body)).toEqual(['Bob Brown']);
+    const either = await search({
+      conditions: [
+        { field: 'groups', operator: 'includesAny', value: [ids.men] },
+        { field: 'tags', operator: 'includesAll', value: [ids.followUp] },
+      ],
+      logic: 'OR',
+    });
+    expect(sorted(either.body)).toEqual(['Alice Anders', 'Carol Cruz', 'Dan Diaz']);
+  });
+
+  it('returns each row with its tags', async () => {
+    const res = await one('tags', 'includesAll', [ids.choir]);
+    const alice = res.body.users.find((u: { name: string }) => u.name === 'Alice Anders');
+    expect(alice.memberTags.map((t: { tag: { name: string } }) => t.tag.name)).toEqual([
+      'Choir',
+      'Follow-up',
+    ]);
+  });
+
+  it.each([
+    ['too many ids', { field: 'tags', operator: 'includesAny', value: Array(21).fill(MISSING_ID) }],
+    ['an id that is not a cuid', { field: 'groups', operator: 'includesAny', value: ['x'] }],
+    ['no ids', { field: 'tags', operator: 'excludesAll', value: [] }],
+    ['includesAll on groups', { field: 'groups', operator: 'includesAll', value: [MISSING_ID] }],
+    ['equals on family', { field: 'family', operator: 'equals', value: true }],
+  ])('rejects %s with 400', async (_label, condition) => {
+    const res = await search({ conditions: [condition], logic: 'AND' });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('VALIDATION');
+  });
+
+  describe('quick filters on GET /api/users', () => {
+    it('filters by tag, archived tags included', async () => {
+      expect(sorted((await list(`tagId=${ids.choir}`)).body)).toEqual(['Alice Anders', 'Dan Diaz']);
+      expect(names((await list(`tagId=${ids.retired}`)).body)).toEqual(['Bob Brown']);
+    });
+
+    it('filters by group, counting active rows in active groups only', async () => {
+      expect(names((await list(`groupId=${ids.youth}`)).body)).toEqual(['Alice Anders']);
+      expect(names((await list(`groupId=${ids.men}`)).body)).toEqual(['Dan Diaz']);
+      expect(names((await list(`groupId=${ids.oldChoir}`)).body)).toEqual([]);
+    });
+
+    it('combines tag, group and the other filters', async () => {
+      expect(names((await list(`tagId=${ids.choir}&groupId=${ids.youth}`)).body)).toEqual([
+        'Alice Anders',
+      ]);
+      expect(names((await list(`tagId=${ids.followUp}&status=inactive`)).body)).toEqual([
+        'Carol Cruz',
+      ]);
+      expect(names((await list(`tagId=${ids.choir}&q=dan`, leaderToken)).body)).toEqual([
+        'Dan Diaz',
+      ]);
+    });
+
+    it('returns an empty page for an unknown id', async () => {
+      for (const query of [`tagId=${MISSING_ID}`, `groupId=${MISSING_ID}`]) {
+        const res = await list(query);
+        expect(res.status).toBe(200);
+        expect(res.body).toMatchObject({ users: [], total: 0 });
+      }
+    });
+
+    it('rejects a malformed id with 400', async () => {
+      expect((await list('tagId=nope')).status).toBe(400);
+      expect((await list('groupId=nope')).status).toBe(400);
+    });
+  });
+
+  describe('a saved search naming a deleted tag or group', () => {
+    it('still loads, can be used and matches nothing for that condition', async () => {
+      const gone = await prisma.memberTag.create({ data: { name: 'Short-lived' } });
+      const goneGroup = await prisma.group.create({ data: { name: 'Gone', type: 'ministry' } });
+      const alice = await prisma.user.findUniqueOrThrow({ where: { email: email('alice') } });
+      await prisma.userTag.create({ data: { userId: alice.id, tagId: gone.id } });
+      await prisma.groupMember.create({ data: { userId: alice.id, groupId: goneGroup.id } });
+      const query = {
+        conditions: [
+          { field: 'tags', operator: 'includesAny', value: [gone.id] },
+          { field: 'groups', operator: 'includesAny', value: [goneGroup.id] },
+          { field: 'family', operator: 'isNotEmpty' },
+        ],
+        logic: 'OR',
+      };
+      const saved = await request(app)
+        .post('/api/users/saved-searches')
+        .set(bearer(adminToken))
+        .send({ name: 'Deleted references', query });
+      expect(saved.status).toBe(201);
+      const savedId = saved.body.search.id as string;
+      try {
+        expect(sorted((await search(query)).body)).toEqual(['Alice Anders', 'Bob Brown']);
+        expect(
+          (await request(app).delete(`/api/tags/${gone.id}`).set(bearer(adminToken))).status,
+        ).toBe(200);
+        expect(
+          (await request(app).delete(`/api/groups/${goneGroup.id}`).set(bearer(adminToken))).status,
+        ).toBe(200);
+
+        const listed = await request(app).get('/api/users/saved-searches').set(bearer(adminToken));
+        const entry = listed.body.searches.find((s: { id: string }) => s.id === savedId);
+        expect(entry).toMatchObject({ invalid: false, query: { logic: 'OR' } });
+        expect(entry.query.conditions[0]).toEqual(query.conditions[0]);
+
+        const used = await request(app)
+          .post(`/api/users/saved-searches/${savedId}/use`)
+          .set(bearer(adminToken));
+        expect(used.status).toBe(200);
+
+        // Only the family condition still matches anyone.
+        const res = await search(entry.query);
+        expect(res.status).toBe(200);
+        expect(sorted(res.body)).toEqual(['Alice Anders', 'Bob Brown']);
+        const and = await search({ ...entry.query, logic: 'AND' });
+        expect(and.status).toBe(200);
+        expect(and.body.total).toBe(0);
+      } finally {
+        await prisma.savedSearch.delete({ where: { id: savedId } });
+      }
     });
   });
 });
@@ -600,6 +830,12 @@ describe('member list service ignores the staff-only filters', () => {
     const staff = listWhere({ ...staffFilters, ...paging }, true);
     // role, status, stage, risk and one createdAt range.
     expect((staff.AND as object[]).length).toBe(5);
+  });
+
+  it('listWhere drops the tag and group filters for members', () => {
+    const filters = { tagId: MISSING_ID, groupId: MISSING_ID, ...paging };
+    expect(listWhere(filters, false)).toEqual({ AND: [{ isActive: true }] });
+    expect((listWhere(filters, true).AND as object[]).length).toBe(2);
   });
 
   it('listUsers returns the active directory to a member whatever the filters say', async () => {

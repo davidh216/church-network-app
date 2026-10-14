@@ -21,6 +21,21 @@ interface ChipInputProps {
   formatChip?: (value: string) => string;
   /** The stored form of a typed entry (applied after trimming, before the duplicate check). */
   normalize?: (value: string) => string;
+  /**
+   * The parent's own check of a new entry (after the built-in ones): a message refuses it, and the
+   * entry then stays in the field with that message, exactly like a duplicate.
+   */
+  validate?: (value: string) => string | null;
+  /**
+   * Nothing can be added or removed (the field is read-only and the buttons do nothing), for
+   * example while the choices load or a change is saving. Nothing is `disabled`, so focus stays.
+   */
+  readOnly?: boolean;
+  /**
+   * Announce "Added X" and "Removed X" (default). A parent that saves each change itself turns
+   * this off and announces the outcome once it is known.
+   */
+  announceChanges?: boolean;
   placeholder?: string;
 }
 
@@ -32,7 +47,8 @@ const identity = (value: string) => value;
  * A list of short labels edited as chips: type a value and press Enter or a comma (or leave the
  * field) to add it; each chip has a remove button, and Backspace in the empty field removes the
  * last one. Values are trimmed (and normalised when `normalize` is given) and a case-insensitive
- * duplicate is refused. A refused entry stays in the field with a visible notice. Chips are keyed
+ * duplicate is refused, as is anything `validate` refuses. A refused entry stays in the field with
+ * a visible notice, and only an accepted one is announced. Chips are keyed
  * and removed by position, so duplicate stored values are handled one at a time.
  */
 export default function ChipInput({
@@ -46,6 +62,9 @@ export default function ChipInput({
   suggestions,
   formatChip = identity,
   normalize = identity,
+  validate,
+  readOnly = false,
+  announceChanges = true,
   placeholder = 'Type and press Enter',
 }: ChipInputProps) {
   const [draft, setDraft] = useState('');
@@ -76,6 +95,7 @@ export default function ChipInput({
   };
 
   const add = (raw: string) => {
+    if (readOnly) return;
     const trimmed = raw.trim();
     if (!trimmed) {
       setDraft('');
@@ -87,16 +107,21 @@ export default function ChipInput({
     if (values.some((v) => v.toLowerCase() === value.toLowerCase()))
       return refuse(`${formatChip(value)} is already in the list`);
     if (full) return refuse(`At most ${maxItems} entries: remove one to add another`);
+    const refusal = validate?.(value);
+    if (refusal) return refuse(refusal);
     setDraft('');
     setNotice('');
     onChange([...values, value]);
-    setAnnouncement(`Added ${formatChip(value)}`);
+    if (announceChanges) setAnnouncement(`Added ${formatChip(value)}`);
   };
 
+  /** Whether the chip was removed (never while read-only). */
   const remove = (index: number) => {
+    if (readOnly) return false;
     const value = values[index]!;
     onChange(values.filter((_, i) => i !== index));
-    setAnnouncement(`Removed ${formatChip(value)}`);
+    if (announceChanges) setAnnouncement(`Removed ${formatChip(value)}`);
+    return true;
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -132,11 +157,11 @@ export default function ChipInput({
                   removeRefs.current[index] = el;
                 }}
                 onClick={() => {
-                  pendingFocus.current = index;
-                  remove(index);
+                  if (remove(index)) pendingFocus.current = index;
                 }}
+                aria-disabled={readOnly || undefined}
                 aria-label={`Remove ${formatChip(value)}`}
-                className="ml-1 rounded-full px-1.5 hover:bg-blue-200 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                className="ml-1 rounded-full px-1.5 hover:bg-blue-200 focus:outline-hidden focus:ring-2 focus:ring-blue-500 aria-disabled:opacity-50"
               >
                 <span aria-hidden="true">×</span>
               </button>
@@ -150,6 +175,7 @@ export default function ChipInput({
           id={id}
           type="text"
           value={draft}
+          readOnly={readOnly}
           maxLength={maxLength}
           list={listId}
           onChange={(e) => {
@@ -161,14 +187,14 @@ export default function ChipInput({
           placeholder={placeholder}
           aria-invalid={error ? true : undefined}
           aria-describedby={describedBy}
-          className={inputClass}
+          className={`${inputClass} read-only:bg-gray-50`}
         />
         {/* Never `disabled`: Tab from a typed entry commits it on blur, and focus must still land
             here rather than fall to the page. A click with nothing typed does nothing. */}
         <button
           type="button"
           onClick={() => add(draft)}
-          aria-disabled={empty}
+          aria-disabled={empty || readOnly}
           aria-label={`Add to ${label}`}
           className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md focus:outline-hidden focus:ring-2 focus:ring-gray-500 aria-disabled:opacity-50"
         >

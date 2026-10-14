@@ -11,6 +11,7 @@ import type {
   InteractionStatus,
   InteractionType,
   MaritalStatus,
+  MemberGroupMembership,
   MediaType,
   MembershipStage,
   MembershipType,
@@ -21,6 +22,8 @@ import type {
   RelationshipType,
   RiskLevel,
   SearchQuery,
+  TagCategory,
+  TagChip,
 } from '@embrace/shared';
 
 export type {
@@ -98,6 +101,8 @@ export interface Member {
   interests?: string[];
   roles: UserRole[];
   engagement?: Engagement | null;
+  /** Staff projections only: members never receive tags (P5-D12). Archived tags have isActive false. */
+  memberTags?: Array<{ tag: TagChip }>;
 }
 
 export interface MediaItem {
@@ -181,6 +186,17 @@ export interface MemberDetails {
   familyId?: string;
   /** Derived on the server from the family's headOfFamilyId. */
   isHeadOfFamily: boolean;
+  /** The member's family (staff profile only): its name, head and address. */
+  family?: {
+    id: string;
+    familyName: string;
+    headOfFamilyId: string | null;
+    address: string | null;
+    city: string | null;
+    state: string | null;
+    zipCode: string | null;
+    country: string | null;
+  } | null;
 
   // Notes and tracking
   notes?: string;
@@ -209,6 +225,7 @@ export interface MemberDetails {
     communityScore: number;
     communicationScore: number;
   };
+  /** Active relationships within the member's current family; the type is the relative's relation to them. */
   familyMembers?: Array<{
     id: string;
     name: string;
@@ -246,6 +263,16 @@ export interface MemberDetails {
     isPublic: boolean;
     celebrated: boolean;
   }>;
+  /** The member's tags by name; archived ones stay listed with `tag.isActive` false. */
+  memberTags?: Array<{
+    id: string;
+    addedAt: string;
+    tag: TagChip & { category: TagCategory };
+    /** Who added it; null when unknown or the account is gone. */
+    addedBy?: { id: string; name: string } | null;
+  }>;
+  /** Every group membership (staff only), archived groups and inactive rows included. */
+  groupMemberships?: MemberGroupMembership[];
   memberNotes?: Array<{
     id: string;
     title?: string;

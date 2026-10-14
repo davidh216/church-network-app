@@ -1,11 +1,14 @@
 import { useId } from 'react';
 import { formatLocalDate } from '@/lib/format/date';
 import type { SavedSearch } from '@/types/domain';
+import { DeletedChip } from './ConditionValue';
 
 interface SavedSearchItemProps {
   search: SavedSearch;
   onApply: () => void;
   onDelete: () => void;
+  /** The query names a tag or group that no longer exists. */
+  deletedReferences?: boolean;
 }
 
 /**
@@ -13,7 +16,12 @@ interface SavedSearchItemProps {
  * is named by the visible search name (plus a visually hidden verb); the description and the
  * saved date or invalid explanation describe it.
  */
-export default function SavedSearchItem({ search, onApply, onDelete }: SavedSearchItemProps) {
+export default function SavedSearchItem({
+  search,
+  onApply,
+  onDelete,
+  deletedReferences = false,
+}: SavedSearchItemProps) {
   const id = useId();
   const descriptionId = `${id}-description`;
   const statusId = `${id}-status`;
@@ -42,6 +50,12 @@ export default function SavedSearchItem({ search, onApply, onDelete }: SavedSear
           {search.isPublic && (
             <span className="px-2 py-0.5 rounded-sm text-xs font-medium bg-green-100 text-green-800">
               Public
+            </span>
+          )}
+          {deletedReferences && (
+            <span title="This search names a deleted tag or group, which matches no one">
+              <DeletedChip />
+              <span className="sr-only">: names a deleted tag or group, which matches no one</span>
             </span>
           )}
           {search.invalid && (

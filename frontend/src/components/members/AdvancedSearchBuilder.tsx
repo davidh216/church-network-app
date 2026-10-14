@@ -8,6 +8,7 @@ import {
   newDraft,
   type DraftCondition,
 } from '@/lib/members/searchQuery';
+import { useSearchNames } from '@/lib/members/useSearchNames';
 import { PANEL_IDS } from './MemberListActions';
 import ConditionRow from './search/ConditionRow';
 
@@ -34,6 +35,8 @@ export default function AdvancedSearchBuilder({
   );
   const [logic, setLogic] = useState<'AND' | 'OR'>(initialQuery?.logic ?? 'AND');
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // The builder is staff-only, like the tag and group lists.
+  const { names, choices } = useSearchNames(true);
 
   const update = (next: DraftCondition) =>
     setDrafts((prev) => prev.map((d) => (d.key === next.key ? next : d)));
@@ -107,6 +110,8 @@ export default function AdvancedSearchBuilder({
             canRemove={drafts.length > 1}
             onChange={update}
             onRemove={() => remove(draft.key)}
+            choices={choices}
+            names={names}
           />
         ))}
       </ul>

@@ -1,3 +1,5 @@
+import { existsSync, mkdirSync } from 'node:fs';
+import path from 'node:path';
 import { expect, request, type APIRequestContext } from '@playwright/test';
 import { seededAdmin } from './admin';
 
@@ -16,11 +18,33 @@ export async function signedInRequest(credentials: {
   return null;
 }
 
-/** An API client signed in as the seeded admin. */
-export async function adminRequest(): Promise<APIRequestContext> {
+// The admin's session, saved once per run under the output directory (which Playwright empties
+// at the start of every run). The login limit counts every sign-in (10 per address and email in
+// 15 minutes), so the API helpers and the specs that need no login form share this one session.
+const ADMIN_STATE = path.join(__dirname, '..', 'test-results', '.auth', 'admin.json');
+
+/**
+ * The path of a storage state signed in as the seeded admin (for `request.newContext` or a
+ * browser context). Signs in only when no saved session exists or the saved one no longer works.
+ */
+export async function adminStorageState(): Promise<string> {
+  if (existsSync(ADMIN_STATE)) {
+    const saved = await request.newContext({ baseURL, storageState: ADMIN_STATE });
+    const valid = (await saved.get('/api/auth/me')).ok();
+    await saved.dispose();
+    if (valid) return ADMIN_STATE;
+  }
   const context = await signedInRequest(seededAdmin());
   if (!context) throw new Error('The seeded admin could not sign in');
-  return context;
+  mkdirSync(path.dirname(ADMIN_STATE), { recursive: true });
+  await context.storageState({ path: ADMIN_STATE });
+  await context.dispose();
+  return ADMIN_STATE;
+}
+
+/** An API client signed in as the seeded admin (the run's shared session). */
+export async function adminRequest(): Promise<APIRequestContext> {
+  return request.newContext({ baseURL, storageState: await adminStorageState() });
 }
 
 /**
@@ -62,6 +86,32 @@ export async function ensureE2eMember(admin: APIRequestContext): Promise<{ id: s
   return { id };
 }
 
+/**
+ * A second fixed member that never signs in (so it costs no login attempts): specs that need
+ * someone other than the admin and E2E_MEMBER use it, so they do not depend on what else
+ * church_dev holds. CI starts from a database with only the admin.
+ */
+export const E2E_OTHER = {
+  name: 'E2E Other Member',
+  email: 'e2e-other@example.test',
+  password: 'E2e-other-fixed-password',
+};
+
+export async function ensureE2eOther(
+  admin: APIRequestContext,
+): Promise<{ id: string; name: string }> {
+  const created = await admin.post('/api/users', { data: { ...E2E_OTHER, isActive: true } });
+  if (created.status() === 201) {
+    const { user } = (await created.json()) as { user: { id: string } };
+    return { id: user.id, name: E2E_OTHER.name };
+  }
+  expect(created.status()).toBe(409);
+  const id = await userIdByEmail(admin, E2E_OTHER.email);
+  const data = { isActive: true, name: E2E_OTHER.name };
+  expect((await admin.put(`/api/users/${id}`, { data })).ok()).toBe(true);
+  return { id, name: E2E_OTHER.name };
+}
+
 async function memberId(admin: APIRequestContext): Promise<string> {
   const found = await admin.get('/api/users', { params: { q: E2E_MEMBER.email } });
   expect(found.ok()).toBe(true);
@@ -79,6 +129,77 @@ export async function deleteSavedSearches(admin: APIRequestContext, prefix: stri
   for (const search of searches.filter((s) => s.name.startsWith(prefix))) {
     expect((await admin.delete(`/api/users/saved-searches/${search.id}`)).ok()).toBe(true);
   }
+}
+
+/** Deletes every group (archived ones too) named `name`, leftovers of interrupted runs included. */
+export async function deleteGroups(admin: APIRequestContext, name: string) {
+  const list = await admin.get('/api/groups', { params: { status: 'all' } });
+  expect(list.ok()).toBe(true);
+  const { groups } = (await list.json()) as { groups: { id: string; name: string }[] };
+  for (const group of groups.filter((g) => g.name === name)) {
+    expect((await admin.delete(`/api/groups/${group.id}`)).ok()).toBe(true);
+  }
+}
+
+/** Deletes every tag (archived ones too) named `name`, with its assignments. */
+export async function deleteTags(admin: APIRequestContext, name: string) {
+  const list = await admin.get('/api/tags', { params: { includeArchived: 'true' } });
+  expect(list.ok()).toBe(true);
+  const { tags } = (await list.json()) as { tags: { id: string; name: string }[] };
+  for (const tag of tags.filter((t) => t.name === name)) {
+    expect((await admin.delete(`/api/tags/${tag.id}`)).ok()).toBe(true);
+  }
+}
+
+/** Creates a group named `name` with `memberId` on its roster; returns its id. */
+export async function createGroupWithMember(
+  admin: APIRequestContext,
+  name: string,
+  memberId: string,
+): Promise<string> {
+  const created = await admin.post('/api/groups', {
+    data: { name, type: 'small_group', meetingDay: 'Wednesdays', location: 'Hall' },
+  });
+  expect(created.status()).toBe(201);
+  const { group } = (await created.json()) as { group: { id: string } };
+  const added = await admin.post(`/api/groups/${group.id}/members`, {
+    data: { userId: memberId, role: 'co_leader' },
+  });
+  expect(added.status()).toBe(201);
+  return group.id;
+}
+
+/** Deletes every family named `name` (leftovers of interrupted runs included); members are unlinked. */
+export async function deleteFamilies(admin: APIRequestContext, name: string) {
+  const list = await admin.get('/api/families', { params: { q: name, pageSize: 100 } });
+  expect(list.ok()).toBe(true);
+  const { families } = (await list.json()) as { families: { id: string; familyName: string }[] };
+  for (const family of families.filter((f) => f.familyName === name)) {
+    expect((await admin.delete(`/api/families/${family.id}`)).ok()).toBe(true);
+  }
+}
+
+/** Creates a family named `name` around `headId` (who joins it); returns its id. */
+export async function createFamilyWithHead(
+  admin: APIRequestContext,
+  name: string,
+  headId: string,
+): Promise<string> {
+  const created = await admin.post('/api/families', {
+    data: { familyName: name, city: 'Springfield', headOfFamilyId: headId },
+  });
+  expect(created.status()).toBe(201);
+  return ((await created.json()) as { family: { id: string } }).family.id;
+}
+
+/** The id of the active user whose email is exactly `email`. */
+export async function userIdByEmail(admin: APIRequestContext, email: string): Promise<string> {
+  const found = await admin.get('/api/users', { params: { q: email } });
+  expect(found.ok()).toBe(true);
+  const { users } = (await found.json()) as { users: { id: string; email?: string }[] };
+  const user = users.find((u) => u.email === email);
+  if (!user) throw new Error(`${email} was not found`);
+  return user.id;
 }
 
 /** Adds one video when the library is empty, so the media page has cards to check. */

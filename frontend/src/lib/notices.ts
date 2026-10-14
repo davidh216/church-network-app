@@ -4,6 +4,7 @@
  */
 const NOTICES = {
   'staff-only': 'That page is only available to staff.',
+  'admin-only': 'That page is only available to administrators.',
 } as const;
 
 type NoticeCode = keyof typeof NOTICES;

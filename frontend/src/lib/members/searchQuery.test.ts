@@ -1,10 +1,13 @@
 import { SEARCH_FIELD_OPERATORS, searchQuery, type SearchField } from '@embrace/shared';
 import { describe, expect, it } from 'vitest';
 import { EMPTY_FILTERS } from './filters';
+import type { SearchNames } from './searchNames';
 import {
   SEARCH_FIELDS,
   buildSearchQuery,
   describeQuery,
+  describeQuerySegments,
+  referencesDeleted,
   draftsFromQuery,
   filtersToQuery,
   NAME_ONLY_SAVE_NOTE,
@@ -14,6 +17,19 @@ import {
   withField,
   type DraftCondition,
 } from './searchQuery';
+
+// Well-formed ids for tag and group conditions.
+const TAG_A = 'clh3am8hi0000qwer1234abcd';
+const TAG_B = 'clh3am8hi0001qwer1234abcd';
+const GROUP_A = 'clh3am8hi0002qwer1234abcd';
+const GONE = 'clh3am8hi0009qwer1234abcd';
+const names: SearchNames = {
+  tags: new Map([
+    [TAG_A, 'Choir'],
+    [TAG_B, 'Follow-up'],
+  ]),
+  groups: new Map([[GROUP_A, 'Youth']]),
+};
 
 const draft = (field: SearchField, updates: Partial<DraftCondition>): DraftCondition => ({
   ...newDraft(field),
@@ -74,6 +90,34 @@ describe('buildSearchQuery', () => {
     ]);
   });
 
+  it('converts the tag, group and family conditions', () => {
+    const result = buildSearchQuery(
+      [
+        draft('tags', { operator: 'includesAll', values: [TAG_A, TAG_B] }),
+        draft('groups', { operator: 'excludesAll', values: [GROUP_A] }),
+        draft('family', { operator: 'isNotEmpty' }),
+      ],
+      'AND',
+    );
+    expect(result.ok && result.query.conditions).toEqual([
+      { field: 'tags', operator: 'includesAll', value: [TAG_A, TAG_B] },
+      { field: 'groups', operator: 'excludesAll', value: [GROUP_A] },
+      { field: 'family', operator: 'isNotEmpty' },
+    ]);
+  });
+
+  it('asks for a choice when a tag or group condition has none', () => {
+    const tags = draft('tags', { operator: 'includesAny' });
+    const groups = draft('groups', { operator: 'includesAny' });
+    expect(buildSearchQuery([tags, groups], 'AND')).toEqual({
+      ok: false,
+      errors: {
+        [tags.key]: 'Choose at least one value',
+        [groups.key]: 'Choose at least one value',
+      },
+    });
+  });
+
   it('reports a message per invalid condition', () => {
     const empty = draft('name', {});
     const range = draft('engagement.engagementScore', {
@@ -114,6 +158,9 @@ describe('draftsFromQuery', () => {
         },
         { field: 'isActive' as const, operator: 'equals' as const, value: true },
         { field: 'bio' as const, operator: 'isEmpty' as const },
+        { field: 'tags' as const, operator: 'excludesAll' as const, value: [TAG_A, GONE] },
+        { field: 'groups' as const, operator: 'includesAny' as const, value: [GROUP_A] },
+        { field: 'family' as const, operator: 'isEmpty' as const },
       ],
       logic: 'OR' as const,
     };
@@ -149,6 +196,8 @@ describe('filtersToQuery', () => {
       engagement: 'all',
       joinedFrom: '2026-01-01',
       joinedTo: '',
+      tag: TAG_A,
+      group: GROUP_A,
     });
     expect(query).toEqual({
       conditions: [
@@ -158,6 +207,8 @@ describe('filtersToQuery', () => {
         { field: 'engagement.riskLevel', operator: 'equals', value: 'high' },
         { field: 'isActive', operator: 'equals', value: false },
         { field: 'createdAt', operator: 'between', value: ['2026-01-01', '9999-12-31'] },
+        { field: 'tags', operator: 'includesAny', value: [TAG_A] },
+        { field: 'groups', operator: 'includesAny', value: [GROUP_A] },
       ],
       logic: 'AND',
     });
@@ -224,5 +275,36 @@ describe('describeQuery', () => {
     ).toBe(
       'Membership stage equals New Member AND Engagement score between 50 and 90 AND Status equals Active',
     );
+  });
+});
+
+describe('tag and group names in descriptions', () => {
+  const query = {
+    conditions: [
+      { field: 'tags' as const, operator: 'includesAny' as const, value: [TAG_A, GONE] },
+      { field: 'groups' as const, operator: 'excludesAll' as const, value: [GROUP_A] },
+      { field: 'family' as const, operator: 'isNotEmpty' as const },
+    ],
+    logic: 'AND' as const,
+  };
+
+  it('names tags and groups, and marks a deleted one', () => {
+    expect(describeQuery(query, names)).toBe(
+      'Tags include any of Choir, (deleted) AND Groups include none of Youth AND Family is not empty',
+    );
+    expect(describeQuerySegments(query, names).filter((s) => s.deleted)).toEqual([
+      { text: '(deleted)', deleted: true },
+    ]);
+    expect(referencesDeleted(query, names)).toBe(true);
+    expect(referencesDeleted({ ...query, conditions: query.conditions.slice(1) }, names)).toBe(
+      false,
+    );
+  });
+
+  it('marks nothing deleted before the names load', () => {
+    expect(describeQuery(query)).toBe(
+      'Tags include any of …, … AND Groups include none of … AND Family is not empty',
+    );
+    expect(referencesDeleted(query, { tags: null, groups: null })).toBe(false);
   });
 });

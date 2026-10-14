@@ -94,6 +94,34 @@ export const ACTIVITY_TYPES = [
   'profile_update',
   'other',
 ] as const;
+// The audited actions (PHASE5_SPECS.md 1.3), `<object>_<event>`: the spec's `user.role_changed`
+// is `user_role_changed` here, since a Prisma enum value cannot contain a dot.
+export const AUDIT_ACTIONS = [
+  'user_role_changed',
+  'user_activated',
+  'user_deactivated',
+  'user_password_reset_by_admin',
+  'tag_created',
+  'tag_updated',
+  'tag_archived',
+  'tag_deleted',
+  'tag_assigned',
+  'tag_unassigned',
+  'group_created',
+  'group_updated',
+  'group_archived',
+  'group_deleted',
+  'group_member_added',
+  'group_member_updated',
+  'group_member_removed',
+  'family_created',
+  'family_updated',
+  'family_deleted',
+  'family_member_added',
+  'family_member_removed',
+  'family_relationship_set',
+  'family_relationship_removed',
+] as const;
 
 export const membershipStage = z.enum(MEMBERSHIP_STAGES);
 export const riskLevel = z.enum(RISK_LEVELS);
@@ -117,6 +145,7 @@ export const impact = z.enum(IMPACTS);
 export const noteType = z.enum(NOTE_TYPES);
 export const tagCategory = z.enum(TAG_CATEGORIES);
 export const activityType = z.enum(ACTIVITY_TYPES, { error: 'Choose an activity type' });
+export const auditAction = z.enum(AUDIT_ACTIONS);
 
 // Every shared enum by its Prisma enum name (the backend parity test iterates this map).
 export const PRISMA_ENUMS = {
@@ -141,6 +170,7 @@ export const PRISMA_ENUMS = {
   NoteType: NOTE_TYPES,
   TagCategory: TAG_CATEGORIES,
   ActivityType: ACTIVITY_TYPES,
+  AuditAction: AUDIT_ACTIONS,
 } as const satisfies Record<string, readonly string[]>;
 
 export type MembershipStage = z.infer<typeof membershipStage>;
@@ -164,6 +194,7 @@ export type Impact = z.infer<typeof impact>;
 export type NoteType = z.infer<typeof noteType>;
 export type TagCategory = z.infer<typeof tagCategory>;
 export type ActivityType = z.infer<typeof activityType>;
+export type AuditAction = z.infer<typeof auditAction>;
 
 // The display label of an enum value: "core_member" -> "Core Member",
 // "YOUTUBE_VIDEO" -> "Youtube Video". Frontend selects and badges derive their text from this.

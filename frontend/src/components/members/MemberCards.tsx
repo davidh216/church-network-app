@@ -1,6 +1,7 @@
 import { formatLocalDate } from '@/lib/format/date';
 import type { Member } from '@/types/domain';
 import { MemberAvatar, RoleBadges, StatusBadge } from './MemberBadges';
+import { MemberTagChips } from '@/components/tags/TagChips';
 import MemberRowActions from './MemberRowActions';
 
 interface MemberCardsProps {
@@ -51,6 +52,7 @@ export default function MemberCards({
                 <RoleBadges member={member} padding="px-2 py-1" />
                 {canManage && <StatusBadge isActive={member.isActive} padding="px-2 py-1" />}
               </div>
+              {canManage && <MemberTagChips tags={member.memberTags?.map((t) => t.tag)} />}
 
               {member.bio && (
                 <p className="text-sm text-gray-600 mt-2 line-clamp-2">{member.bio}</p>

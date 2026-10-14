@@ -12,12 +12,14 @@ import Attendance from './profile/Attendance';
 import ChurchInfo from './profile/ChurchInfo';
 import ContactInfo from './profile/ContactInfo';
 import Family from './profile/Family';
+import Groups from './profile/Groups';
 import Interactions from './profile/Interactions';
 import Milestones from './profile/Milestones';
 import Notes from './profile/Notes';
 import PersonalInfo from './profile/PersonalInfo';
 import ProfileHeader, { backLinkClass } from './profile/ProfileHeader';
 import Tabs, { panelId, tabId, type ProfileTabId } from './profile/Tabs';
+import TagsSection from './profile/TagsSection';
 import Timeline from './profile/Timeline';
 
 interface MemberProfileProps {
@@ -31,6 +33,7 @@ const TAB_PANELS: Record<ProfileTabId, ComponentType<{ member: MemberDetails }>>
   timeline: Timeline,
   attendance: Attendance,
   family: Family,
+  groups: Groups,
   interactions: Interactions,
   milestones: Milestones,
   activity: Notes,
@@ -74,6 +77,7 @@ export default function MemberProfile({ memberId }: MemberProfileProps) {
     <div>
       <div className={cardClass}>
         <ProfileHeader member={member} onEdit={() => setEditing(true)} />
+        <TagsSection member={member} />
         <Tabs active={activeTab} onChange={setActiveTab} />
         <div
           role="tabpanel"

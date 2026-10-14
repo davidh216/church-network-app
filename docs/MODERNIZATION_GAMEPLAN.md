@@ -1,6 +1,6 @@
 # Church Network App: Modernization Gameplan
 
-Date: 2026-10-03. Status: APPROVED 2026-10-04 (initial scope = Phase 0 + Phase 1). Phase 0 implemented on branch `modernize/phase-0`; Phases 0, 1 and 2 are merged into `main` (PRs #1, #2, #3, merged 2026-10-05). Phase 3 is merged into `main` (PR #9, merged 2026-10-07). Phase 4 is specified in `PHASE4_SPECS.md` (approved 2026-10-11) and implemented on branch `modernize/phase-4`.
+Date: 2026-10-03. Status: APPROVED 2026-10-04 (initial scope = Phase 0 + Phase 1). Phase 0 implemented on branch `modernize/phase-0`; Phases 0, 1 and 2 are merged into `main` (PRs #1, #2, #3, merged 2026-10-05). Phase 3 is merged into `main` (PR #9, merged 2026-10-07). Phase 4 is merged into `main` (PR #10, merged 2026-10-12). Phase 5 (features) is specified in `PHASE5_SPECS.md` (approved 2026-10-12 with every recommendation) and is being implemented as PRs 5A, 5B and 5C.
 
 Owner decisions (2026-10-04): D1 Postgres, moved up to the start of Phase 1 (switching the Prisma provider regenerates the migration history, so it follows the Phase 0 security fixes rather than preceding them). D2 registration requires admin approval. D3 httpOnly cookie sessions. D6 delete the lifecycle-automation tables. Remaining decisions take the recommendation unless the owner says otherwise.
 
@@ -306,9 +306,44 @@ Adversarial reviews:
   - The compose-mode backup runs in CI.
   - The README now says how to restore into an empty database and in which order to revert upgrades.
 
-### Phase 5 and beyond (out of this plan's estimates)
+### Phase 5: features (about 3.5 weeks)
 
-Groups and ministries UI, real bulk actions, email/SMS communication, media approval workflow, family relationship editing, member tags UI. Each becomes a normal feature PR on the foundations above.
+Goal: deliver the features the README claims and that Phases 0 to 4 left as schema only, on the tested foundations above. Detailed items, contracts, the authorization matrix and decisions P5-D1 to P5-D12 are in `PHASE5_SPECS.md` (approved 2026-10-12 with every recommendation). Three sequential PRs, each branched from `main` after the previous one merges (P5-D1).
+
+- [x] 5.1 (PR 5A, about 5 days) Organise people: an audit log with an admin page; member tags (manage, assign, filter, staff-only visibility); groups and ministries (directory for everyone, management and rosters for staff, `Group.leaderId` folded into roster roles); families (create, membership, head of family, relationship editing with a database check on pair order, members see their own family); tag, group and family search filters. F066. Spec G1 to G6.
+- [ ] 5.2 (PR 5B, about 3 days) Act on people and content: real bulk actions (tags, groups, activate, deactivate, export, select all matching); a pending-approval filter for registrations; the media approval workflow (member submissions, staff review queue, a `status` replacing `isApproved` and `isPublic`, unapproved items hidden by id). F036. Spec W1 to W3.
+- [ ] 5.3 (PR 5C, about 6 days) Communicate: SMTP mail with Mailpit in development and CI; a database outbox with a retrying, rate-limited worker; compose and history UI for staff; one-click unsubscribe and editable preferences; interaction logging from the profile; a communication score that counts only messages expecting a reply; approval and registration emails; password reset by email, with password changes ending other sessions. SMS deferred (P5-D3). Spec M1 to M8.
+
+Exit criteria: each PR green in CI (including Playwright with axe on every new page and dialog), its migrations proven on a copy of the previous database with no drift and archived values replayed, an adversarial review with every finding fixed, the README updated, then merged into `main`.
+
+Verified 5A on 2026-10-14 on `modernize/phase-5a`. From the root, these all pass:
+- `npm run typecheck`
+- `npm run lint`
+- `npm run format:check`
+- `npm test`: 173 shared, 920 backend and 574 frontend tests, including concurrency tests that fail without the row locks
+- `npm run build`
+- the drift check
+- `docker compose config` and actionlint
+- the Playwright suite, twice in a row: 6 scenarios with axe on every new page and dialog, leaving church_dev as it was
+
+**Upgrade drill.** Two databases upgraded cleanly:
+- A copy of the Phase 4 dev database, seeded with legacy shapes, took the five 5A migrations: a leader without a roster row and one with a member row, a reversed and a mirrored relationship pair, a head outside the family and a head in another family. Every value was converted as specified and archived in `phase5_archive`.
+- The Phase 2 dump took the whole migration chain.
+
+Both ended with the same schema as a fresh migration. 5A adds no dependencies.
+
+Adversarial review: four lenses (authorization and data exposure, migrations and integrity, frontend UX and accessibility, regressions and contracts), each verified live against its own database. No blockers. 15 should-fix and about 12 nits were found and all fixed in the `5A-fix` commits. The largest were:
+- family write races, reproduced with parallel requests, that could leave a head outside the family or a relationship between non-members (now serialised by a family row lock);
+- a case-insensitive tag-name race;
+- accounts created with staff roles going unaudited;
+- a tag picker that announced refused or unsaved changes;
+- member lists left stale after roster and family changes.
+
+An independent recheck confirmed every fix and found five more, all fixed: a deadlock between two admins editing each other, a second pool connection inside a transaction, two racy unit tests, and a tag picker that locked up when the tag list failed to load.
+
+### Beyond Phase 5 (out of this plan's estimates)
+
+SMS (needs A2P 10DLC registration), delegated group-leader permissions, member import, a provider API transport for email, and the items in section 8.
 
 ## 7. Decisions the owner must make
 

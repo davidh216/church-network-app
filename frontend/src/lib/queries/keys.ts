@@ -1,4 +1,7 @@
+import type { GroupListParams } from '@/lib/api/groups';
 import type {
+  ListAuditParams,
+  ListFamiliesParams,
   ListMediaParams,
   ListServicesParams,
   ListTimelineParams,
@@ -45,5 +48,28 @@ export const queryKeys = {
   /** Outside `analytics` so invalidating the analytics after a job does not refetch the job. */
   engagementJobs: { detail: (id: string) => ['engagement-jobs', id] as const },
   roles: { all: ['roles'] as const },
+  tags: {
+    all: ['tags'] as const,
+    list: (includeArchived: boolean) => ['tags', 'list', { includeArchived }] as const,
+  },
+  groups: {
+    all: ['groups'] as const,
+    list: (params: GroupListParams) => ['groups', 'list', params] as const,
+    /** The signed-in user's own memberships (group ids are cuids, never "mine"). */
+    mine: () => ['groups', 'mine'] as const,
+    detail: (id: string) => ['groups', 'detail', id] as const,
+  },
+  families: {
+    all: ['families'] as const,
+    list: (params: ListFamiliesParams) => ['families', 'list', params] as const,
+    /** The signed-in user's own family (family ids are cuids, never "mine"). */
+    mine: () => ['families', 'mine'] as const,
+    detail: (id: string) => ['families', 'detail', id] as const,
+  },
+  /** Every audited change invalidates `audit.all`, so the log never shows a stale page. */
+  audit: {
+    all: ['audit'] as const,
+    list: (params: ListAuditParams) => ['audit', 'list', params] as const,
+  },
   savedSearches: { all: ['saved-searches'] as const },
 };

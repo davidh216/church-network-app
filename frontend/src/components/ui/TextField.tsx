@@ -1,4 +1,4 @@
-import type { InputHTMLAttributes } from 'react';
+import type { InputHTMLAttributes, Ref } from 'react';
 import { fieldA11y } from '@/lib/forms/validate';
 import FieldError from './FieldError';
 
@@ -9,6 +9,7 @@ interface TextFieldProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'id
   onChange: (value: string) => void;
   /** The field's inline validation message, if any. */
   error?: string;
+  ref?: Ref<HTMLInputElement>;
 }
 
 const inputClass =

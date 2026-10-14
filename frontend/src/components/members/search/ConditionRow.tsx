@@ -6,6 +6,7 @@ import {
   withField,
   type DraftCondition,
 } from '@/lib/members/searchQuery';
+import type { SearchChoices, SearchNames } from '@/lib/members/searchNames';
 import ConditionValue from './ConditionValue';
 
 interface ConditionRowProps {
@@ -16,6 +17,8 @@ interface ConditionRowProps {
   canRemove: boolean;
   onChange: (draft: DraftCondition) => void;
   onRemove: () => void;
+  choices?: SearchChoices;
+  names?: SearchNames;
 }
 
 const selectClass =
@@ -29,6 +32,8 @@ export default function ConditionRow({
   canRemove,
   onChange,
   onRemove,
+  choices,
+  names,
 }: ConditionRowProps) {
   const errorId = error ? `condition-${draft.key}-error` : undefined;
   return (
@@ -72,6 +77,8 @@ export default function ConditionRow({
           draft={draft}
           index={index}
           errorId={errorId}
+          choices={choices}
+          names={names}
           onChange={(updates) => onChange({ ...draft, ...updates })}
         />
 

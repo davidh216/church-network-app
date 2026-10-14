@@ -9,7 +9,9 @@ import {
   type MemberSort,
 } from '@/lib/members/filters';
 import { NAME_ONLY_LIST_NOTE } from '@/lib/members/searchQuery';
+import { useSearchNames } from '@/lib/members/useSearchNames';
 import AdvancedQueryChip from './search/AdvancedQueryChip';
+import TagGroupFilters from './TagGroupFilters';
 
 interface MemberFiltersProps {
   filters: Filters;
@@ -103,7 +105,9 @@ export default function MemberFilters({
     searchRef.current?.focus();
   };
 
-  const chips = activeFilterChips(filters).map(({ label, keys }) => ({
+  // Tag and group names for the selects and the chips (staff only).
+  const { names, choices } = useSearchNames(canManage);
+  const chips = activeFilterChips(filters, names).map(({ label, keys }) => ({
     label,
     clear: () => keys.forEach((key) => onFilterChange(key, EMPTY_FILTERS[key])),
   }));
@@ -170,6 +174,14 @@ export default function MemberFilters({
               ))}
             </select>
           ))}
+          <TagGroupFilters
+            tag={filters.tag}
+            group={filters.group}
+            onFilterChange={onFilterChange}
+            names={names}
+            choices={choices}
+            className={filterClass}
+          />
           <input
             type="date"
             aria-label="Joined from"

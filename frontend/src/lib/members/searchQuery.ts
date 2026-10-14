@@ -13,6 +13,13 @@ import {
 } from '@embrace/shared';
 import { enumOptions, stageLabel } from './display';
 import { dateRangeError, type MemberFilters } from './filters';
+import {
+  NO_CHOICES,
+  NO_NAMES,
+  referenceName,
+  type SearchChoices,
+  type SearchNames,
+} from './searchNames';
 
 /**
  * The advanced member search (POST /api/users/search) as the builder edits it. A draft keeps
@@ -20,7 +27,8 @@ import { dateRangeError, type MemberFilters } from './filters';
  * `searchQuery` with the shared schema, so the rules match what the API enforces.
  */
 
-type FieldKind = 'text' | 'role' | 'score' | 'stage' | 'risk' | 'date' | 'active';
+type FieldKind =
+  'text' | 'role' | 'score' | 'stage' | 'risk' | 'date' | 'active' | 'tag' | 'group' | 'family';
 
 export const SEARCH_FIELDS: { field: SearchField; label: string; kind: FieldKind }[] = [
   { field: 'name', label: 'Name', kind: 'text' },
@@ -34,6 +42,9 @@ export const SEARCH_FIELDS: { field: SearchField; label: string; kind: FieldKind
   { field: 'createdAt', label: 'Joined', kind: 'date' },
   { field: 'lastLoginAt', label: 'Last login', kind: 'date' },
   { field: 'isActive', label: 'Status', kind: 'active' },
+  { field: 'tags', label: 'Tags', kind: 'tag' },
+  { field: 'groups', label: 'Groups', kind: 'group' },
+  { field: 'family', label: 'Family', kind: 'family' },
 ];
 
 export const OPERATOR_LABELS: Record<SearchOperator, string> = {
@@ -50,7 +61,25 @@ export const OPERATOR_LABELS: Record<SearchOperator, string> = {
   in: 'is one of',
   before: 'before',
   after: 'after',
+  includesAny: 'include any of',
+  includesAll: 'include all of',
+  excludesAll: 'include none of',
+  isNotEmpty: 'is not empty',
 };
+
+/** Operators that take a list of choices (`values`), and those that take no value. */
+const MULTI_OPERATORS: readonly SearchOperator[] = [
+  'in',
+  'includesAny',
+  'includesAll',
+  'excludesAll',
+];
+const isMulti = (operator: SearchOperator) => MULTI_OPERATORS.includes(operator);
+/** True for the operators that take no value (`isEmpty`, `isNotEmpty`). */
+export const takesNoValue = (operator: SearchOperator) =>
+  operator === 'isEmpty' || operator === 'isNotEmpty';
+/** True for the operators that take a list of choices. */
+export const takesChoices = isMulti;
 
 const ROLE_OPTIONS = ['admin', 'leader', 'member'] as const;
 
@@ -66,8 +95,16 @@ export function operatorsFor(field: SearchField): readonly SearchOperator[] {
   return SEARCH_FIELD_OPERATORS[field];
 }
 
-/** Choices for the enum-like fields, as [value, label] pairs. */
-export function optionsFor(kind: FieldKind): [string, string][] {
+/**
+ * Choices for the enum-like fields, as [value, label] pairs; tags and groups come from the
+ * server (`choices`).
+ */
+export function optionsFor(
+  kind: FieldKind,
+  choices: SearchChoices = NO_CHOICES,
+): [string, string][] {
+  if (kind === 'tag') return choices.tag;
+  if (kind === 'group') return choices.group;
   if (kind === 'role') return enumOptions(ROLE_OPTIONS);
   if (kind === 'stage') return enumOptions(MEMBERSHIP_STAGES);
   if (kind === 'risk') return enumOptions(RISK_LEVELS);
@@ -88,7 +125,7 @@ export interface DraftCondition {
   value: string;
   /** The high end of `between`. */
   value2: string;
-  /** The choices of `in`. */
+  /** The choices of `in` and of the tag and group operators. */
   values: string[];
 }
 
@@ -115,8 +152,8 @@ const isBlank = (value: string) => value.trim() === '';
 
 /** A message when the draft is missing a value, before the schema runs. */
 function missingValue(draft: DraftCondition): string | null {
-  if (draft.operator === 'isEmpty') return null;
-  if (draft.operator === 'in') return draft.values.length ? null : 'Choose at least one value';
+  if (takesNoValue(draft.operator)) return null;
+  if (isMulti(draft.operator)) return draft.values.length ? null : 'Choose at least one value';
   if (draft.operator === 'between')
     return isBlank(draft.value) || isBlank(draft.value2) ? 'Enter both values' : null;
   return isBlank(draft.value) ? 'Enter a value' : null;
@@ -131,8 +168,8 @@ function toCandidate(draft: DraftCondition): unknown {
     if (kind === 'active') return raw === 'true';
     return raw.trim();
   };
-  if (operator === 'isEmpty') return { field, operator };
-  if (operator === 'in') return { field, operator, value: draft.values };
+  if (takesNoValue(operator)) return { field, operator };
+  if (isMulti(operator)) return { field, operator, value: draft.values };
   if (operator === 'between')
     return { field, operator, value: [scalar(draft.value), scalar(draft.value2)] };
   return { field, operator, value: scalar(draft.value) };
@@ -175,7 +212,7 @@ export function draftsFromQuery(query: Pick<SearchQuery, 'conditions'>): DraftCo
     const draft = { ...newDraft(condition.field), operator: condition.operator };
     if (!('value' in condition)) return draft;
     const value = condition.value as unknown;
-    if (condition.operator === 'in') return { ...draft, values: (value as string[]).map(String) };
+    if (isMulti(condition.operator)) return { ...draft, values: (value as string[]).map(String) };
     if (Array.isArray(value))
       return { ...draft, value: String(value[0]), value2: String(value[1]) };
     return { ...draft, value: String(value) };
@@ -229,6 +266,10 @@ export function filtersToQuery(filters: MemberFilters): SearchQuery | null {
       operator: 'between',
       value: [filters.joinedFrom || EARLIEST_DATE, filters.joinedTo || LATEST_DATE],
     });
+  if (isSet(filters.tag))
+    conditions.push({ field: 'tags', operator: 'includesAny', value: [filters.tag] });
+  if (isSet(filters.group))
+    conditions.push({ field: 'groups', operator: 'includesAny', value: [filters.group] });
   if (search && conditions.length === 0) {
     const textFields = ['name', 'email', 'phone', 'bio'] as const;
     return {
@@ -257,6 +298,25 @@ export const NAME_ONLY_SAVE_NOTE =
 /** Shown under the quick filters while the engagement filter narrows the text search. */
 export const NAME_ONLY_LIST_NOTE = 'With an engagement filter, the text search matches names only.';
 
+/** One piece of a query's description; `deleted` marks a tag or group that no longer exists. */
+export interface QuerySegment {
+  text: string;
+  deleted?: boolean;
+}
+
+function valueSegments(condition: SearchCondition, names: SearchNames): QuerySegment[] {
+  if (!('value' in condition)) return [];
+  const kind = fieldKind(condition.field);
+  if (kind === 'tag' || kind === 'group') {
+    const refs = (condition.value as string[]).map((id) => referenceName(names, kind, id));
+    return refs.flatMap((ref, i) => [
+      ...(i > 0 ? [{ text: ', ' }] : []),
+      ref.deleted ? { text: ref.label, deleted: true } : { text: ref.label },
+    ]);
+  }
+  return [{ text: valueText(condition) }];
+}
+
 function valueText(condition: SearchCondition): string {
   if (!('value' in condition)) return '';
   const kind = fieldKind(condition.field);
@@ -274,11 +334,39 @@ function valueText(condition: SearchCondition): string {
   return one(value);
 }
 
-/** One line per query, for the "Advanced query active" chip: `Name contains ann AND ...`. */
-export function describeQuery(query: Pick<SearchQuery, 'conditions' | 'logic'>): string {
-  return query.conditions
-    .map((c) =>
-      [fieldLabel(c.field), OPERATOR_LABELS[c.operator], valueText(c)].filter(Boolean).join(' '),
-    )
-    .join(` ${query.logic} `);
+/**
+ * A query as segments of one line, for the "Advanced query active" chip: `Name contains ann AND
+ * Tags include any of Choir, (deleted)`. `names` names the tags and groups.
+ */
+export function describeQuerySegments(
+  query: Pick<SearchQuery, 'conditions' | 'logic'>,
+  names: SearchNames = NO_NAMES,
+): QuerySegment[] {
+  return query.conditions.flatMap((c, i) => {
+    const values = valueSegments(c, names);
+    const head = [fieldLabel(c.field), OPERATOR_LABELS[c.operator]].join(' ');
+    return [
+      ...(i > 0 ? [{ text: ` ${query.logic} ` }] : []),
+      { text: values.length ? `${head} ` : head },
+      ...values,
+    ];
+  });
+}
+
+/** The query as one line of text (see describeQuerySegments). */
+export function describeQuery(
+  query: Pick<SearchQuery, 'conditions' | 'logic'>,
+  names: SearchNames = NO_NAMES,
+): string {
+  return describeQuerySegments(query, names)
+    .map((segment) => segment.text)
+    .join('');
+}
+
+/** True when the query names a tag or group that no longer exists (once the names have loaded). */
+export function referencesDeleted(
+  query: Pick<SearchQuery, 'conditions' | 'logic'>,
+  names: SearchNames,
+): boolean {
+  return describeQuerySegments(query, names).some((segment) => segment.deleted);
 }

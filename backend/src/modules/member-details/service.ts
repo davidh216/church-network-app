@@ -1,4 +1,4 @@
-import type { Prisma, RelationshipType } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 import type { z } from 'zod';
 import type {
   addInteractionInput,
@@ -13,6 +13,8 @@ import { isAdmin } from '../../middleware/auth';
 import type { AuthenticatedUser } from '../../types/auth';
 import type { interactionsQuery, milestonesQuery, notesQuery } from './schemas';
 import { today } from '../services/service';
+import { memberGroups } from '../groups/service';
+import { relationOfOther } from '../families/pairs';
 
 // Private notes are visible only to their author and to admins.
 function visibleNotes(viewer: AuthenticatedUser): Prisma.MemberNoteWhereInput {
@@ -20,66 +22,49 @@ function visibleNotes(viewer: AuthenticatedUser): Prisma.MemberNoteWhereInput {
 }
 
 const relative = {
-  select: { id: true, name: true, firstName: true, lastName: true, avatar: true, isActive: true },
+  select: {
+    id: true,
+    name: true,
+    firstName: true,
+    lastName: true,
+    avatar: true,
+    isActive: true,
+    familyId: true,
+  },
 };
+// The member's family on the staff profile: its name, head and address.
+const familySelect = {
+  id: true,
+  familyName: true,
+  headOfFamilyId: true,
+  address: true,
+  city: true,
+  state: true,
+  zipCode: true,
+  country: true,
+} satisfies Prisma.FamilySelect;
 const person = { select: { id: true, name: true } };
 
-const INVERSE_RELATIONSHIP: Record<RelationshipType, RelationshipType> = {
-  spouse: 'spouse',
-  parent: 'child',
-  child: 'parent',
-  sibling: 'sibling',
-  grandparent: 'grandchild',
-  grandchild: 'grandparent',
-  other: 'other',
-};
-
-/** `a` is the `type` of `b` -> `b` is the inverse type of `a` (parent <-> child, ...). */
-export function inverseRelationship(type: RelationshipType): RelationshipType {
-  return INVERSE_RELATIONSHIP[type];
-}
-
-export interface FamilyPair {
-  primaryUserId: string;
-  relatedUserId: string;
-  /** The primary's relation to the related user. */
-  relationshipType: RelationshipType;
-}
-
-/**
- * Each family pair is stored once, with primaryUserId < relatedUserId (PHASE3_SPECS.md 1.2):
- * a pair given the other way round is swapped and its type inverted.
- */
-export function normaliseFamilyPair(pair: FamilyPair): FamilyPair {
-  if (pair.primaryUserId <= pair.relatedUserId) return pair;
-  return {
-    primaryUserId: pair.relatedUserId,
-    relatedUserId: pair.primaryUserId,
-    relationshipType: inverseRelationship(pair.relationshipType),
-  };
-}
-
-/** Records (or updates) the relationship between two members of a family, normalised. */
-export function setFamilyRelationship(familyId: string, pair: FamilyPair, isActive = true) {
-  const { primaryUserId, relatedUserId, relationshipType } = normaliseFamilyPair(pair);
-  return prisma.familyRelationship.upsert({
-    where: { primaryUserId_relatedUserId: { primaryUserId, relatedUserId } },
-    create: { familyId, primaryUserId, relatedUserId, relationshipType, isActive },
-    update: { familyId, relationshipType, isActive },
-  });
-}
+// The pair helpers moved to the families module (G4); re-exported for existing callers.
+export {
+  inverseRelationship,
+  normaliseFamilyPair,
+  setFamilyRelationship,
+  type FamilyPair,
+} from '../families/pairs';
 
 // The full CRM profile of a member: roles, engagement, family, recent interactions,
-// milestones, notes the viewer may see and tags (the timeline has its own paged endpoint). Never the password hash.
+// milestones, notes the viewer may see, tags and group memberships (the timeline has its own
+// paged endpoint). Never the password hash.
 export async function getMemberDetails(id: string, viewer: AuthenticatedUser) {
   const user = await prisma.user.findUnique({
     where: { id },
     include: {
       roles: { include: { role: true } },
       engagement: true,
-      family: true,
-      familyRelationships: { include: { relatedUser: relative } },
-      relatedFamilyMembers: { include: { primaryUser: relative } },
+      family: { select: familySelect },
+      familyRelationships: { where: { isActive: true }, include: { relatedUser: relative } },
+      relatedFamilyMembers: { where: { isActive: true }, include: { primaryUser: relative } },
       interactions: {
         orderBy: { createdAt: 'desc' },
         take: 50,
@@ -92,7 +77,11 @@ export async function getMemberDetails(id: string, viewer: AuthenticatedUser) {
         take: 20,
         include: { author: person },
       },
-      memberTags: { include: { tag: true } },
+      // Staff only (P5-D12); archived tags stay listed with isActive false.
+      memberTags: {
+        orderBy: [{ tag: { name: 'asc' } }, { id: 'asc' }],
+        include: { tag: true, addedBy: person },
+      },
     },
   });
   if (!user) throw new HttpError(404, 'User not found');
@@ -107,20 +96,27 @@ export async function getMemberDetails(id: string, viewer: AuthenticatedUser) {
   });
   const lastAttended = latestAttended?.service.date ?? null;
 
-  // Relationships in both directions, flattened and de-duplicated by person. Each entry's
-  // relationshipType is the relative's relation to this member: a stored type is the primary's
-  // relation to the related user, so it is inverted where this member is the primary.
+  // Active relationships within the member's current family (PHASE5_SPECS.md 1.4), in both
+  // directions, flattened and de-duplicated by person: a relationship kept from a family the
+  // member left, or naming someone outside it, is not shown. Each entry's relationshipType is the
+  // relative's relation to this member.
+  const inFamily = (rel: { familyId: string }, other: { familyId: string | null }) =>
+    user.familyId !== null && rel.familyId === user.familyId && other.familyId === user.familyId;
   const familyMembers = [
-    ...user.familyRelationships.map((rel) => ({
-      ...rel.relatedUser,
-      relationshipType: inverseRelationship(rel.relationshipType),
-      isPrimary: true,
-    })),
-    ...user.relatedFamilyMembers.map((rel) => ({
-      ...rel.primaryUser,
-      relationshipType: rel.relationshipType,
-      isPrimary: false,
-    })),
+    ...user.familyRelationships
+      .filter((rel) => inFamily(rel, rel.relatedUser))
+      .map(({ relatedUser: { familyId: _f, ...other }, ...rel }) => ({
+        ...other,
+        relationshipType: relationOfOther(rel, user.id),
+        isPrimary: true,
+      })),
+    ...user.relatedFamilyMembers
+      .filter((rel) => inFamily(rel, rel.primaryUser))
+      .map(({ primaryUser: { familyId: _f, ...other }, ...rel }) => ({
+        ...other,
+        relationshipType: relationOfOther(rel, user.id),
+        isPrimary: false,
+      })),
   ];
   const uniqueFamilyMembers = familyMembers.filter(
     (member, index) => index === familyMembers.findIndex((m) => m.id === member.id),
@@ -129,7 +125,18 @@ export async function getMemberDetails(id: string, viewer: AuthenticatedUser) {
   // Head of family is derived from the family row (users.isHeadOfFamily was dropped in P3-D3).
   const isHeadOfFamily = user.family?.headOfFamilyId === user.id;
 
-  return { ...user, lastAttended, isHeadOfFamily, familyMembers: uniqueFamilyMembers };
+  // Staff only, like the whole profile: every membership, archived groups and inactive rows too.
+  const groupMemberships = await memberGroups(id);
+
+  // The raw relationship rows stay out of the response: familyMembers is their filtered view.
+  const { familyRelationships: _own, relatedFamilyMembers: _related, ...profile } = user;
+  return {
+    ...profile,
+    lastAttended,
+    isHeadOfFamily,
+    familyMembers: uniqueFamilyMembers,
+    groupMemberships,
+  };
 }
 
 // "call_made" -> "Call made"

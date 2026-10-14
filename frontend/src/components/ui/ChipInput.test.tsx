@@ -8,12 +8,16 @@ function Harness({
   maxItems,
   error,
   normalize,
+  validate,
+  readOnly,
   onSubmit = () => undefined,
 }: {
   initial?: string[];
   maxItems?: number;
   error?: string;
   normalize?: (value: string) => string;
+  validate?: (value: string) => string | null;
+  readOnly?: boolean;
   onSubmit?: () => void;
 }) {
   const [values, setValues] = useState(initial);
@@ -32,6 +36,8 @@ function Harness({
         maxItems={maxItems}
         error={error}
         normalize={normalize}
+        validate={validate}
+        readOnly={readOnly}
       />
       <input aria-label="Next field" />
       <div data-testid="values">{values.join('|')}</div>
@@ -177,5 +183,54 @@ describe('ChipInput', () => {
     expect(input()).toHaveAccessibleDescription(
       'Press Enter or a comma to add. Skills cannot be blank',
     );
+  });
+
+  it('keeps an entry the parent refuses, shows why, and never announces it as added', () => {
+    const validate = vi.fn((value: string) => (value === 'Choyr' ? 'No tag called Choyr' : null));
+    render(<Harness validate={validate} />);
+    typeAndPress('Choyr');
+    expect(values()).toBe('');
+    expect(input()).toHaveValue('Choyr');
+    expect(notice()).toHaveTextContent('No tag called Choyr');
+    expect(screen.getByRole('status')).toHaveTextContent('No tag called Choyr');
+    expect(screen.getByRole('status')).not.toHaveTextContent(/Added/);
+    // On blur too.
+    fireEvent.blur(input());
+    expect(input()).toHaveValue('Choyr');
+    typeAndPress('Choir');
+    expect(values()).toBe('Choir');
+    expect(input()).toHaveValue('');
+    expect(screen.getByRole('status')).toHaveTextContent('Added Choir');
+  });
+
+  it('adds and removes nothing while read-only, and keeps every control focusable', () => {
+    render(<Harness initial={['Music']} readOnly />);
+    expect(input()).toHaveAttribute('readonly');
+    fireEvent.keyDown(input(), { key: 'Enter' });
+    fireEvent.keyDown(input(), { key: 'Backspace' });
+    const remove = screen.getByRole('button', { name: 'Remove Music' });
+    remove.focus();
+    fireEvent.click(remove);
+    expect(values()).toBe('Music');
+    expect(remove).not.toBeDisabled();
+    expect(remove).toHaveAttribute('aria-disabled', 'true');
+    expect(remove).toHaveFocus();
+    expect(screen.getByRole('status')).toHaveTextContent('');
+  });
+
+  it('lets the parent announce changes itself', () => {
+    const Quiet = () => {
+      const [list, setList] = useState(['Music']);
+      return (
+        <ChipInput id="q" label="Quiet" values={list} onChange={setList} announceChanges={false} />
+      );
+    };
+    render(<Quiet />);
+    const field = screen.getByRole('textbox', { name: 'Quiet' });
+    fireEvent.change(field, { target: { value: 'Sound' } });
+    fireEvent.keyDown(field, { key: 'Enter' });
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Music' }));
+    expect(screen.getByRole('list', { name: 'Quiet' })).toHaveTextContent('Sound');
+    expect(screen.getByRole('status')).toHaveTextContent('');
   });
 });

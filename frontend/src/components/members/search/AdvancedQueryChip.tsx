@@ -1,5 +1,7 @@
 import type { SearchQuery } from '@embrace/shared';
-import { describeQuery } from '@/lib/members/searchQuery';
+import { describeQuerySegments } from '@/lib/members/searchQuery';
+import { useSearchNames } from '@/lib/members/useSearchNames';
+import { DeletedChip } from './ConditionValue';
 
 interface AdvancedQueryChipProps {
   query: SearchQuery;
@@ -9,6 +11,8 @@ interface AdvancedQueryChipProps {
 
 /** Shown in place of the quick filters while the list shows an advanced search result. */
 export default function AdvancedQueryChip({ query, onEdit, onClear }: AdvancedQueryChipProps) {
+  // Advanced queries are staff-only; a tag or group deleted since shows as a "(deleted)" chip.
+  const { names } = useSearchNames(true);
   return (
     <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Advanced query">
       <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
@@ -29,7 +33,11 @@ export default function AdvancedQueryChip({ query, onEdit, onClear }: AdvancedQu
       >
         Edit query
       </button>
-      <span className="text-sm text-gray-600 break-words">{describeQuery(query)}</span>
+      <span className="text-sm text-gray-600 break-words">
+        {describeQuerySegments(query, names).map((segment, i) =>
+          segment.deleted ? <DeletedChip key={i} /> : segment.text,
+        )}
+      </span>
     </div>
   );
 }

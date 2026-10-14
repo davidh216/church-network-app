@@ -16,6 +16,13 @@ vi.mock('@/lib/api/memberDetails', () => detailsApi);
 const rolesApi = vi.hoisted(() => ({ listRoles: vi.fn() }));
 vi.mock('@/lib/api/roles', () => rolesApi);
 
+const tagsApi = vi.hoisted(() => ({
+  listTags: vi.fn(),
+  assignTag: vi.fn(),
+  unassignTag: vi.fn(),
+}));
+vi.mock('@/lib/api/tags', () => tagsApi);
+
 const details = {
   id: 'u1',
   name: 'Ada Lovelace',
@@ -26,6 +33,17 @@ const details = {
   smsOptIn: false,
   mailOptIn: false,
   isHeadOfFamily: true,
+  familyId: 'fam1',
+  family: {
+    id: 'fam1',
+    familyName: 'Lovelace',
+    headOfFamilyId: 'u1',
+    address: '12 St James Sq',
+    city: 'London',
+    state: null,
+    zipCode: null,
+    country: null,
+  },
   volunteerSkills: ['Music'],
   interests: [],
   createdAt: '2024-01-05T12:00:00.000Z',
@@ -58,6 +76,7 @@ const details = {
 beforeEach(() => {
   vi.resetAllMocks();
   rolesApi.listRoles.mockResolvedValue([]);
+  tagsApi.listTags.mockResolvedValue([]);
   detailsApi.getMemberTimeline.mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 20 });
 });
 
@@ -103,8 +122,20 @@ describe('MemberProfile', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: /Family/ }));
     expect(screen.getByText('1 family members')).toBeTruthy();
-    expect(screen.getByText('Byron Lovelace')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Byron Lovelace' }).getAttribute('href')).toBe(
+      '/members/f1',
+    );
+    expect(screen.getByText('Parent')).toBeTruthy();
     expect(screen.getByText('Head of Family')).toBeTruthy();
+    // The family by name, never its raw id, with its address and a link to manage it.
+    expect(screen.getByRole('link', { name: 'Lovelace' }).getAttribute('href')).toBe(
+      '/families/fam1',
+    );
+    expect(screen.getByText('12 St James Sq, London')).toBeTruthy();
+    expect(screen.queryByText('fam1')).toBeNull();
+    expect(screen.getByRole('link', { name: 'Manage family' }).getAttribute('href')).toBe(
+      '/families/fam1',
+    );
 
     fireEvent.click(screen.getByRole('tab', { name: /Timeline/ }));
     expect(await screen.findByText('No timeline activities found')).toBeTruthy();
@@ -145,6 +176,44 @@ describe('MemberProfile', () => {
       'Email Communications: Opted in',
     );
     expect(screen.getByText('SMS/Text Messages')).toHaveTextContent('SMS/Text Messages: Opted out');
+  });
+
+  it('lists the member groups on the Groups tab, archived groups and paused rows marked', async () => {
+    detailsApi.getMemberDetails.mockResolvedValue({
+      ...details,
+      groupMemberships: [
+        {
+          group: { id: 'g1', name: 'Choir', type: 'ministry', isActive: true },
+          role: 'co_leader',
+          joinDate: '2026-01-02T12:00:00.000Z',
+          isActive: true,
+        },
+        {
+          group: { id: 'g2', name: 'Old Committee', type: 'committee', isActive: false },
+          role: 'member',
+          joinDate: '2025-01-02T12:00:00.000Z',
+          isActive: false,
+        },
+      ],
+    });
+    await render(<MemberProfile memberId="u1" />);
+    await screen.findByRole('heading', { level: 1 });
+    fireEvent.click(screen.getByRole('tab', { name: /Groups/ }));
+    const panel = screen.getByRole('tabpanel', { name: /Groups/ });
+    expect(within(panel).getByRole('link', { name: 'Choir' })).toHaveAttribute(
+      'href',
+      '/groups/g1',
+    );
+    expect(panel).toHaveTextContent('Co-leader');
+    expect(panel).toHaveTextContent('Committee · Archived group · Membership paused');
+  });
+
+  it('says so when the member is in no group', async () => {
+    detailsApi.getMemberDetails.mockResolvedValue({ ...details, groupMemberships: [] });
+    await render(<MemberProfile memberId="u1" />);
+    await screen.findByRole('heading', { level: 1 });
+    fireEvent.click(screen.getByRole('tab', { name: /Groups/ }));
+    expect(screen.getByText(/Ada Lovelace is not in any group/)).toBeTruthy();
   });
 
   it('shows the attendance tab and refetches for another window and service types', async () => {
@@ -228,17 +297,21 @@ describe('MemberProfile', () => {
     await screen.findByRole('heading', { level: 1 });
     fireEvent.click(screen.getByRole('tab', { name: /Attendance/ }));
     const sentence = await screen.findByText(/attended\s+of/);
-    expect(screen.getByRole('status')).toHaveTextContent('');
+    expect(within(screen.getByRole('tabpanel')).getByRole('status')).toHaveTextContent('');
     expect(sentence).toHaveAttribute('aria-live', 'polite');
 
     fireEvent.change(screen.getByLabelText('Period'), { target: { value: '3' } });
     await settle();
-    expect(screen.getByRole('status')).toHaveTextContent('Updating attendance…');
+    expect(within(screen.getByRole('tabpanel')).getByRole('status')).toHaveTextContent(
+      'Updating attendance…',
+    );
     const region = screen.getByRole('region', { name: 'Attendance summary' });
     expect(region).toHaveAttribute('aria-busy', 'true');
 
     resolveNext({ ...summary, months: 3, serviceCount: 1, attendedCount: 1 });
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(''));
+    await waitFor(() =>
+      expect(within(screen.getByRole('tabpanel')).getByRole('status')).toHaveTextContent(''),
+    );
     expect(region).toHaveAttribute('aria-busy', 'false');
     expect(screen.getByText(/attended\s+of/)).toHaveTextContent(/attended 1 of 1 /);
   });
