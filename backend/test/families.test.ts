@@ -449,6 +449,24 @@ describe('families (G4)', () => {
     await prisma.user.updateMany({ where: { familyId: family.id }, data: { familyId: null } });
   });
 
+  it('does not name deactivated relatives to a member, as the directory does not', async () => {
+    const family = await newFamily();
+    for (const id of [memberId, annId, benId]) await put(family.id, id);
+    await relate(family.id, { userId: annId, relatedUserId: memberId, type: 'parent' });
+    await prisma.user.update({ where: { id: annId }, data: { isActive: false } });
+    try {
+      const res = await request(app).get('/api/families/mine').set(member);
+      expect(res.body.family).toEqual({
+        familyName: 'Doe',
+        relatives: [{ name: 'Ben', relationship: null }],
+      });
+      expect(res.text).not.toContain('Ann');
+    } finally {
+      await prisma.user.update({ where: { id: annId }, data: { isActive: true } });
+      await prisma.user.updateMany({ where: { familyId: family.id }, data: { familyId: null } });
+    }
+  });
+
   it('shows the staff profile the family name and address and only its active relationships', async () => {
     const family = await newFamily({ familyName: 'Doe', city: 'Springfield' });
     const old = await newFamily({ familyName: 'Old' });

@@ -281,7 +281,8 @@ export function deleteFamily(
 }
 
 // The caller's own family: its name, and each other member's name with their active relation to
-// the caller within this family. Nothing else (no ids, contact details or address).
+// the caller within this family. Nothing else (no ids, contact details or address), and no
+// deactivated relatives.
 export async function ownFamily(userId: string): Promise<OwnFamily | null> {
   const me = await prisma.user.findUnique({
     where: { id: userId },
@@ -291,7 +292,8 @@ export async function ownFamily(userId: string): Promise<OwnFamily | null> {
           id: true,
           familyName: true,
           members: {
-            where: { id: { not: userId } },
+            // Only active accounts, as in the member directory.
+            where: { id: { not: userId }, isActive: true },
             orderBy: [{ name: 'asc' }, { id: 'asc' }],
             select: { id: true, name: true },
           },
