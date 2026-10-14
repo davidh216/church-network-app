@@ -109,6 +109,39 @@ export async function createGroupWithMember(
   return group.id;
 }
 
+/** Deletes every family named `name` (leftovers of interrupted runs included); members are unlinked. */
+export async function deleteFamilies(admin: APIRequestContext, name: string) {
+  const list = await admin.get('/api/families', { params: { q: name, pageSize: 100 } });
+  expect(list.ok()).toBe(true);
+  const { families } = (await list.json()) as { families: { id: string; familyName: string }[] };
+  for (const family of families.filter((f) => f.familyName === name)) {
+    expect((await admin.delete(`/api/families/${family.id}`)).ok()).toBe(true);
+  }
+}
+
+/** Creates a family named `name` around `headId` (who joins it); returns its id. */
+export async function createFamilyWithHead(
+  admin: APIRequestContext,
+  name: string,
+  headId: string,
+): Promise<string> {
+  const created = await admin.post('/api/families', {
+    data: { familyName: name, city: 'Springfield', headOfFamilyId: headId },
+  });
+  expect(created.status()).toBe(201);
+  return ((await created.json()) as { family: { id: string } }).family.id;
+}
+
+/** The id of the active user whose email is exactly `email`. */
+export async function userIdByEmail(admin: APIRequestContext, email: string): Promise<string> {
+  const found = await admin.get('/api/users', { params: { q: email } });
+  expect(found.ok()).toBe(true);
+  const { users } = (await found.json()) as { users: { id: string; email?: string }[] };
+  const user = users.find((u) => u.email === email);
+  if (!user) throw new Error(`${email} was not found`);
+  return user.id;
+}
+
 /** Adds one video when the library is empty, so the media page has cards to check. */
 export async function ensureOneVideo(admin: APIRequestContext) {
   const list = await admin.get('/api/media', { params: { pageSize: 1 } });

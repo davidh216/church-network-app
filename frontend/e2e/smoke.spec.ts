@@ -2,26 +2,34 @@ import { expect, test, type Page } from '@playwright/test';
 import { seededAdmin } from './admin';
 import {
   adminRequest,
+  createFamilyWithHead,
   createGroupWithMember,
+  deleteFamilies,
   deleteGroups,
   deleteSavedSearches,
   E2E_MEMBER,
   ensureE2eMember,
   ensureOneVideo,
+  userIdByEmail,
 } from './api';
 import { expectNoSeriousA11yViolations } from './axe';
-import { deleteGroupAuditEvents } from './db';
+import { deleteAuditEvents } from './db';
 
 // The saved search the advanced-query test creates; leftovers from interrupted runs are removed
 // before the suite and the search itself after it, so church_dev does not grow.
 const SAVED_SEARCH_NAME = 'E2E new members';
 // The group the group-page test creates and deletes, with its audit events.
 const GROUP_NAME = 'E2E smoke group';
+// The families the family-page test creates and deletes (the second one only holds a member the
+// move confirmation is about), with their audit events.
+const FAMILY_NAME = 'E2E smoke family';
+const OTHER_FAMILY_NAME = 'E2E smoke other family';
 
 test.beforeAll(async () => {
   const admin = await adminRequest();
   await deleteSavedSearches(admin, SAVED_SEARCH_NAME);
   await deleteGroups(admin, GROUP_NAME);
+  for (const name of [FAMILY_NAME, OTHER_FAMILY_NAME]) await deleteFamilies(admin, name);
   // The /media checks (and its axe scan) need at least one card with a play button.
   await ensureOneVideo(admin);
   await admin.dispose();
@@ -31,8 +39,10 @@ test.afterAll(async () => {
   const admin = await adminRequest();
   await deleteSavedSearches(admin, SAVED_SEARCH_NAME);
   await deleteGroups(admin, GROUP_NAME);
+  for (const name of [FAMILY_NAME, OTHER_FAMILY_NAME]) await deleteFamilies(admin, name);
   await admin.dispose();
-  deleteGroupAuditEvents(GROUP_NAME);
+  deleteAuditEvents('group', GROUP_NAME);
+  for (const name of [FAMILY_NAME, OTHER_FAMILY_NAME]) deleteAuditEvents('family', name);
 });
 
 async function signIn(page: Page, email: string, password: string) {
@@ -276,7 +286,7 @@ test('admin builds an advanced query, saves it, reloads and applies it', async (
   // afterAll deletes the saved search.
 });
 
-test('admin opens a group page with its roster, edits nothing and deletes the group', async ({
+test('admin opens a group page and a family page with their dialogs, then deletes both', async ({
   page,
 }) => {
   const admin = seededAdmin();
@@ -315,4 +325,85 @@ test('admin opens a group page with its roster, edits nothing and deletes the gr
   await expect(page).toHaveURL(/\/groups$/);
   await expect(page.getByRole('link', { name: GROUP_NAME })).toHaveCount(0);
   // afterAll removes the group's audit events (and the group, if this test failed before).
+
+  // Families (same session: the login limit counts every sign-in). The admin heads the family and
+  // the e2e member (created by the member test) joins it; a third member heads another family,
+  // so adding them asks before moving. Nothing is moved and both families are deleted at the end,
+  // which unlinks their members again.
+  const nav = page.getByRole('navigation', { name: 'Main' });
+  const memberId = await userIdByEmail(page.request, E2E_MEMBER.email);
+  const users = (await (
+    await page.request.get('/api/users', { params: { status: 'active', pageSize: 50 } })
+  ).json()) as { users: { id: string; name: string; email?: string }[] };
+  const third = users.users.find(
+    (u) => u.id !== me.user.id && u.id !== memberId && /^[\w ]+$/.test(u.name),
+  );
+  if (!third) throw new Error('church_dev needs a third active member');
+  const familyId = await createFamilyWithHead(page.request, FAMILY_NAME, me.user.id);
+  expect(
+    (
+      await page.request.put(`/api/families/${familyId}/members/${memberId}`, { data: {} })
+    ).status(),
+  ).toBe(200);
+  await createFamilyWithHead(page.request, OTHER_FAMILY_NAME, third.id);
+
+  await nav.getByRole('link', { name: 'Families' }).click();
+  await expect(page).toHaveURL(/\/families$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'Families' })).toBeVisible();
+  await expect(page.getByRole('status', { name: 'Loading families' })).toHaveCount(0);
+  await expectNoSeriousA11yViolations(page, '/families');
+  const newFamily = page.getByRole('button', { name: 'New Family' });
+  await newFamily.click();
+  const familyDialog = page.getByRole('dialog', { name: 'New Family' });
+  await expect(familyDialog.getByLabel('Family name *')).toBeFocused();
+  await expectNoSeriousA11yViolations(page, '/families with the New Family dialog');
+  await page.keyboard.press('Escape');
+  await expect(newFamily).toBeFocused();
+
+  await page.getByLabel('Search by name').fill(FAMILY_NAME);
+  await page.getByRole('link', { name: FAMILY_NAME, exact: true }).click();
+  await expect(
+    page.getByRole('heading', { level: 1, name: `${FAMILY_NAME} family` }),
+  ).toBeVisible();
+  const members = page.getByRole('region', { name: 'Members (2)' });
+  await expect(members.getByLabel('Head of family')).toHaveValue(me.user.id);
+  await expect(members.getByRole('link', { name: E2E_MEMBER.name })).toBeVisible();
+  await expectNoSeriousA11yViolations(page, '/families/[id]');
+
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  const editFamily = page.getByRole('dialog', { name: 'Edit Family' });
+  await expect(editFamily.getByLabel('Family name *')).toBeFocused();
+  await expectNoSeriousA11yViolations(page, '/families/[id] with the Edit Family dialog');
+  await page.keyboard.press('Escape');
+  await expect(editFamily).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Set relationship' }).click();
+  const relationship = page.getByRole('dialog', { name: 'Set Relationship' });
+  await relationship.getByLabel('is the').selectOption('spouse');
+  await expectNoSeriousA11yViolations(page, '/families/[id] with the Set Relationship dialog');
+  await relationship.getByRole('button', { name: 'Save Relationship' }).click();
+  await expect(relationship).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Relationships' })).toContainText(
+    / is the spouse of .* · .* is the spouse of /,
+  );
+
+  await page.getByLabel('Find a member').fill(third.name);
+  await page
+    .getByRole('list', { name: 'Matching members' })
+    .getByRole('button', { name: `Add ${third.name} to the family` })
+    .first()
+    .click();
+  const move = page.getByRole('dialog', { name: `Move ${third.name}?` });
+  await expect(move).toContainText(`the ${OTHER_FAMILY_NAME} family`);
+  await expectNoSeriousA11yViolations(page, '/families/[id] with the move confirmation');
+  await move.getByRole('button', { name: 'Cancel' }).click();
+  await expect(move).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Delete', exact: true }).click();
+  const deleteFamily = page.getByRole('dialog', { name: 'Delete Family?' });
+  await expect(deleteFamily).toContainText('Its 2 members stay in the directory without a family.');
+  await expectNoSeriousA11yViolations(page, '/families/[id] with the Delete Family dialog');
+  await deleteFamily.getByRole('button', { name: 'Delete Family' }).click();
+  await expect(page).toHaveURL(/\/families$/);
+  // afterAll deletes the other family and every family audit event of the run.
 });
