@@ -174,10 +174,14 @@ export async function findFamily(tx: Prisma.TransactionClient, id: string) {
   return family;
 }
 
+// "the Roe family", but "the Smith Family" rather than "the Smith Family family".
+const familyTitle = (familyName: string) =>
+  /\bfamily$/i.test(familyName.trim()) ? familyName : `${familyName} family`;
+
 export const inOtherFamily = (name: string, familyName: string) =>
   new HttpError(
     409,
-    `${name} already belongs to the ${familyName} family`,
+    `${name} already belongs to the ${familyTitle(familyName)}`,
     FAMILY_MEMBER_ELSEWHERE,
   );
 

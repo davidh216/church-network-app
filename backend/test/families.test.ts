@@ -108,6 +108,12 @@ describe('families (G4)', () => {
       code: 'IN_OTHER_FAMILY',
     });
     expect(await prisma.family.count({ where: { familyName: 'Poe' } })).toBe(0);
+    await prisma.family.update({
+      where: { id: (await prisma.user.findUniqueOrThrow({ where: { id: annId } })).familyId! },
+      data: { familyName: 'Roe Family' },
+    });
+    const titled = await create({ familyName: 'Poe', headOfFamilyId: annId });
+    expect(titled.body.error).toBe('Ann already belongs to the Roe Family');
     await prisma.user.update({ where: { id: annId }, data: { familyId: null } });
   });
 
