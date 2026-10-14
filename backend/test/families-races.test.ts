@@ -165,7 +165,10 @@ describe('family write races', () => {
         request(app).put(`/api/families/${familyId}/members/${cyId}`).set(admin),
       ]);
       // Exactly one of them places Cy; the other is refused and writes nothing.
-      expect([create.status, put.status].sort()).toEqual([201, 409]);
+      expect([
+        [201, 409],
+        [409, 200],
+      ]).toContainEqual([create.status, put.status]);
       const placedIn = await familyOf(cyId);
       if (create.status === 201) {
         expect(put.body.code).toBe('IN_OTHER_FAMILY');
@@ -214,5 +217,47 @@ describe('family write races', () => {
     });
     expect(await familyOf(cyId)).toBe(familyId);
     expect(await prisma.family.count({ where: { familyName: 'New' } })).toBe(0);
+  });
+
+  it('makes a deletion wait for a member being added, and count them', async () => {
+    const familyId = await familyWith('Held', [annId]);
+    const { audit: realAudit } =
+      await vi.importActual<typeof import('../src/lib/audit')>('../src/lib/audit');
+    let reached!: () => void;
+    let release!: () => void;
+    const atGate = new Promise<void>((resolve) => (reached = resolve));
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    // putMember has locked the family and set Cy's familyId; it waits at family_member_added.
+    vi.mocked(audit).mockImplementationOnce(((...args: Parameters<typeof audit>) => {
+      reached();
+      return gate.then(() => realAudit(...args));
+    }) as unknown as typeof audit);
+    const adding = request(app)
+      .put(`/api/families/${familyId}/members/${cyId}`)
+      .set(admin)
+      .then((res) => res);
+    await atGate;
+    const deleting = request(app)
+      .delete(`/api/families/${familyId}`)
+      .set(admin)
+      .then((res) => res);
+    // The deletion waits on the family row (at most 2 s).
+    for (let i = 0; i < 40; i++) {
+      const [row] = await prisma.$queryRaw<{ waiting: number }[]>`
+        SELECT count(*)::int AS waiting FROM pg_stat_activity
+        WHERE datname = current_database() AND wait_event_type = 'Lock'`;
+      if (row!.waiting > 0) break;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    release();
+    expect((await adding).status).toBe(200);
+    expect((await deleting).status).toBe(200);
+    const events = await prisma.auditEvent.findMany({
+      where: { targetId: familyId },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    });
+    expect(events.map((e) => e.action)).toEqual(['family_member_added', 'family_deleted']);
+    expect(events[1]!.metadata).toMatchObject({ members: 2 });
+    expect(await familyOf(cyId)).toBe(null);
   });
 });
