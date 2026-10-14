@@ -58,6 +58,7 @@ export default function TagsSection({ member }: { member: MemberDetails }) {
 
   // Runs before ChipInput accepts a typed name: a refusal keeps the text with this reason.
   const validate = (name: string) => {
+    if (!allTags) return 'Tags can be added once the tag list loads.';
     if (findActive(name)) return null;
     const tag = findTag(name);
     if (tag) return `${tag.name} is archived; restore it in Manage Tags.`;
@@ -98,10 +99,14 @@ export default function TagsSection({ member }: { member: MemberDetails }) {
         // A typed name becomes the tag's own spelling.
         normalize={(value) => findActive(value)?.name ?? value}
         validate={validate}
-        readOnly={!allTags || pending !== null}
+        // Read-only while loading or saving. After a load error, removing still works and an
+        // add is refused with the reason (validate).
+        readOnly={loading || pending !== null}
         announceChanges={false}
         formatChip={(name) => (archived.some((a) => same(a, name)) ? `${name} (archived)` : name)}
-        placeholder={loading ? 'Loading tags…' : pending ? 'Saving…' : 'Type a tag name'}
+        placeholder={
+          loading ? 'Loading tags…' : pending ? 'Saving…' : loadError ? '' : 'Type a tag name'
+        }
       />
       <p role="status" className="mt-1 text-xs text-gray-600">
         {loading ? 'Loading tags…' : pending ? 'Saving…' : announcement}

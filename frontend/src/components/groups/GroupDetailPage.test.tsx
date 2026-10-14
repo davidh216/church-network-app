@@ -186,8 +186,8 @@ describe('GroupDetailPage', () => {
       fireEvent.change(role, { target: { value: 'leader' } });
       expect(groupsApi.updateGroupMember).toHaveBeenCalledTimes(1);
       finish(row('u2', 'Ben', 'co_leader'));
-      await settle();
-      expect(role).not.toHaveAttribute('aria-disabled');
+      // The mutation stays pending until its invalidation refetches finish.
+      await waitFor(() => expect(role).not.toHaveAttribute('aria-disabled'));
     });
 
     it('returns to the search field after an add', async () => {

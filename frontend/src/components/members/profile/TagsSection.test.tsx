@@ -121,8 +121,7 @@ describe('TagsSection', () => {
     fireEvent.keyDown(input(), { key: 'Enter' });
     fireEvent.click(screen.getByRole('button', { name: 'Remove Choir' }));
     list.resolve([active('t1', 'Choir'), active('t2', 'Youth')]);
-    await settle();
-    expect(input()).not.toHaveAttribute('readonly');
+    await waitFor(() => expect(input()).not.toHaveAttribute('readonly'));
     expect(status()).toHaveTextContent('');
     expect(tagsApi.unassignTag).not.toHaveBeenCalled();
     typeAndEnter('Youth');
@@ -155,12 +154,25 @@ describe('TagsSection', () => {
 
   it('unassigns a removed chip, archived ones too, and shows a failure', async () => {
     tagsApi.unassignTag.mockRejectedValueOnce(new ApiError(500, 'Server down'));
-    await render(<TagsSection member={member} />);
+    await renderReady();
     fireEvent.click(screen.getByRole('button', { name: 'Remove Old list (archived)' }));
     await waitFor(() => expect(tagsApi.unassignTag).toHaveBeenCalledWith('u1', 't9'));
     expect((await screen.findByRole('alert')).textContent).toBe('Server down');
     expect(status()).not.toHaveTextContent(/Removed/);
     // The chip is back once the failed change settles.
     expect(screen.getByRole('button', { name: 'Remove Old list (archived)' })).toBeTruthy();
+  });
+
+  it('still removes tags, and refuses adds with a reason, when the tag list fails to load', async () => {
+    tagsApi.listTags.mockRejectedValue(new ApiError(500, 'Tags down'));
+    await render(<TagsSection member={member} />);
+    await waitFor(() => expect(input()).not.toHaveAttribute('readonly'));
+    typeAndEnter('Youth');
+    expect(tagsApi.assignTag).not.toHaveBeenCalled();
+    expect(
+      (await screen.findAllByText('Tags can be added once the tag list loads.')).length,
+    ).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Old list (archived)' }));
+    await waitFor(() => expect(tagsApi.unassignTag).toHaveBeenCalledWith('u1', 't9'));
   });
 });
