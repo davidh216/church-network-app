@@ -73,22 +73,25 @@ export function useCreateUser() {
 }
 
 /**
- * Refetches member lists, that member's profile and analytics after an update, and the group and
- * family pages, whose rosters show each member's name and active status.
+ * Refetches member lists, that member's profile and analytics after an update. The group and
+ * family pages, whose rosters show each member's name and active status, refetch too, in the
+ * background: the save does not wait for them.
  */
 export function useUpdateUser() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, input }: { id: string; input: UpdateUserInput }) => updateUser(id, input),
-    onSuccess: (_user, { id }) =>
-      Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.users.all }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.memberDetails.detail(id) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.analytics.all }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.groups.all }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.families.all }),
-        // A role or status change is audited.
-        queryClient.invalidateQueries({ queryKey: queryKeys.audit.all }),
-      ]),
+    onSuccess: (_user, { id }) => {
+      const users = queryClient.invalidateQueries({ queryKey: queryKeys.users.all });
+      const details = queryClient.invalidateQueries({
+        queryKey: queryKeys.memberDetails.detail(id),
+      });
+      const analytics = queryClient.invalidateQueries({ queryKey: queryKeys.analytics.all });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.groups.all });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.families.all });
+      // A role or status change is audited.
+      const audit = queryClient.invalidateQueries({ queryKey: queryKeys.audit.all });
+      return Promise.all([users, details, analytics, audit]);
+    },
   });
 }
