@@ -1,6 +1,7 @@
 import type { GroupListParams } from '@/lib/api/groups';
 import type {
   ListAuditParams,
+  ListFamiliesParams,
   ListMediaParams,
   ListServicesParams,
   ListTimelineParams,
@@ -57,6 +58,13 @@ export const queryKeys = {
     /** The signed-in user's own memberships (group ids are cuids, never "mine"). */
     mine: () => ['groups', 'mine'] as const,
     detail: (id: string) => ['groups', 'detail', id] as const,
+  },
+  families: {
+    all: ['families'] as const,
+    list: (params: ListFamiliesParams) => ['families', 'list', params] as const,
+    /** The signed-in user's own family (family ids are cuids, never "mine"). */
+    mine: () => ['families', 'mine'] as const,
+    detail: (id: string) => ['families', 'detail', id] as const,
   },
   /** Every audited change invalidates `audit.all`, so the log never shows a stale page. */
   audit: {

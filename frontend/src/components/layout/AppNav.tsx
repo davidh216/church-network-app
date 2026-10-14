@@ -22,6 +22,7 @@ export function navItems(staff: boolean, userId: string, admin = false): NavItem
     { href: '/groups', label: 'Groups' },
     ...(staff
       ? [
+          { href: '/families', label: 'Families' },
           { href: '/services', label: 'Services' },
           { href: '/analytics', label: 'Analytics' },
         ]

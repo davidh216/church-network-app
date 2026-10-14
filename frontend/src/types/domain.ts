@@ -186,6 +186,17 @@ export interface MemberDetails {
   familyId?: string;
   /** Derived on the server from the family's headOfFamilyId. */
   isHeadOfFamily: boolean;
+  /** The member's family (staff profile only): its name, head and address. */
+  family?: {
+    id: string;
+    familyName: string;
+    headOfFamilyId: string | null;
+    address: string | null;
+    city: string | null;
+    state: string | null;
+    zipCode: string | null;
+    country: string | null;
+  } | null;
 
   // Notes and tracking
   notes?: string;
@@ -214,6 +225,7 @@ export interface MemberDetails {
     communityScore: number;
     communicationScore: number;
   };
+  /** Active relationships within the member's current family; the type is the relative's relation to them. */
   familyMembers?: Array<{
     id: string;
     name: string;

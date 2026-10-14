@@ -33,6 +33,17 @@ const details = {
   smsOptIn: false,
   mailOptIn: false,
   isHeadOfFamily: true,
+  familyId: 'fam1',
+  family: {
+    id: 'fam1',
+    familyName: 'Lovelace',
+    headOfFamilyId: 'u1',
+    address: '12 St James Sq',
+    city: 'London',
+    state: null,
+    zipCode: null,
+    country: null,
+  },
   volunteerSkills: ['Music'],
   interests: [],
   createdAt: '2024-01-05T12:00:00.000Z',
@@ -111,8 +122,20 @@ describe('MemberProfile', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: /Family/ }));
     expect(screen.getByText('1 family members')).toBeTruthy();
-    expect(screen.getByText('Byron Lovelace')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Byron Lovelace' }).getAttribute('href')).toBe(
+      '/members/f1',
+    );
+    expect(screen.getByText('Parent')).toBeTruthy();
     expect(screen.getByText('Head of Family')).toBeTruthy();
+    // The family by name, never its raw id, with its address and a link to manage it.
+    expect(screen.getByRole('link', { name: 'Lovelace' }).getAttribute('href')).toBe(
+      '/families/fam1',
+    );
+    expect(screen.getByText('12 St James Sq, London')).toBeTruthy();
+    expect(screen.queryByText('fam1')).toBeNull();
+    expect(screen.getByRole('link', { name: 'Manage family' }).getAttribute('href')).toBe(
+      '/families/fam1',
+    );
 
     fireEvent.click(screen.getByRole('tab', { name: /Timeline/ }));
     expect(await screen.findByText('No timeline activities found')).toBeTruthy();

@@ -3,6 +3,7 @@ import type { RegisterResult } from '@/types/domain';
 import * as analytics from './analytics';
 import * as auditApi from './audit';
 import * as auth from './auth';
+import * as families from './families';
 import * as groups from './groups';
 import * as media from './media';
 import * as memberDetails from './memberDetails';
@@ -502,6 +503,65 @@ describe('groups endpoints', () => {
       { url: '/api/groups/g1/members', method: 'POST', body: { userId: 'u1', role: 'leader' } },
       { url: '/api/groups/g1/members/u1', method: 'PATCH', body: { role: 'member' } },
       { url: '/api/groups/g1/members/u1', method: 'DELETE', body: undefined },
+    ]);
+  });
+});
+
+describe('families endpoints', () => {
+  it('lists families with search and paging, and reads the own family', async () => {
+    respond({ success: true, families: [], total: 0, page: 2, pageSize: 25, extra: 1 });
+    respond({ success: true, family: null });
+    await expect(families.listFamilies({ q: 'Doe', page: 2 })).resolves.toEqual({
+      families: [],
+      total: 0,
+      page: 2,
+      pageSize: 25,
+    });
+    await expect(families.getOwnFamily()).resolves.toBeNull();
+    expect([call(0).url, call(1).url]).toEqual([
+      '/api/families?q=Doe&page=2',
+      '/api/families/mine',
+    ]);
+  });
+
+  it('reads, creates, updates and deletes a family', async () => {
+    respond({ success: true, family: { id: 'f1' } });
+    respond({ success: true, family: { id: 'f1' } }, { status: 201 });
+    respond({ success: true, family: { id: 'f1' } });
+    respond({ success: true, members: 2, relationships: 1 });
+    await expect(families.getFamily('f1')).resolves.toEqual({ id: 'f1' });
+    await families.createFamily({ familyName: 'Doe' });
+    await families.updateFamily('f1', { headOfFamilyId: null });
+    await expect(families.deleteFamily('f1')).resolves.toEqual({ members: 2, relationships: 1 });
+    expect([call(0), call(1), call(2), call(3)]).toEqual([
+      { url: '/api/families/f1', method: 'GET', body: undefined },
+      { url: '/api/families', method: 'POST', body: { familyName: 'Doe' } },
+      { url: '/api/families/f1', method: 'PATCH', body: { headOfFamilyId: null } },
+      { url: '/api/families/f1', method: 'DELETE', body: undefined },
+    ]);
+  });
+
+  it('changes members and relationships under the family', async () => {
+    respond({ success: true, member: { id: 'u1' }, movedFrom: null });
+    respond({ success: true, member: { id: 'u1' }, movedFrom: { id: 'f0', familyName: 'Old' } });
+    respond({ success: true, relationships: 0, wasHead: false });
+    respond({ success: true, relationship: { id: 'r1' } });
+    respond({ success: true });
+    await expect(families.putFamilyMember('f1', 'u1')).resolves.toEqual({
+      member: { id: 'u1' },
+      movedFrom: null,
+    });
+    await families.putFamilyMember('f1', 'u1', true);
+    await families.removeFamilyMember('f1', 'u1');
+    const input = { userId: 'u1', relatedUserId: 'u2', type: 'spouse' } as const;
+    await expect(families.setFamilyRelationship('f1', input)).resolves.toEqual({ id: 'r1' });
+    await families.removeFamilyRelationship('f1', 'r1');
+    expect([call(0), call(1), call(2), call(3), call(4)]).toEqual([
+      { url: '/api/families/f1/members/u1', method: 'PUT', body: {} },
+      { url: '/api/families/f1/members/u1', method: 'PUT', body: { move: true } },
+      { url: '/api/families/f1/members/u1', method: 'DELETE', body: undefined },
+      { url: '/api/families/f1/relationships', method: 'PUT', body: input },
+      { url: '/api/families/f1/relationships/r1', method: 'DELETE', body: undefined },
     ]);
   });
 });

@@ -92,6 +92,7 @@ describe('app shell', () => {
       'Members',
       'Media',
       'Groups',
+      'Families',
       'Services',
       'Analytics',
       'Audit Log',
@@ -303,7 +304,7 @@ describe('navigation helpers', () => {
     expect(isCurrent('/', '/')).toBe(true);
   });
 
-  it('lists Groups for everyone, Services and Analytics for staff, the audit log for admins', () => {
+  it('lists Groups for everyone, Families, Services and Analytics for staff, the audit log for admins', () => {
     expect(navItems(false, 'u1').map((i) => i.href)).toEqual([
       '/',
       '/members',
@@ -316,6 +317,7 @@ describe('navigation helpers', () => {
       '/members',
       '/media',
       '/groups',
+      '/families',
       '/services',
       '/analytics',
       '/members/u1',
@@ -325,6 +327,7 @@ describe('navigation helpers', () => {
       '/members',
       '/media',
       '/groups',
+      '/families',
       '/services',
       '/analytics',
       '/admin/audit',
