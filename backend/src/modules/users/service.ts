@@ -159,15 +159,18 @@ export function toCsv(rows: ExportRow[]): string {
 
 // Resolves requested role ids (defaulting to `member`). Staff may create members,
 // but only an admin may grant any role other than `member`.
+// `db` is the transaction client when called inside one: a second pool connection there
+// would let concurrent updates starve the pool.
 async function resolveRoles(
   roleIds: string[] | undefined,
   requesterIsAdmin: boolean,
+  db: Prisma.TransactionClient | typeof prisma = prisma,
 ): Promise<{ id: string; name: string }[]> {
   if (!roleIds || roleIds.length === 0) {
-    const member = await prisma.role.findUnique({ where: { name: 'member' } });
+    const member = await db.role.findUnique({ where: { name: 'member' } });
     return member ? [{ id: member.id, name: member.name }] : [];
   }
-  const roles = await prisma.role.findMany({ where: { id: { in: roleIds } } });
+  const roles = await db.role.findMany({ where: { id: { in: roleIds } } });
   if (roles.length !== new Set(roleIds).size) throw new HttpError(400, 'Unknown role id');
   if (!requesterIsAdmin && roles.some((r) => r.name !== 'member')) {
     throw new HttpError(403, 'Only an admin can grant staff roles');
@@ -260,9 +263,11 @@ export async function updateUser(
 
   await prisma.$transaction(async (tx) => {
     // The account row is locked before its roles and status are read, so a concurrent update
-    // waits and the audited "from" values are the ones this update replaces.
+    // waits and the audited "from" values are the ones this update replaces. NO KEY UPDATE,
+    // like the UPDATE itself: plain FOR UPDATE also blocks the KEY SHARE locks that foreign-key
+    // checks take (the audit row's actorId), so two admins editing each other would deadlock.
     const locked = await tx.$queryRaw<{ id: string }[]>`
-      SELECT "id" FROM "users" WHERE "id" = ${id} FOR UPDATE`;
+      SELECT "id" FROM "users" WHERE "id" = ${id} FOR NO KEY UPDATE`;
     if (locked.length === 0) throw new HttpError(404, 'User not found');
     const target = await tx.user.findUniqueOrThrow({
       where: { id },
@@ -277,7 +282,7 @@ export async function updateUser(
 
     let roles: { id: string; name: string }[] | undefined;
     if (body.roleIds !== undefined) {
-      roles = await resolveRoles(body.roleIds, admin);
+      roles = await resolveRoles(body.roleIds, admin, tx);
       const ownAdminRoleId = adminRoleId(requester);
       if (admin && self && (!ownAdminRoleId || !roles.some((r) => r.id === ownAdminRoleId))) {
         throw new HttpError(403, 'You cannot lock yourself out');

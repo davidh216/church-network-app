@@ -171,6 +171,38 @@ describe('audit log (G1)', () => {
       .send({ roleIds: [roleIds.member] });
   });
 
+  it('lets two admins change each other at the same time without a deadlock', async () => {
+    // A holds B's row and waits at its audit insert, whose actorId check needs a KEY SHARE lock
+    // on A's row, while B's update holds A's row: FOR UPDATE would deadlock, NO KEY UPDATE not.
+    const otherId = (await createUser({ email: 'audit-admin2@audit.test.local', role: 'admin' }))
+      .id;
+    const other = bearer(await login('audit-admin2@audit.test.local'));
+    const { audit: realAudit } =
+      await vi.importActual<typeof import('../src/lib/audit')>('../src/lib/audit');
+    let reached!: () => void;
+    let release!: () => void;
+    const atGate = new Promise<void>((resolve) => (reached = resolve));
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    vi.mocked(audit).mockImplementationOnce(((...args: Parameters<typeof audit>) => {
+      reached();
+      return gate.then(() => realAudit(...args));
+    }) as typeof audit);
+    const both = [roleIds.admin, roleIds.leader];
+    const first = request(app).put(`/api/users/${otherId}`).set(admin).send({ roleIds: both });
+    const firstDone = first.then((r) => r);
+    await atGate;
+    const second = request(app).put(`/api/users/${adminId}`).set(other).send({ roleIds: both });
+    const secondDone = second.then((r) => r);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    release();
+    const [r1, r2] = await Promise.all([firstDone, secondDone]);
+    expect([r1.status, r2.status]).toEqual([200, 200]);
+    await request(app)
+      .put(`/api/users/${adminId}`)
+      .set(admin)
+      .send({ roleIds: [roleIds.admin] });
+  });
+
   it('rolls the change back when the audit write fails, and the event with a failed change', async () => {
     vi.mocked(audit).mockRejectedValueOnce(new Error('audit write failed'));
     const res = await request(app).put(`/api/users/${memberId}`).set(leader).send({
