@@ -38,10 +38,73 @@ describe('audit display helpers', () => {
     ).toBe('member → leader, member');
     expect(
       describeDetails({
-        metadata: { name: 'Choir', tagName: 'Choir', changes: { color: 1 } },
+        metadata: { name: 'Choir', tagName: 'Choir', tagId: 't1' },
         count: 3,
       }),
-    ).toBe('tagName: Choir; changes: color; count: 3');
+    ).toBe('tag: Choir; count: 3');
     expect(describeDetails({ metadata: null, count: null })).toBe('');
+  });
+
+  it('shows changes as "field: old → new" and hides raw ids', () => {
+    expect(
+      describeDetails({
+        metadata: {
+          name: 'Youth',
+          changes: { name: { from: 'Yuoth', to: 'Youth' }, isActive: { from: true, to: false } },
+        },
+        count: null,
+      }),
+    ).toBe('name: Yuoth → Youth; active: true → false');
+    expect(
+      describeDetails({
+        metadata: {
+          name: 'Smith',
+          changes: { headOfFamilyId: { from: null, to: 'u2' }, city: { from: 'Leeds', to: null } },
+        },
+        count: null,
+      }),
+    ).toBe('head of family: set; city: Leeds → none');
+    expect(
+      describeDetails({
+        metadata: {
+          name: 'Youth',
+          memberId: 'u1',
+          memberName: 'Mo',
+          changes: { role: { from: 'member', to: 'co_leader' } },
+        },
+        count: null,
+      }),
+    ).toBe('member: Mo; role: member → co_leader');
+  });
+
+  it('names references and relationships without their ids', () => {
+    expect(
+      describeDetails({
+        metadata: {
+          name: 'Ng',
+          memberId: 'u1',
+          memberName: 'Mo',
+          relationships: 1,
+          wasHead: false,
+          movedTo: { id: 'f2', name: 'Lee' },
+        },
+        count: 1,
+      }),
+    ).toBe('member: Mo; relationships: 1; was head: false; moved to: Lee; count: 1');
+    expect(
+      describeDetails({
+        metadata: {
+          name: 'Ng',
+          relationshipId: 'r1',
+          userId: 'u1',
+          userName: 'Al',
+          relatedUserId: 'u2',
+          relatedUserName: 'Bo',
+          type: 'parent',
+          previousType: null,
+        },
+        count: null,
+      }),
+    ).toBe('user: Al; related user: Bo; type: parent; previous type: none');
   });
 });

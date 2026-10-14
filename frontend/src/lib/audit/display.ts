@@ -43,14 +43,48 @@ export function targetLink(
 
 const show = (value: unknown): string => {
   if (Array.isArray(value)) return value.map(show).join(', ') || 'none';
-  if (value === null || value === undefined) return 'none';
-  if (typeof value === 'object') return Object.keys(value).join(', ');
+  if (value === null || value === undefined || value === '') return 'none';
+  if (typeof value === 'object') {
+    // A reference such as `movedTo: { id, name }` is shown by its name, never its id.
+    const name = (value as Record<string, unknown>).name;
+    return typeof name === 'string' ? name : Object.keys(value).join(', ');
+  }
   return String(value as string | number | boolean);
 };
 
+/** A raw id (`memberId`, `tagId`, `relationshipId`, `headOfFamilyId`): the names say who. */
+const isIdKey = (key: string) => key === 'id' || /[a-z]Id$/.test(key);
+
+/** "memberName" -> "member", "relatedUserName" -> "related user", "headOfFamilyId" -> "head of family". */
+export function fieldLabel(key: string): string {
+  if (key === 'isActive') return 'active';
+  const words = key
+    .replace(/Id$/, '')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .toLowerCase()
+    .split(' ');
+  if (words.length > 1 && words.at(-1) === 'name') words.pop();
+  return words.join(' ');
+}
+
+/** One changed field as "field: old → new"; a reference by id only says that it changed. */
+function describeChange(key: string, change: unknown): string {
+  const { from, to } = (change ?? {}) as { from?: unknown; to?: unknown };
+  if (isIdKey(key)) {
+    const what = from == null ? 'set' : to == null ? 'cleared' : 'changed';
+    return `${fieldLabel(key)}: ${what}`;
+  }
+  return `${fieldLabel(key)}: ${show(from)} → ${show(to)}`;
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  !!value && typeof value === 'object' && !Array.isArray(value);
+
 /**
  * A one-line summary of an event's details: "member → leader, member" for a change with `from`
- * and `to`, else its fields as "key: value" (the target's own name is shown elsewhere).
+ * and `to`, "field: old → new" for each entry of `changes`, else its fields as "key: value".
+ * Raw ids are left out (the names recorded beside them say who), and so is the target's own
+ * name, which is shown in its own column.
  */
 export function describeDetails(event: Pick<AuditEvent, 'metadata' | 'count'>): string {
   const parts: string[] = [];
@@ -59,8 +93,13 @@ export function describeDetails(event: Pick<AuditEvent, 'metadata' | 'count'>): 
     parts.push(`${show(metadata.from)} → ${show(metadata.to)}`);
   }
   for (const [key, value] of Object.entries(metadata)) {
-    if (key === 'name' || key === 'from' || key === 'to') continue;
-    parts.push(`${key}: ${show(value)}`);
+    if (key === 'name' || key === 'from' || key === 'to' || isIdKey(key)) continue;
+    if (key === 'changes' && isRecord(value)) {
+      for (const [field, change] of Object.entries(value))
+        parts.push(describeChange(field, change));
+      continue;
+    }
+    parts.push(`${fieldLabel(key)}: ${show(value)}`);
   }
   if (event.count !== null && event.count !== undefined) parts.push(`count: ${event.count}`);
   return parts.join('; ');
