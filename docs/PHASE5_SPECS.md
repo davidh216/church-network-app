@@ -103,6 +103,8 @@ Existing rules stay as they are:
 
 ### 1.3 Audit events (`AuditAction` enum)
 
+Stored values are snake_case (`user_role_changed`, `tag_assigned`), because a Prisma enum value cannot contain a dot; the dotted names below are their readable form. Creating an account with staff roles or as inactive records `user_role_changed` or `user_deactivated` (5A review).
+
 - **5A:**
   - From existing actions:
     - `user.role_changed`

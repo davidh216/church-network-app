@@ -69,19 +69,28 @@ A comprehensive church management platform built with modern web technologies, d
 - User-role assignments with multiple roles support
 
 #### **Families**
-- Family unit organization
-- Head of family designation
-- Shared family information and address
+- Family unit organization: each member belongs to at most one family
+- Head of family designation (the head is always a member of the family)
+- Shared family name and address
+- Relationships (spouse, parent, child, sibling, grandparent, grandchild, other) between two members of the same family, stored once per pair and shown from each side
 
 #### **Groups & Ministries**
-- Small groups, committees, service teams
-- Group leadership and member roles
+- Ministries, small groups, committees, service teams
+- Rosters with roles (leader, co-leader, member); a membership can be paused
 - Meeting schedules and location tracking
+- Archived groups stay on record but drop out of the directory, filters and engagement
+
+#### **Tags**
+- Staff-defined labels (name, colour, category) attached to members, visible to staff only
+- Tags can be archived (kept on members, no longer offered) or deleted by an admin
+
+#### **Audit log**
+- Every change to roles, account status, admin password resets, tags, groups and families records who did it and when
 
 #### **Media Management**
 - YouTube video integration
 - Content categorization and tagging
-- Approval workflow for published content
+- Approval workflow: planned (`docs/PHASE5_SPECS.md` W2); today staff posts publish immediately
 
 #### **Services and Attendance**
 - One `Service` per date and type (Sunday service, Bible study, prayer meeting and so on)
@@ -92,7 +101,8 @@ A comprehensive church management platform built with modern web technologies, d
 - Three components: attendance (last 12 weeks of scoring services, weight 0.6), community (active group memberships, 0.2) and communication (responses over asks in 12 months, 0.2)
 - Membership stage and risk follow fixed, documented rules (see `docs/PHASE3_SPECS.md` 1.5 and 6.1)
 - Monthly snapshots drive the trends; a background job refreshes every member
-- Groups cannot be managed in the app yet and interactions are recorded only through the API, so until those features arrive the community component is 0 and communication is 50 for most members
+- The community component counts active memberships in active groups. Once rosters are in use, the next refresh raises it and moves members with such a membership to `core_member`; expect stages to shift on that first refresh
+- Interactions are recorded only through the API until the communication features arrive, so communication is 50 for most members
 - Refresh job status lives in the API process: run a single API instance
 
 ## 🚦 Getting Started
@@ -168,6 +178,18 @@ npx prisma migrate resolve --rolled-back 20261006020000_relations_keys_indexes
 npx prisma migrate deploy
 ```
 
+The Phase 5 migrations (groups, families, audit) follow the same rule with a separate `phase5_archive` schema:
+- **Group leaders.** `Group.leaderId` is removed. Each group's leader becomes a `leader` row on its roster (added, or raised from `member`); the original values are in `phase5_archive.group_leaders`.
+- **Family relationships.** Pairs are stored in one canonical order, now enforced by a database check. Reversed rows are swapped (type inverted), mirrored duplicates and self-pairs are deleted, and relationships between people who are not both in that family are deleted. Every such row is copied whole into `phase5_archive.family_relationships`.
+- **Family heads.** A head with no family joins the family they head (the oldest one if several); a head who belongs to another family is cleared. Both are recorded in `phase5_archive.value_changes`.
+
+```sql
+SELECT * FROM phase5_archive.group_leaders;
+SELECT * FROM phase5_archive.family_relationships;
+SELECT * FROM phase5_archive.value_changes;
+DROP SCHEMA phase5_archive CASCADE;   -- after checking; later Phase 5 migrations recreate it if they need it
+```
+
 Stored engagement scores keep their old values until the next refresh. Run the refresh job once after upgrading, and then on a schedule (for example nightly from cron):
 
 ```bash
@@ -230,6 +252,10 @@ Run it nightly, for example from cron:
 - Self-registration creates an **inactive** account. An admin or leader activates it (edit the member and tick Active) before the person can sign in.
 - The first admin comes from the seed (`SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD`). Passwords must be at least 12 characters and not a common password. Signed-in users change theirs with `POST /api/auth/change-password`; admins reset others with `POST /api/users/:id/reset-password`.
 - `admin` and `leader` can see member contact details, CRM notes, analytics and exports and can create members. Only `admin` can grant the `leader` or `admin` role, change roles, or edit another staff account. `member` sees a name-only directory and their own profile.
+- Groups: everyone sees the directory of active groups (name, type, schedule, location, leader names) and their own memberships. Staff create, edit and archive groups and manage rosters; only an admin deletes a group. A group leader role on a roster grants no extra app permissions.
+- Families: members see their own family (the family name and their relatives' names and relationships, nothing else). Staff see and edit every family; only an admin deletes one.
+- Tags are visible to staff only, never to members, including on their own profile. Only an admin deletes a tag.
+- Admins can read the audit log (Audit Log in the navigation, or `GET /api/audit`). It has no retention limit and no delete route; it records role changes, activations and deactivations, admin password resets, accounts created with staff roles, and every tag, group and family change.
 - Emails are stored lowercase. The Postgres baseline migration starts from an empty database, so data imported from the old SQLite deployment must be lowercased on import.
 
 ### **Quality checks**
@@ -239,6 +265,7 @@ npm run format:check                                             # prettier
 npx -w frontend playwright install chromium                     # once; CI does this itself
 E2E_WEB_PORT=3111 E2E_API_PORT=5111 npm run -w frontend test:e2e # Playwright suite; starts both dev servers and needs SEED_ADMIN_* in backend/.env
 ```
+The Playwright suite signs the admin in once per run and reuses that session (saved under `frontend/test-results/.auth`), which keeps it inside the login rate limit (10 attempts per address and email every 15 minutes). The specs delete what they create, including their audit events.
 A husky pre-commit hook runs lint-staged: prettier on staged files at the root, plus `eslint --fix` in the backend, frontend and shared workspaces. CI (`.github/workflows/ci.yml`) runs on pull requests and on pushes to `main` and `modernize/**`. It runs typecheck, lint, format check, tests against a Postgres service, builds, the compiled seed, a migration drift check (`SHADOW_DATABASE_URL=... npx -w backend prisma migrate diff --from-migrations prisma/migrations --to-schema prisma/schema.prisma --exit-code`; the shadow database is wiped, so point it at a scratch database such as church_test, never at `DATABASE_URL`), a production advisory audit (`npm audit --omit=dev --audit-level=high`) and a registry-signature check of all installed packages (`npm audit signatures`). It also runs the Playwright suite followed by a backup and restore drill, and an Images job that builds both Dockerfiles and smoke-tests the compose stack (health, login page, sign-in through the web app, refresh CLI, a compose-mode backup and restore, and 503 within 10 seconds of the database stopping). Actions are pinned by commit SHA. Dependabot updates them weekly together with npm (7-day cooldown, 14 days for majors) and the Node and PostgreSQL images, which the Dockerfiles and compose pin by digest.
 
 ## 📁 Project Structure
@@ -254,30 +281,30 @@ church-network-app/
 │   ├── Dockerfile
 │   ├── prisma/
 │   │   ├── schema.prisma       # PostgreSQL schema
-│   │   ├── migrations/         # baseline plus Phase 2 and 3 migrations
+│   │   ├── migrations/         # baseline plus Phase 2, 3 and 5 migrations
 │   │   └── seed.ts             # roles and optional first admin
 │   ├── prisma.config.ts
 │   ├── src/
 │   │   ├── app.ts              # Express app: middleware, modules, 404/error handlers
 │   │   ├── server.ts           # listen and graceful shutdown
 │   │   ├── config/env.ts       # zod-validated environment
-│   │   ├── lib/                # prisma singleton, pg-config (DATABASE_URL reader), logger and request logger, HttpError, shared zod schemas
+│   │   ├── lib/                # prisma singleton, audit() helper, pg-config (DATABASE_URL reader), logger and request logger, HttpError, shared zod schemas
 │   │   ├── middleware/         # authenticate, requireRole, validate, error handler, not found
 │   │   ├── jobs/               # refresh-engagement CLI (cron)
-│   │   └── modules/            # auth, users, saved-searches, roles, media, analytics, member-details, services
+│   │   └── modules/            # auth, users, saved-searches, roles, media, analytics, member-details, services, audit, tags, groups, families
 │   │                           #   each with router.ts, service.ts, schemas.ts
 │   ├── test/                   # vitest + supertest, including a route matrix
 │   └── .env.example
 ├── frontend/                   # Next.js App Router
 │   ├── Dockerfile
 │   ├── src/
-│   │   ├── app/                # layout, providers, dashboard, members, media, analytics, services, login, register
+│   │   ├── app/                # layout, providers, dashboard, members, groups, families, media, analytics, services, admin/audit, login, register
 │   │   ├── proxy.ts            # redirects to /login without a session cookie
-│   │   ├── components/         # auth, members, media, analytics, services, dashboard, layout, ui (+ tests)
+│   │   ├── components/         # auth, members, groups, families, tags, audit, media, analytics, services, dashboard, layout, ui (+ tests)
 │   │   ├── lib/api/            # apiFetch client and typed endpoint modules
 │   │   ├── lib/auth/           # AuthProvider, useAuth, useIsStaff
 │   │   └── types/domain.ts     # shared domain types
-│   ├── e2e/                    # Playwright: smoke and attendance flows, axe checks
+│   ├── e2e/                    # Playwright: smoke, attendance and organise flows, axe checks
 │   └── .env.example
 ├── packages/shared/            # @embrace/shared: zod schemas, enums, types
 ├── docs/
@@ -285,7 +312,8 @@ church-network-app/
 │   ├── PHASE1_SPECS.md
 │   ├── PHASE2_SPECS.md
 │   ├── PHASE3_SPECS.md
-│   └── PHASE4_SPECS.md
+│   ├── PHASE4_SPECS.md
+│   └── PHASE5_SPECS.md
 └── README.md
 ```
 
@@ -302,12 +330,37 @@ All routes except `/health`, `POST /api/auth/register`, `POST /api/auth/login` a
 - `POST /api/users/:id/reset-password` - Reset a member's password *(admin)*
 
 ### **User Management**
-- `GET /api/users` - Member directory (full details for staff, name-only for members)
+- `GET /api/users` - Member directory (full details and tags for staff, name-only for members). Staff-only filters include `tagId` and `groupId`
+- `POST /api/users/search` - Advanced search *(staff)*: up to 10 conditions on name, contact, roles, engagement, dates, status, `tags` (includesAny, includesAll, excludesAll), `groups` (includesAny, excludesAll; active memberships of active groups) and `family` (isEmpty, isNotEmpty). A deleted tag or group id matches no member
 - `POST /api/users` - Create a member *(staff)*
 - `GET /api/users/:id` - Get a user (full details for staff; your own profile without engagement data for members)
 - `PUT /api/users/:id` - Update profile; staff may set `isActive`, admins may set `roleIds`
 - `GET /api/users/export` - CSV export *(staff)*
 - `GET|POST|DELETE /api/users/saved-searches` - Saved searches
+- `POST /api/users/:id/tags` `{tagId}`, `DELETE /api/users/:id/tags/:tagId` - Assign or remove a tag *(staff; archived tags cannot be newly assigned)*
+
+### **Tags** *(staff; delete is admin only)*
+- `GET /api/tags?includeArchived` - Tags with usage counts
+- `POST /api/tags`, `PATCH /api/tags/:id` - Create, rename, recolour, recategorise, archive or restore (names are unique ignoring case)
+- `DELETE /api/tags/:id` - Delete a tag and its assignments
+
+### **Groups** *(reads for everyone; writes staff; delete admin only)*
+- `GET /api/groups?type&status` - Members: active groups with leader names. Staff: also archived groups (`status=inactive|all`) and member counts
+- `GET /api/groups?mine=true` - Your own active memberships and roles
+- `GET /api/groups/:id` - Group details; staff also get the roster (404 for members on an archived group)
+- `POST /api/groups`, `PATCH /api/groups/:id`, `DELETE /api/groups/:id` - Create, edit or archive (`isActive: false`), delete
+- `POST /api/groups/:id/members` `{userId, role}`, `PATCH|DELETE /api/groups/:id/members/:userId` - Manage the roster (active accounts only; one row per person)
+
+### **Families** *(staff unless noted; delete is admin only)*
+- `GET /api/families/mine` - Your own family name and your active relatives' names and relationships *(any signed-in user)*
+- `GET /api/families?q&page&pageSize`, `GET /api/families/:id` - List and detail (members, head, relationships from both sides)
+- `POST /api/families`, `PATCH /api/families/:id`, `DELETE /api/families/:id` - Create (optionally with its head as first member), edit name, address and head (must be a member), delete (members are unlinked)
+- `PUT /api/families/:id/members/:userId` `{move?}` - Add a member; 409 `IN_OTHER_FAMILY` unless `move` is true, which also removes their relationships in the old family
+- `DELETE /api/families/:id/members/:userId` - Remove a member, their relationships in the family, and their head role
+- `PUT /api/families/:id/relationships` `{userId, relatedUserId, type}`, `DELETE /api/families/:id/relationships/:relationshipId` - Set or remove a relationship (`type` is `userId`'s relation to `relatedUserId`; both must be members)
+
+### **Audit log** *(admin)*
+- `GET /api/audit?actorId&action&targetType&targetId&from&to&page&pageSize` - Newest first; `from` and `to` are UTC calendar days; each row carries `targetExists`, false once its target has been deleted
 
 ### **Services and Attendance** *(staff; delete is admin only)*
 - `GET /api/services?from&to&type&page&pageSize` - Services in a date range
@@ -316,7 +369,7 @@ All routes except `/health`, `POST /api/auth/register`, `POST /api/auth/login` a
 - `PUT /api/services/:id/attendance` - Record `{ present: [...ids], absent: [...ids] }` (at most 2000 ids per request)
 
 ### **Member CRM** *(staff unless noted)*
-- `GET /api/member-details/:id` - Profile with notes, interactions, milestones, family and engagement
+- `GET /api/member-details/:id` - Profile with notes, interactions, milestones, tags, group memberships, family (name, address and active relationships within the current family) and engagement
 - `GET /api/member-details/:id/timeline?page&pageSize` - Interactions, milestones, notes and attended services, newest first
 - `GET /api/member-details/:id/attendance?months&types` - Attendance summary
 - `GET /api/member-details/me/attendance` - Your own attendance summary *(any signed-in user)*
@@ -351,6 +404,12 @@ All routes except `/health`, `POST /api/auth/register`, `POST /api/auth/login` a
 3. **Recording attendance**: the Attendance button in a service's row opens the sheet; tick who was present and save
 4. **Engagement**: Refresh engagement on the Analytics page after recording attendance, or schedule the refresh job (see Upgrading an existing database)
 
+### **Groups, Families and Tags**
+1. **Groups**: everyone can browse Groups and see their own. Staff create a group with "New Group", open it to add people, change roles or pause and remove memberships, and archive it when it stops meeting
+2. **Families** (staff): create a family under Families, add its members (someone already in another family is moved only after you confirm), choose the head, and set relationships between members; each side's profile shows the matching relationship
+3. **Tags** (staff): "Manage Tags" on the Members page creates, edits and archives tags; add or remove a member's tags in the Tags section of their profile, and filter the member list by tag or group
+4. **Audit log** (admin): Audit Log in the navigation lists every recorded change; filter by action, target or date, or narrow to one person or object
+
 ### **Media Library**
 1. **Adding Videos**: Add YouTube videos with titles, descriptions, and category tags
 2. **Video Player**: Enhanced player with playlist support, fullscreen, and keyboard controls
@@ -358,8 +417,8 @@ All routes except `/health`, `POST /api/auth/register`, `POST /api/auth/login` a
 
 ### **User Roles**
 - **Admin**: Full system access, user management, and configuration
-- **Leader**: Member management, content approval, and ministry oversight
-- **Member**: Media library, the member directory, and their own profile (contact details, skills and interests, own attendance)
+- **Leader**: Member management, groups, families and tags, services and attendance, analytics
+- **Member**: Media library, the member directory, the groups directory, and their own profile (contact details, skills and interests, own attendance, own groups and family)
 
 ## 🔮 Roadmap
 
@@ -372,8 +431,9 @@ All routes except `/health`, `POST /api/auth/register`, `POST /api/auth/login` a
 ### **Phase 2: Advanced Features** (In Progress)
 - [ ] Bulk member import/export
 - [ ] Communication tools (email/SMS)
-- [ ] Advanced family management
-- [ ] Group and ministry management
+- [x] Advanced family management (families, heads, relationship editing)
+- [x] Group and ministry management (directory, rosters, roles)
+- [x] Member tags and an audit log
 - [x] Attendance tracking interface (services and attendance sheet)
 
 ### **Phase 3: Analytics & Reporting**
