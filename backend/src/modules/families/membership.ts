@@ -14,6 +14,7 @@ import {
   findFamily,
   inOtherFamily,
   isUniqueViolation,
+  lockFamilies,
   toMember,
   toRelationship,
   type RelationshipRow,
@@ -22,7 +23,8 @@ import {
 // Family membership and relationships (PHASE5_SPECS.md G4), staff only. A user belongs to at most
 // one family (users.familyId). Leaving a family deletes the leaver's relationships in it and
 // clears the head when they were the head. Relationships join two different members of the same
-// family and are stored once per pair.
+// family and are stored once per pair. Each write locks its families first (lockFamilies), so
+// concurrent writes to one family cannot break these rules between their reads and writes.
 
 const USER_NOT_FOUND = 'User not found';
 const NOT_A_MEMBER = 'This person is not in the family';
@@ -38,7 +40,7 @@ const memberSelect = {
   family: { select: { familyName: true, headOfFamilyId: true } },
 } satisfies Prisma.UserSelect;
 
-// Removes userId from familyId: their relationships in it are deleted and the head is cleared
+// Removes userId from familyId (locked by the caller): their relationships in it are deleted and the head is cleared
 // when it was them. Returns what was removed, for the audit event.
 async function leave(tx: Prisma.TransactionClient, familyId: string, userId: string) {
   const { count: relationships } = await tx.familyRelationship.deleteMany({
@@ -62,9 +64,15 @@ export async function putMember(
   move: boolean,
 ): Promise<FamilyMembershipResult> {
   return prisma.$transaction(async (tx) => {
+    // Both the target family and the one they leave are locked (in id order) before the user is
+    // read again: a move out of a family they have meanwhile left is refused below.
+    const seen = await tx.user.findUnique({ where: { id: userId }, select: { familyId: true } });
+    const locked = await lockFamilies(tx, familyId, seen?.familyId);
     const family = await findFamily(tx, familyId);
     const user = await tx.user.findUnique({ where: { id: userId }, select: memberSelect });
     if (!user) throw new HttpError(404, USER_NOT_FOUND);
+    if (user.familyId && !locked.has(user.familyId))
+      throw new HttpError(409, MOVE_RACED, 'CONFLICT');
     if (user.familyId === familyId)
       return { member: toMember(user, family.headOfFamilyId), movedFrom: null };
     const old = user.familyId && user.family ? { id: user.familyId, ...user.family } : null;

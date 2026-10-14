@@ -144,7 +144,28 @@ export async function getFamily(id: string): Promise<FamilyDetail> {
   return toDetail(row);
 }
 
+/**
+ * Locks the given families' rows for the rest of the transaction and returns the ids that exist.
+ * Every family write takes this lock before it reads the members, the head or the
+ * relationships, so writes to one family run one after another and each sees the last one's
+ * result. Several families are locked in id order, so two writers never wait on each other.
+ */
+export async function lockFamilies(
+  tx: Prisma.TransactionClient,
+  ...ids: (string | null | undefined)[]
+): Promise<Set<string>> {
+  const found = new Set<string>();
+  for (const id of [...new Set(ids.filter((id): id is string => !!id))].sort()) {
+    const rows = await tx.$queryRaw<{ id: string }[]>`
+      SELECT "id" FROM "families" WHERE "id" = ${id} FOR UPDATE`;
+    if (rows.length > 0) found.add(id);
+  }
+  return found;
+}
+
+/** The family, locked (lockFamilies); 404 when there is none. */
 export async function findFamily(tx: Prisma.TransactionClient, id: string) {
+  if (!(await lockFamilies(tx, id)).has(id)) throw new HttpError(404, FAMILY_NOT_FOUND);
   const family = await tx.family.findUnique({
     where: { id },
     select: { id: true, familyName: true, headOfFamilyId: true },
@@ -219,6 +240,7 @@ export async function updateFamily(
   body: z.output<typeof updateFamilyInput>,
 ): Promise<FamilyDetail> {
   await prisma.$transaction(async (tx) => {
+    if (!(await lockFamilies(tx, id)).has(id)) throw new HttpError(404, FAMILY_NOT_FOUND);
     const before = await tx.family.findUnique({
       where: { id },
       select: {
@@ -261,6 +283,7 @@ export function deleteFamily(
   id: string,
 ): Promise<{ members: number; relationships: number }> {
   return prisma.$transaction(async (tx) => {
+    if (!(await lockFamilies(tx, id)).has(id)) throw new HttpError(404, FAMILY_NOT_FOUND);
     const family = await tx.family.findUnique({
       where: { id },
       select: { familyName: true, _count: { select: { members: true, relationships: true } } },
