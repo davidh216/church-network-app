@@ -133,4 +133,15 @@ describe('ManageTagsDialog', () => {
     await waitFor(() => expect(tagsApi.deleteTag).toHaveBeenCalledWith('t1'));
     expect(await screen.findByRole('button', { name: 'New Tag' })).toBeTruthy();
   });
+
+  it.each([
+    [0, 'It is not on any member. This cannot be undone.', 'Delete Tag'],
+    [1, 'It will be removed from 1 member.', 'Delete from 1 member'],
+  ])('words the confirmation for a tag on %i members', async (usageCount, text, button) => {
+    tagsApi.listTags.mockResolvedValue([{ ...choir, usageCount }, retired]);
+    await renderAs(['admin']);
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Choir' }));
+    expect(screen.getByText(text, { exact: false })).toBeTruthy();
+    expect(screen.getByRole('button', { name: button })).toBeTruthy();
+  });
 });

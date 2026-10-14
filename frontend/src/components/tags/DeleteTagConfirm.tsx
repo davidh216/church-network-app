@@ -15,6 +15,7 @@ interface DeleteTagConfirmProps {
 export default function DeleteTagConfirm({ tag, onDone, onCancel }: DeleteTagConfirmProps) {
   const deleteTag = useDeleteTag();
   const [error, setError] = useState('');
+  const used = tag.usageCount > 0;
   const members = `${tag.usageCount} ${tag.usageCount === 1 ? 'member' : 'members'}`;
 
   const confirm = async () => {
@@ -33,8 +34,9 @@ export default function DeleteTagConfirm({ tag, onDone, onCancel }: DeleteTagCon
         Delete the tag {tag.name}?
       </h3>
       <p className="text-sm text-gray-700">
-        It will be removed from {members}. This cannot be undone; archive the tag instead to keep it
-        on the members who have it.
+        {used
+          ? `It will be removed from ${members}. This cannot be undone; archive the tag instead to keep it on the members who have it.`
+          : 'It is not on any member. This cannot be undone.'}
       </p>
       {error && (
         <div role="alert" className="p-2 bg-red-100 border border-red-400 text-red-700 text-sm">
@@ -55,7 +57,7 @@ export default function DeleteTagConfirm({ tag, onDone, onCancel }: DeleteTagCon
           disabled={deleteTag.isPending}
           className="px-3 py-1.5 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md focus:outline-hidden focus:ring-2 focus:ring-red-500 disabled:opacity-50"
         >
-          {deleteTag.isPending ? 'Deleting...' : `Delete from ${members}`}
+          {deleteTag.isPending ? 'Deleting...' : used ? `Delete from ${members}` : 'Delete Tag'}
         </button>
       </div>
     </section>

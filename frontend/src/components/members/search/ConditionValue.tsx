@@ -64,7 +64,11 @@ export default function ConditionValue({
           </label>
         ))}
         {(kind === 'tag' || kind === 'group') && optionsFor(kind, choices).length === 0 && (
-          <span className="text-sm text-gray-600">{`No ${kind}s to choose from`}</span>
+          <span className="text-sm text-gray-600">
+            {(kind === 'tag' ? names.tags : names.groups)
+              ? `No ${kind}s to choose from`
+              : 'Loading…'}
+          </span>
         )}
       </fieldset>
     );

@@ -87,6 +87,18 @@ describe('AdvancedSearchBuilder', () => {
     });
   });
 
+  it('says the tags are loading, not that there are none, until they arrive', async () => {
+    let resolveTags: (tags: unknown[]) => void = () => undefined;
+    tagsApi.listTags.mockReturnValue(new Promise((resolve) => (resolveTags = resolve)));
+    await setup();
+    change('Condition 1 field', 'tags');
+    const tags = screen.getByRole('group', { name: 'Condition 1 values' });
+    expect(tags).toHaveTextContent('Loading…');
+    expect(tags).not.toHaveTextContent('No tags to choose from');
+    resolveTags([]);
+    await waitFor(() => expect(tags).toHaveTextContent('No tags to choose from'));
+  });
+
   it('asks for a tag before applying', async () => {
     const { onApply } = await setup();
     change('Condition 1 field', 'tags');
