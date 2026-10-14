@@ -13,7 +13,7 @@ interface GroupListProps {
 }
 
 const buttonClass =
-  'px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-hidden focus:ring-2 focus:ring-blue-500 disabled:opacity-50';
+  'px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-hidden focus:ring-2 focus:ring-blue-500 aria-disabled:opacity-50';
 
 /**
  * The groups directory: each group's name (linking to its page), type, schedule, location and
@@ -59,8 +59,9 @@ export default function GroupList({ groups, onToggleArchived, busyId }: GroupLis
               <button
                 type="button"
                 className={buttonClass}
-                disabled={busyId === staff.id}
-                onClick={() => onToggleArchived(staff)}
+                // Not `disabled`: that would drop the keyboard focus to the page.
+                aria-disabled={busyId === staff.id || undefined}
+                onClick={() => busyId !== staff.id && onToggleArchived(staff)}
                 aria-label={`${staff.isActive ? 'Archive' : 'Restore'} ${staff.name}`}
               >
                 {staff.isActive ? 'Archive' : 'Restore'}

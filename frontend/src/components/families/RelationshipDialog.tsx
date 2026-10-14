@@ -45,6 +45,8 @@ export default function RelationshipDialog({
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
+    // The button stays enabled while saving (disabling it would drop the focus to the page).
+    if (setRelationship.isPending) return;
     const checked = validateForm(setFamilyRelationshipInput, { userId, type, relatedUserId });
     if (!checked.ok) {
       setFieldErrors(checked.errors);
@@ -144,8 +146,8 @@ export default function RelationshipDialog({
           </button>
           <button
             type="submit"
-            disabled={setRelationship.isPending}
-            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md focus:outline-hidden focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+            aria-disabled={setRelationship.isPending || undefined}
+            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md focus:outline-hidden focus:ring-2 focus:ring-blue-500 aria-disabled:opacity-50"
           >
             {setRelationship.isPending ? 'Saving...' : 'Save Relationship'}
           </button>

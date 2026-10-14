@@ -4,28 +4,42 @@ import { useRef, useState } from 'react';
 import type { FamilyDetail } from '@embrace/shared';
 import { getErrorMessage } from '@/lib/errors';
 import { relationSentence } from '@/lib/families/display';
+import { useFocusAfterRemoval } from '@/lib/hooks/useFocusAfterRemoval';
 import { useRemoveFamilyRelationship } from '@/lib/queries/families';
 import RelationshipDialog from './RelationshipDialog';
 
 const smallButton =
-  'px-2.5 py-1 text-sm font-medium rounded-md border focus:outline-hidden focus:ring-2 disabled:opacity-50';
+  'px-2.5 py-1 text-sm font-medium rounded-md border focus:outline-hidden focus:ring-2 aria-disabled:opacity-50';
 
 /**
  * Staff: the family's relationships, each pair said from both sides ("Ann is the parent of Ben ·
- * Ben is the child of Ann"), with "Set relationship" (two members needed) and remove.
+ * Ben is the child of Ann"), with "Set relationship" (two members needed) and remove. After a
+ * removal, focus moves to the next relationship's Remove button, else to the heading.
  */
 export default function FamilyRelationships({ family }: { family: FamilyDetail }) {
   const remove = useRemoveFamilyRelationship();
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState('');
   const headingRef = useRef<HTMLHeadingElement>(null);
+  // Set synchronously, so a second click before the re-render starts nothing.
+  const saving = useRef(false);
+  const focus = useFocusAfterRemoval(
+    family.relationships.map((r) => r.id),
+    headingRef,
+  );
 
   const removeRelationship = async (relationshipId: string) => {
+    if (saving.current) return;
+    saving.current = true;
     setError('');
+    focus.expectRemoval(relationshipId);
     try {
       await remove.mutateAsync({ familyId: family.id, relationshipId });
     } catch (err: unknown) {
+      focus.cancel();
       setError(getErrorMessage(err, 'Failed to remove the relationship'));
+    } finally {
+      saving.current = false;
     }
   };
 
@@ -80,7 +94,8 @@ export default function FamilyRelationships({ family }: { family: FamilyDetail }
                 </span>
                 <button
                   type="button"
-                  disabled={remove.isPending}
+                  ref={focus.control(r.id)}
+                  aria-disabled={remove.isPending || undefined}
                   onClick={() => void removeRelationship(r.id)}
                   aria-label={`Remove relationship: ${sentence}`}
                   className={`${smallButton} text-red-700 bg-white border-red-300 hover:bg-red-50 focus:ring-red-500`}

@@ -144,4 +144,19 @@ describe('ManageTagsDialog', () => {
     expect(screen.getByText(text, { exact: false })).toBeTruthy();
     expect(screen.getByRole('button', { name: button })).toBeTruthy();
   });
+
+  it('keeps Archive enabled and focused while it saves, and starts nothing else', async () => {
+    let finish: (tag: unknown) => void = () => undefined;
+    tagsApi.updateTag.mockReturnValue(new Promise((resolve) => (finish = resolve)));
+    await renderAs(['leader']);
+    const archive = screen.getByRole('button', { name: 'Archive Choir' });
+    archive.focus();
+    fireEvent.click(archive);
+    await waitFor(() => expect(archive).toHaveAttribute('aria-disabled', 'true'));
+    expect(archive).not.toBeDisabled();
+    expect(archive).toHaveFocus();
+    fireEvent.click(screen.getByRole('button', { name: 'Restore Retired' }));
+    expect(tagsApi.updateTag).toHaveBeenCalledTimes(1);
+    finish({ ...choir, isActive: false });
+  });
 });

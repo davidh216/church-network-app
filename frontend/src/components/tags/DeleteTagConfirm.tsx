@@ -19,6 +19,8 @@ export default function DeleteTagConfirm({ tag, onDone, onCancel }: DeleteTagCon
   const members = `${tag.usageCount} ${tag.usageCount === 1 ? 'member' : 'members'}`;
 
   const confirm = async () => {
+    // The button stays enabled while deleting (disabling it would drop the focus to the page).
+    if (deleteTag.isPending) return;
     setError('');
     try {
       await deleteTag.mutateAsync(tag.id);
@@ -54,8 +56,8 @@ export default function DeleteTagConfirm({ tag, onDone, onCancel }: DeleteTagCon
         <button
           type="button"
           onClick={() => void confirm()}
-          disabled={deleteTag.isPending}
-          className="px-3 py-1.5 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md focus:outline-hidden focus:ring-2 focus:ring-red-500 disabled:opacity-50"
+          aria-disabled={deleteTag.isPending || undefined}
+          className="px-3 py-1.5 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md focus:outline-hidden focus:ring-2 focus:ring-red-500 aria-disabled:opacity-50"
         >
           {deleteTag.isPending ? 'Deleting...' : used ? `Delete from ${members}` : 'Delete Tag'}
         </button>

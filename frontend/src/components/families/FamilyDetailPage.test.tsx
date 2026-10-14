@@ -135,8 +135,16 @@ describe('FamilyDetailPage', () => {
     fireEvent.click(within(results).getByRole('button', { name: 'Add Cy to the family' }));
     const dialog = await screen.findByRole('dialog', { name: 'Move Cy?' });
     expect(dialog).toHaveTextContent('Cy already belongs to the Roe family.');
+    familiesApi.getFamily.mockResolvedValue({
+      ...doe,
+      members: [...doe.members, member('u3', 'Cy')],
+    });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Move to this family' }));
     await waitFor(() => expect(screen.getByText('Cy moved from the Roe family.')).toBeTruthy());
+    // The Add button that opened the dialog is gone: focus is back in the search field.
+    await waitFor(() =>
+      expect(screen.getByRole('searchbox', { name: 'Find a member' })).toHaveFocus(),
+    );
     expect(familiesApi.putFamilyMember).toHaveBeenNthCalledWith(1, 'f1', 'u3', false);
     expect(familiesApi.putFamilyMember).toHaveBeenNthCalledWith(2, 'f1', 'u3', true);
     expect(screen.queryByRole('dialog')).toBeNull();
@@ -177,5 +185,46 @@ describe('FamilyDetailPage', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Delete Family' }));
     await waitFor(() => expect(router.replace).toHaveBeenCalledWith('/families'));
     expect(familiesApi.deleteFamily).toHaveBeenCalledWith('f1');
+  });
+
+  it('moves focus to the next row after removing a member or a relationship, else the heading', async () => {
+    const U3 = 'cuser3aaaaaaaaaaaaaaaaaaaa';
+    const rel = (id: string, other: { id: string; name: string }) => ({
+      ...doe.relationships[0]!,
+      id,
+      relatedUser: other,
+    });
+    const three = {
+      ...doe,
+      members: [...doe.members, member(U3, 'Cy')],
+      relationships: [rel('r1', { id: U2, name: 'Ben' }), rel('r2', { id: U3, name: 'Cy' })],
+    };
+    familiesApi.getFamily.mockResolvedValue(three);
+    familiesApi.removeFamilyMember.mockResolvedValue(undefined);
+    familiesApi.removeFamilyRelationship.mockResolvedValue(undefined);
+    await renderAs(['leader']);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Ben from the family' }));
+    familiesApi.getFamily.mockResolvedValue({
+      ...three,
+      members: [three.members[0], three.members[2]],
+      relationships: [three.relationships[1]],
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm remove Ben' }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Remove Cy from the family' })).toHaveFocus(),
+    );
+
+    familiesApi.getFamily.mockResolvedValue({
+      ...three,
+      members: [three.members[0], three.members[2]],
+      relationships: [],
+    });
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Remove relationship: Ann is the parent of Cy' }),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'Relationships' })).toHaveFocus(),
+    );
   });
 });

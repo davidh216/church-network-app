@@ -19,7 +19,7 @@ import GroupRoster from './GroupRoster';
 const cardClass = 'p-5 border border-gray-200 shadow-sm rounded-md bg-white';
 const backLink = 'text-sm font-medium text-blue-600 hover:text-blue-800';
 const outlineButton =
-  'px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-hidden focus:ring-2 focus:ring-blue-500 disabled:opacity-50';
+  'px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-hidden focus:ring-2 focus:ring-blue-500 aria-disabled:opacity-50';
 
 /**
  * The `/groups/[id]` route: a group's details for everyone (members only reach active groups).
@@ -70,7 +70,8 @@ export default function GroupDetailPage({ id }: { id: string }) {
   ];
 
   const toggleArchived = async () => {
-    if (!staff) return;
+    // Never `disabled` while saving: that would drop the keyboard focus to the page.
+    if (!staff || updateGroup.isPending) return;
     setActionError('');
     try {
       await updateGroup.mutateAsync({ id: staff.id, input: { isActive: !staff.isActive } });
@@ -105,7 +106,7 @@ export default function GroupDetailPage({ id }: { id: string }) {
               <button
                 type="button"
                 className={outlineButton}
-                disabled={updateGroup.isPending}
+                aria-disabled={updateGroup.isPending || undefined}
                 onClick={() => void toggleArchived()}
               >
                 {staff.isActive ? 'Archive' : 'Restore'}

@@ -74,6 +74,8 @@ export default function FamilyDialog({
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
+    // The button stays enabled while saving (disabling it would drop the focus to the page).
+    if (saving) return;
     const checked = validateForm(createFamilyInput, form);
     if (!checked.ok) {
       fail(checked.errors, checked.errors[FORM_ERROR_KEY] ?? '');
@@ -152,8 +154,8 @@ export default function FamilyDialog({
           </button>
           <button
             type="submit"
-            disabled={saving}
-            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md focus:outline-hidden focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+            aria-disabled={saving || undefined}
+            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md focus:outline-hidden focus:ring-2 focus:ring-blue-500 aria-disabled:opacity-50"
           >
             {saving ? 'Saving...' : family ? 'Save Changes' : 'Create Family'}
           </button>

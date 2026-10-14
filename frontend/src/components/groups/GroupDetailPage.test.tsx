@@ -145,4 +145,73 @@ describe('GroupDetailPage', () => {
     await waitFor(() => expect(router.replace).toHaveBeenCalledWith('/groups'));
     expect(groupsApi.deleteGroup).toHaveBeenCalledWith('g1');
   });
+
+  describe('focus', () => {
+    const roster3 = [
+      row('u1', 'Ann', 'leader'),
+      row('u2', 'Ben', 'member'),
+      row('u3', 'Cy', 'member'),
+    ];
+
+    it('moves to the next row after a removal, and to the heading after the last row', async () => {
+      groupsApi.getGroup.mockResolvedValue({ ...staffChoir, roster: roster3, memberCount: 3 });
+      groupsApi.removeGroupMember.mockResolvedValue(undefined);
+      await renderAs(['leader']);
+      fireEvent.click(screen.getByRole('button', { name: 'Remove Ann' }));
+      groupsApi.getGroup.mockResolvedValue({ ...staffChoir, roster: roster3.slice(1) });
+      const confirmAnn = screen.getByRole('button', { name: 'Confirm remove Ann' });
+      confirmAnn.focus();
+      fireEvent.click(confirmAnn);
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Remove Ben' })).toHaveFocus());
+
+      fireEvent.click(screen.getByRole('button', { name: 'Remove Cy' }));
+      groupsApi.getGroup.mockResolvedValue({ ...staffChoir, roster: [roster3[1]] });
+      fireEvent.click(screen.getByRole('button', { name: 'Confirm remove Cy' }));
+      await waitFor(() => expect(screen.getByRole('heading', { name: /^Roster/ })).toHaveFocus());
+    });
+
+    it('keeps the role select and Pause enabled while a change saves, and starts nothing else', async () => {
+      groupsApi.getGroup.mockResolvedValue(staffChoir);
+      let finish: (value: unknown) => void = () => undefined;
+      groupsApi.updateGroupMember.mockReturnValue(new Promise((resolve) => (finish = resolve)));
+      await renderAs(['leader']);
+      const role = screen.getByRole('combobox', { name: 'Role of Ben' });
+      role.focus();
+      fireEvent.change(role, { target: { value: 'co_leader' } });
+      await settle();
+      expect(role).not.toBeDisabled();
+      expect(role).toHaveAttribute('aria-disabled', 'true');
+      expect(role).toHaveFocus();
+      fireEvent.click(screen.getByRole('button', { name: 'Pause membership of Ben' }));
+      fireEvent.change(role, { target: { value: 'leader' } });
+      expect(groupsApi.updateGroupMember).toHaveBeenCalledTimes(1);
+      finish(row('u2', 'Ben', 'co_leader'));
+      await settle();
+      expect(role).not.toHaveAttribute('aria-disabled');
+    });
+
+    it('returns to the search field after an add', async () => {
+      groupsApi.getGroup.mockResolvedValue(staffChoir);
+      usersApi.listUsers.mockResolvedValue({
+        users: [{ id: 'u3', name: 'Bea', email: 'bea@example.org' }],
+        total: 1,
+        page: 1,
+        pageSize: 8,
+      });
+      groupsApi.addGroupMember.mockResolvedValue(row('u3', 'Bea', 'member'));
+      await renderAs(['leader']);
+      const search = screen.getByRole('searchbox', { name: 'Find a member' });
+      fireEvent.change(search, { target: { value: 'Bea' } });
+      const results = await screen.findByRole('list', { name: 'Matching members' });
+      groupsApi.getGroup.mockResolvedValue({
+        ...staffChoir,
+        roster: [...staffChoir.roster, row('u3', 'Bea', 'member')],
+      });
+      const add = within(results).getByRole('button', { name: 'Add Bea as Member' });
+      add.focus();
+      fireEvent.click(add);
+      await waitFor(() => expect(within(results).getByText('In the group')).toBeTruthy());
+      expect(search).toHaveFocus();
+    });
+  });
 });

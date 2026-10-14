@@ -48,6 +48,8 @@ export default function ManageTagsDialog({ onClose, fallbackFocus }: ManageTagsD
   }, [view]);
 
   const setArchived = async (tag: Tag, archived: boolean) => {
+    // The button stays enabled while saving (disabling it would drop the focus to the page).
+    if (updateTag.isPending) return;
     setError('');
     try {
       await updateTag.mutateAsync({ id: tag.id, input: { isActive: !archived } });
@@ -115,10 +117,10 @@ export default function ManageTagsDialog({ onClose, fallbackFocus }: ManageTagsD
                   </button>
                   <button
                     type="button"
-                    disabled={updateTag.isPending}
+                    aria-disabled={updateTag.isPending || undefined}
                     onClick={() => void setArchived(tag, tag.isActive)}
                     aria-label={`${tag.isActive ? 'Archive' : 'Restore'} ${tag.name}`}
-                    className={`${smallButton} bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-50`}
+                    className={`${smallButton} bg-gray-100 text-gray-700 hover:bg-gray-200 aria-disabled:opacity-50`}
                   >
                     {tag.isActive ? 'Archive' : 'Restore'}
                   </button>

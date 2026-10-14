@@ -94,6 +94,25 @@ describe('GroupsPage', () => {
     expect(groupsApi.updateGroup).toHaveBeenCalledWith('g1', { isActive: false });
   });
 
+  it('moves focus to the list heading when an archived group leaves the Active list', async () => {
+    groupsApi.listGroups.mockResolvedValue([
+      staffChoir,
+      { ...staffChoir, id: 'g2', name: 'Youth' },
+    ]);
+    groupsApi.updateGroup.mockResolvedValue({ ...staffChoir, isActive: false });
+    await renderAs(['leader']);
+    groupsApi.listGroups.mockResolvedValue([{ ...staffChoir, id: 'g2', name: 'Youth' }]);
+    const archive = screen.getByRole('button', { name: 'Archive Choir' });
+    archive.focus();
+    fireEvent.click(archive);
+    // Still enabled (and focused) while it saves; a second click starts nothing.
+    expect(archive).not.toBeDisabled();
+    fireEvent.click(archive);
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Directory' })).toHaveFocus());
+    expect(groupsApi.updateGroup).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('button', { name: 'Archive Choir' })).toBeNull();
+  });
+
   it('creates a group from the dialog and opens it', async () => {
     groupsApi.listGroups.mockResolvedValue([]);
     groupsApi.createGroup.mockResolvedValue({ ...staffChoir, id: 'g9' });

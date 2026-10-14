@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { FAMILY_MEMBER_ELSEWHERE } from '@embrace/shared';
 import { isApiError } from '@/lib/api/client';
 import { getErrorMessage } from '@/lib/errors';
 import { useDebouncedValue } from '@/lib/hooks/useDebouncedValue';
 import { usePutFamilyMember } from '@/lib/queries/families';
 import { useMemberLookup } from '@/lib/queries/users';
+import { familyTitle } from '@/lib/families/display';
 import TextField from '@/components/ui/TextField';
 import MoveMemberDialog from './MoveMemberDialog';
 
@@ -20,7 +21,9 @@ interface AddFamilyMemberProps {
 /**
  * Staff: find an active member by name (the member search, debounced) and add them to the
  * family. Someone who belongs to another family is only moved after a confirmation, because the
- * move deletes their relationships there.
+ * move deletes their relationships there. After an add, focus returns to the search field for
+ * the next one (the row's Add button is gone); while it saves the buttons do nothing but stay
+ * enabled, so focus is never dropped to the page.
  */
 export default function AddFamilyMember({ familyId, familyName, memberIds }: AddFamilyMemberProps) {
   const [query, setQuery] = useState('');
@@ -30,16 +33,29 @@ export default function AddFamilyMember({ familyId, familyName, memberIds }: Add
   const { data, error, isFetching } = useMemberLookup(q);
   const putMember = usePutFamilyMember();
   const results = q ? (data?.users ?? []) : [];
+  const searchRef = useRef<HTMLInputElement>(null);
+  // Set synchronously, so a second click before the re-render starts nothing.
+  const saving = useRef(false);
+  const [added, setAdded] = useState(0);
+
+  // After the render that replaced the Add button (and closed the move dialog, whose own focus
+  // restoration runs first).
+  useEffect(() => {
+    if (added > 0) searchRef.current?.focus();
+  }, [added]);
 
   const add = async (userId: string, name: string, move = false) => {
+    if (saving.current) return;
+    saving.current = true;
     setMessage(null);
     try {
       const { movedFrom } = await putMember.mutateAsync({ familyId, userId, move });
       setMoving(null);
+      setAdded((n) => n + 1);
       setMessage({
         error: false,
         text: movedFrom
-          ? `${name} moved from the ${movedFrom.familyName} family.`
+          ? `${name} moved from the ${familyTitle(movedFrom.familyName)}.`
           : `${name} added to the family.`,
       });
     } catch (err: unknown) {
@@ -49,16 +65,19 @@ export default function AddFamilyMember({ familyId, familyName, memberIds }: Add
       }
       setMoving(null);
       setMessage({ error: true, text: getErrorMessage(err, 'Failed to add the member') });
+    } finally {
+      saving.current = false;
     }
   };
 
   return (
     <section aria-labelledby="add-family-member" className="mt-6 space-y-3">
       <h3 id="add-family-member" className="text-base font-medium text-gray-900">
-        Add a member to the {familyName} family
+        Add a member to the {familyTitle(familyName)}
       </h3>
       <TextField
         id="family-member-search"
+        ref={searchRef}
         label="Find a member"
         type="search"
         value={query}
@@ -100,10 +119,10 @@ export default function AddFamilyMember({ familyId, familyName, memberIds }: Add
               ) : (
                 <button
                   type="button"
-                  disabled={putMember.isPending}
+                  aria-disabled={putMember.isPending || undefined}
                   onClick={() => void add(user.id, user.name)}
                   aria-label={`Add ${user.name} to the family`}
-                  className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md focus:outline-hidden focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                  className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md focus:outline-hidden focus:ring-2 focus:ring-blue-500 aria-disabled:opacity-50"
                 >
                   Add
                 </button>
@@ -120,6 +139,7 @@ export default function AddFamilyMember({ familyId, familyName, memberIds }: Add
           pending={putMember.isPending}
           onConfirm={() => void add(moving.id, moving.name, true)}
           onClose={() => setMoving(null)}
+          fallbackFocus={searchRef}
         />
       )}
     </section>

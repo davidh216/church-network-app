@@ -1,6 +1,7 @@
 'use client';
 
-import { useId } from 'react';
+import { useId, type RefObject } from 'react';
+import { familyTitle } from '@/lib/families/display';
 import Dialog from '@/components/ui/Dialog';
 
 interface MoveMemberDialogProps {
@@ -12,6 +13,8 @@ interface MoveMemberDialogProps {
   pending: boolean;
   onConfirm: () => void;
   onClose: () => void;
+  /** Gets focus on close when the Add button that opened the dialog is gone. */
+  fallbackFocus?: RefObject<HTMLElement | null>;
 }
 
 /** Staff confirmation before moving someone out of their current family into this one. */
@@ -22,17 +25,23 @@ export default function MoveMemberDialog({
   pending,
   onConfirm,
   onClose,
+  fallbackFocus,
 }: MoveMemberDialogProps) {
   const titleId = useId();
   const descriptionId = useId();
   return (
-    <Dialog labelledBy={titleId} describedBy={descriptionId} onClose={onClose}>
+    <Dialog
+      labelledBy={titleId}
+      describedBy={descriptionId}
+      onClose={onClose}
+      fallbackFocus={fallbackFocus}
+    >
       <h2 id={titleId} className="text-lg font-medium text-gray-900 mb-2">
         Move {name}?
       </h2>
       <p id={descriptionId} className="text-sm text-gray-700 mb-4">
-        {reason}. Moving them to the {familyName} family removes them from that family and deletes
-        their relationships there.
+        {reason}. Moving them to the {familyTitle(familyName)} removes them from that family and
+        deletes their relationships there.
       </p>
       <div className="flex justify-end space-x-3">
         <button
@@ -44,9 +53,9 @@ export default function MoveMemberDialog({
         </button>
         <button
           type="button"
-          onClick={onConfirm}
-          disabled={pending}
-          className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md focus:outline-hidden focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+          onClick={() => !pending && onConfirm()}
+          aria-disabled={pending || undefined}
+          className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md focus:outline-hidden focus:ring-2 focus:ring-blue-500 aria-disabled:opacity-50"
         >
           {pending ? 'Moving...' : 'Move to this family'}
         </button>

@@ -3,6 +3,7 @@
 import { useId, useState, type RefObject } from 'react';
 import type { FamilyDetail } from '@embrace/shared';
 import { getErrorMessage } from '@/lib/errors';
+import { familyTitle } from '@/lib/families/display';
 import { useDeleteFamily } from '@/lib/queries/families';
 import Dialog from '@/components/ui/Dialog';
 
@@ -29,6 +30,8 @@ export default function DeleteFamilyDialog({
   const relationships = family.relationships.length;
 
   const confirm = async () => {
+    // The button stays enabled while deleting (disabling it would drop the focus to the page).
+    if (deleteFamily.isPending) return;
     setError('');
     try {
       await deleteFamily.mutateAsync(family.id);
@@ -49,7 +52,7 @@ export default function DeleteFamilyDialog({
         Delete Family?
       </h2>
       <p id={descriptionId} className="text-sm text-gray-700 mb-4">
-        The {family.familyName} family will be deleted.
+        The {familyTitle(family.familyName)} will be deleted.
         {people > 0 &&
           ` Its ${people} ${people === 1 ? 'member stays' : 'members stay'} in the directory without a family.`}
         {relationships > 0 &&
@@ -75,8 +78,8 @@ export default function DeleteFamilyDialog({
         <button
           type="button"
           onClick={() => void confirm()}
-          disabled={deleteFamily.isPending}
-          className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md focus:outline-hidden focus:ring-2 focus:ring-red-500 disabled:opacity-50"
+          aria-disabled={deleteFamily.isPending || undefined}
+          className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md focus:outline-hidden focus:ring-2 focus:ring-red-500 aria-disabled:opacity-50"
         >
           {deleteFamily.isPending ? 'Deleting...' : 'Delete Family'}
         </button>

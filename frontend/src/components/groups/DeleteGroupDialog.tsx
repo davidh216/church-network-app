@@ -28,6 +28,8 @@ export default function DeleteGroupDialog({
   const people = group.roster.length;
 
   const confirm = async () => {
+    // The button stays enabled while deleting (disabling it would drop the focus to the page).
+    if (deleteGroup.isPending) return;
     setError('');
     try {
       await deleteGroup.mutateAsync(group.id);
@@ -71,8 +73,8 @@ export default function DeleteGroupDialog({
         <button
           type="button"
           onClick={() => void confirm()}
-          disabled={deleteGroup.isPending}
-          className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md focus:outline-hidden focus:ring-2 focus:ring-red-500 disabled:opacity-50"
+          aria-disabled={deleteGroup.isPending || undefined}
+          className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md focus:outline-hidden focus:ring-2 focus:ring-red-500 aria-disabled:opacity-50"
         >
           {deleteGroup.isPending ? 'Deleting...' : 'Delete Group'}
         </button>

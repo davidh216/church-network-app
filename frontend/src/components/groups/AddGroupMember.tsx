@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { GROUP_MEMBER_ROLES, type GroupMemberRole } from '@embrace/shared';
 import { getErrorMessage } from '@/lib/errors';
 import { groupRoleLabel } from '@/lib/groups/display';
@@ -21,7 +21,9 @@ const selectClass =
 
 /**
  * Staff: find an active member by name (the member search, debounced) and add them to the group
- * with the chosen role. Members already on the roster are shown as such.
+ * with the chosen role. Members already on the roster are shown as such. After an add, the row's
+ * Add button is gone, so focus returns to the search field for the next one; while the add saves
+ * the buttons do nothing but stay enabled, so focus is never dropped to the page.
  */
 export default function AddGroupMember({ groupId, groupName, rosterIds }: AddGroupMemberProps) {
   const [query, setQuery] = useState('');
@@ -31,14 +33,28 @@ export default function AddGroupMember({ groupId, groupName, rosterIds }: AddGro
   const { data, error, isFetching } = useMemberLookup(q);
   const addMember = useAddGroupMember();
   const results = q ? (data?.users ?? []) : [];
+  const searchRef = useRef<HTMLInputElement>(null);
+  // Set synchronously, so a second click before the re-render starts nothing.
+  const saving = useRef(false);
+  const [added, setAdded] = useState(0);
+
+  // After the render that replaced the Add button with "In the group".
+  useEffect(() => {
+    if (added > 0) searchRef.current?.focus();
+  }, [added]);
 
   const add = async (userId: string, name: string) => {
+    if (saving.current) return;
+    saving.current = true;
     setMessage(null);
     try {
       await addMember.mutateAsync({ groupId, input: { userId, role } });
       setMessage({ error: false, text: `${name} added as ${groupRoleLabel(role)}.` });
+      setAdded((n) => n + 1);
     } catch (err: unknown) {
       setMessage({ error: true, text: getErrorMessage(err, 'Failed to add the member') });
+    } finally {
+      saving.current = false;
     }
   };
 
@@ -51,6 +67,7 @@ export default function AddGroupMember({ groupId, groupName, rosterIds }: AddGro
         <div className="sm:col-span-2">
           <TextField
             id="group-member-search"
+            ref={searchRef}
             label="Find a member"
             type="search"
             value={query}
@@ -116,10 +133,10 @@ export default function AddGroupMember({ groupId, groupName, rosterIds }: AddGro
                 ) : (
                   <button
                     type="button"
-                    disabled={addMember.isPending}
+                    aria-disabled={addMember.isPending || undefined}
                     onClick={() => void add(user.id, user.name)}
                     aria-label={`Add ${user.name} as ${groupRoleLabel(role)}`}
-                    className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md focus:outline-hidden focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                    className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md focus:outline-hidden focus:ring-2 focus:ring-blue-500 aria-disabled:opacity-50"
                   >
                     Add
                   </button>

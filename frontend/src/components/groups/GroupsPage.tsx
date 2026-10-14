@@ -5,6 +5,7 @@ import { GROUP_TYPES, type GroupType, type StaffGroupSummary } from '@embrace/sh
 import { useRouter } from 'next/navigation';
 import { useIsStaff } from '@/lib/auth/AuthProvider';
 import { getErrorMessage } from '@/lib/errors';
+import { useFocusAfterRemoval } from '@/lib/hooks/useFocusAfterRemoval';
 import { enumOptions } from '@/lib/members/display';
 import { useGroups, useUpdateGroup } from '@/lib/queries/groups';
 import InlineError from '@/components/ui/InlineError';
@@ -37,19 +38,29 @@ export default function GroupsPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [actionError, setActionError] = useState('');
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const directoryRef = useRef<HTMLHeadingElement>(null);
   const params = useMemo(
     () => (staff ? { type: type || undefined, status } : {}),
     [staff, type, status],
   );
   const { data, error, isPending, isPlaceholderData, refetch } = useGroups(params);
   const updateGroup = useUpdateGroup();
+  // A row archived out of the Active filter (or restored out of Archived) leaves the list: focus
+  // then goes to the list heading rather than to the page.
+  const focus = useFocusAfterRemoval(
+    (data ?? []).map((g) => g.id),
+    directoryRef,
+  );
 
   const toggleArchived = async (group: StaffGroupSummary) => {
+    if (busyId) return;
     setActionError('');
     setBusyId(group.id);
+    if (status !== 'all') focus.expectRemoval(group.id, { toNext: false });
     try {
       await updateGroup.mutateAsync({ id: group.id, input: { isActive: !group.isActive } });
     } catch (err: unknown) {
+      focus.cancel();
       setActionError(getErrorMessage(err, 'Failed to update the group'));
     } finally {
       setBusyId(null);
@@ -106,7 +117,12 @@ export default function GroupsPage() {
         className="bg-white shadow-sm rounded-lg"
       >
         <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b">
-          <h2 id="groups-directory" className="text-lg font-medium text-gray-900">
+          <h2
+            id="groups-directory"
+            ref={directoryRef}
+            tabIndex={-1}
+            className="text-lg font-medium text-gray-900 focus:outline-hidden"
+          >
             Directory
           </h2>
           {staff && (
