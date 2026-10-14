@@ -43,6 +43,14 @@ function toTag({ _count, createdAt, updatedAt, ...row }: TagRow): Tag {
 const isUniqueViolation = (err: unknown) =>
   err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002';
 
+// Tag names are checked ignoring case but the unique index is case-sensitive, so two writes of
+// "Choir" and "choir" could both pass the check. Every write that sets a name first takes this
+// transaction-scoped advisory lock (one key for all tags: names change rarely), so the checks
+// run one after another. The key is an arbitrary constant used nowhere else.
+const TAG_NAME_LOCK = 5_020_001;
+const lockTagNames = (tx: Prisma.TransactionClient) =>
+  tx.$executeRaw`SELECT pg_advisory_xact_lock(${TAG_NAME_LOCK}::bigint)`;
+
 /** 409 when another tag already has this name in any letter case. */
 async function assertNameFree(tx: Prisma.TransactionClient, name: string, exceptId?: string) {
   const clash = await tx.memberTag.findFirst({
@@ -78,6 +86,7 @@ export async function listTags(query: z.output<typeof listTagsQuery>): Promise<T
 export function createTag(actor: AuditActor, body: z.output<typeof createTagInput>): Promise<Tag> {
   return writing(() =>
     prisma.$transaction(async (tx) => {
+      await lockTagNames(tx);
       await assertNameFree(tx, body.name);
       const row = await tx.memberTag.create({ data: body, select: tagSelect });
       await audit(
@@ -113,7 +122,10 @@ export function updateTag(
           changes[key] = { from: before[key], to: value };
       }
       if (Object.keys(changes).length === 0) return toTag(before);
-      if (changes.name) await assertNameFree(tx, body.name!, id);
+      if (changes.name) {
+        await lockTagNames(tx);
+        await assertNameFree(tx, body.name!, id);
+      }
       const row = await tx.memberTag.update({ where: { id }, data: body, select: tagSelect });
       const archived = changes.isActive !== undefined && body.isActive === false;
       await audit(

@@ -90,6 +90,29 @@ describe('tags (G2)', () => {
     expect((await create({ name: 'Ch_ir' })).status).toBe(201);
   });
 
+  it('creates only one of several concurrent tags whose names differ only in letter case', async () => {
+    for (let round = 0; round < 5; round++) {
+      const names = ['Choir', 'choir', 'CHOIR', 'cHoIr'].map((n) => `${n}${round}`);
+      const results = await Promise.all(names.map((name) => create({ name })));
+      expect(results.map((r) => r.status).sort()).toEqual([201, 409, 409, 409]);
+      expect(
+        await prisma.memberTag.count({
+          where: { name: { equals: `choir${round}`, mode: 'insensitive' } },
+        }),
+      ).toBe(1);
+    }
+    // Renames too: two tags renamed at once to the same name in different cases.
+    const [a, b] = [
+      (await create({ name: 'A' })).body.tag.id,
+      (await create({ name: 'B' })).body.tag.id,
+    ];
+    const renames = await Promise.all([
+      request(app).patch(`/api/tags/${a}`).set(leader).send({ name: 'Youth' }),
+      request(app).patch(`/api/tags/${b}`).set(leader).send({ name: 'YOUTH' }),
+    ]);
+    expect(renames.map((r) => r.status).sort()).toEqual([200, 409]);
+  });
+
   it('validates the name, colour and category', async () => {
     for (const body of [
       { name: '' },
