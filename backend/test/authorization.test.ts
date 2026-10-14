@@ -665,4 +665,55 @@ describe('authorization', () => {
       expect(await prisma.family.count({ where: { id: familyId } })).toBe(1);
     });
   });
+
+  // PHASE5_SPECS.md G5: filtering by tag or group is staff-only, and a member's attempt says
+  // nothing about whether the tag or group exists.
+  describe('tag and group filters (G5)', () => {
+    let tagId: string;
+    let groupId: string;
+    const missing = 'cmissingtag0000000000000000';
+
+    beforeAll(async () => {
+      tagId = (await prisma.memberTag.create({ data: { name: 'Authz Follow-up' } })).id;
+      await prisma.userTag.create({ data: { userId: otherMemberId, tagId } });
+      groupId = (
+        await prisma.group.create({
+          data: {
+            name: 'Authz Filter Group',
+            type: 'small_group',
+            members: { create: [{ userId: otherMemberId }] },
+          },
+        })
+      ).id;
+    });
+
+    it('a member gets the same 403 for an existing or a missing tag or group', async () => {
+      const bodies = new Set<string>();
+      for (const query of [`tagId=${tagId}`, `tagId=${missing}`, `groupId=${groupId}`]) {
+        const res = await request(app).get(`/api/users?${query}`).set(bearer(memberToken));
+        expect(res.status).toBe(403);
+        bodies.add(JSON.stringify(res.body).replace(/tagId|groupId/, 'filter'));
+      }
+      expect(bodies.size).toBe(1);
+      for (const [field, value] of [
+        ['tags', [tagId]],
+        ['groups', [groupId]],
+      ] as const) {
+        const res = await request(app)
+          .post('/api/users/search')
+          .set(bearer(memberToken))
+          .send({ conditions: [{ field, operator: 'includesAny', value }], logic: 'AND' });
+        expect(res.status).toBe(403);
+        expect(res.text).not.toContain('Other Person');
+      }
+    });
+
+    it('a leader filters by tag and group', async () => {
+      for (const query of [`tagId=${tagId}`, `groupId=${groupId}`]) {
+        const res = await request(app).get(`/api/users?${query}`).set(bearer(leaderToken));
+        expect(res.status).toBe(200);
+        expect(res.body.users.map((u: { id: string }) => u.id)).toEqual([otherMemberId]);
+      }
+    });
+  });
 });
