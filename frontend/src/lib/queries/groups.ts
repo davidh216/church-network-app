@@ -53,17 +53,18 @@ export function useGroup(id: string) {
 
 /**
  * A group or roster change refetches every group query, the staff profiles that list
- * memberships, and the audit log (every group write is audited).
+ * memberships, the member lists (group filters) and the audit log (every group write is audited).
  */
 function invalidateGroups(queryClient: QueryClient, deletedId?: string) {
-  const deleted = deletedId ? queryKeys.groups.detail(deletedId) : null;
+  // A deleted group's cached page is dropped, not refetched: a stale copy must never show it as
+  // live (on Back, or from an old link), and a refetch would only flash a 404.
+  if (deletedId)
+    queryClient.removeQueries({ queryKey: queryKeys.groups.detail(deletedId), exact: true });
   return Promise.all([
-    queryClient.invalidateQueries({
-      queryKey: queryKeys.groups.all,
-      // A deleted group's own page is leaving: refetching it would only flash a 404.
-      predicate: (query) => !deleted || JSON.stringify(query.queryKey) !== JSON.stringify(deleted),
-    }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.groups.all }),
     queryClient.invalidateQueries({ queryKey: queryKeys.memberDetails.all }),
+    // Member lists show and filter by group membership.
+    queryClient.invalidateQueries({ queryKey: queryKeys.users.all }),
     queryClient.invalidateQueries({ queryKey: queryKeys.audit.all }),
   ]);
 }

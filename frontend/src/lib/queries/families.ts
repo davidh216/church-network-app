@@ -51,18 +51,19 @@ export function useFamily(id: string) {
 }
 
 /**
- * A family change refetches every family query, the staff profiles (family name, relatives) and
- * the audit log (every family write is audited).
+ * A family change refetches every family query, the staff profiles (family name, relatives), the
+ * member lists (family filters) and the audit log (every family write is audited).
  */
 function invalidateFamilies(queryClient: QueryClient, deletedId?: string) {
-  const deleted = deletedId ? queryKeys.families.detail(deletedId) : null;
+  // A deleted family's cached page is dropped, not refetched: a stale copy must never show it as
+  // live (on Back, or from an old link), and a refetch would only flash a 404.
+  if (deletedId)
+    queryClient.removeQueries({ queryKey: queryKeys.families.detail(deletedId), exact: true });
   return Promise.all([
-    queryClient.invalidateQueries({
-      queryKey: queryKeys.families.all,
-      // A deleted family's own page is leaving: refetching it would only flash a 404.
-      predicate: (query) => !deleted || JSON.stringify(query.queryKey) !== JSON.stringify(deleted),
-    }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.families.all }),
     queryClient.invalidateQueries({ queryKey: queryKeys.memberDetails.all }),
+    // Member lists show and filter by family membership.
+    queryClient.invalidateQueries({ queryKey: queryKeys.users.all }),
     queryClient.invalidateQueries({ queryKey: queryKeys.audit.all }),
   ]);
 }

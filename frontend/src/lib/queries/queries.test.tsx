@@ -5,6 +5,8 @@ import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { ApiError } from '@/lib/api/client';
 import { makeTestQueryClient, queryWrapper } from '@/test/render';
 import { useAnalytics, useRefreshAllEngagement } from './analytics';
+import { useAddGroupMember, useDeleteGroup, useUpdateGroup } from './groups';
+import { useDeleteFamily, usePutFamilyMember, useUpdateFamily } from './families';
 import { queryKeys } from './keys';
 import { useCreateMedia, useMedia } from './media';
 import { useMemberAttendance, useMemberDetails, useOwnAttendance } from './memberDetails';
@@ -76,6 +78,31 @@ const tagsApi = vi.hoisted(() => ({
   unassignTag: vi.fn(),
 }));
 vi.mock('@/lib/api/tags', () => tagsApi);
+const groupsApi = vi.hoisted(() => ({
+  listGroups: vi.fn(),
+  listOwnGroups: vi.fn(),
+  getGroup: vi.fn(),
+  createGroup: vi.fn(),
+  updateGroup: vi.fn(),
+  deleteGroup: vi.fn(),
+  addGroupMember: vi.fn(),
+  updateGroupMember: vi.fn(),
+  removeGroupMember: vi.fn(),
+}));
+vi.mock('@/lib/api/groups', () => groupsApi);
+const familiesApi = vi.hoisted(() => ({
+  listFamilies: vi.fn(),
+  getOwnFamily: vi.fn(),
+  getFamily: vi.fn(),
+  createFamily: vi.fn(),
+  updateFamily: vi.fn(),
+  deleteFamily: vi.fn(),
+  putFamilyMember: vi.fn(),
+  removeFamilyMember: vi.fn(),
+  setFamilyRelationship: vi.fn(),
+  removeFamilyRelationship: vi.fn(),
+}));
+vi.mock('@/lib/api/families', () => familiesApi);
 
 const failure = new ApiError(500, 'Server exploded');
 const stageQuery = {
@@ -333,6 +360,9 @@ const mutationCases: MutationCase[] = [
       queryKeys.users.all,
       queryKeys.memberDetails.detail('u1'),
       queryKeys.analytics.all,
+      // Rosters show each member's name and active status.
+      queryKeys.groups.all,
+      queryKeys.families.all,
       queryKeys.audit.all,
     ],
   },
@@ -465,7 +495,88 @@ const mutationCases: MutationCase[] = [
       queryKeys.audit.all,
     ],
   },
+  {
+    name: 'useAddGroupMember',
+    api: groupsApi.addGroupMember,
+    useHook: useAddGroupMember,
+    variables: { groupId: 'g1', input: { userId: 'u1', role: 'member' } },
+    args: ['g1', { userId: 'u1', role: 'member' }],
+    // Member lists filter by group, so a roster change refetches them too.
+    invalidates: [
+      queryKeys.groups.all,
+      queryKeys.memberDetails.all,
+      queryKeys.users.all,
+      queryKeys.audit.all,
+    ],
+  },
+  {
+    name: 'useUpdateGroup',
+    api: groupsApi.updateGroup,
+    useHook: useUpdateGroup,
+    variables: { id: 'g1', input: { isActive: false } },
+    args: ['g1', { isActive: false }],
+    invalidates: [
+      queryKeys.groups.all,
+      queryKeys.memberDetails.all,
+      queryKeys.users.all,
+      queryKeys.audit.all,
+    ],
+  },
+  {
+    name: 'usePutFamilyMember',
+    api: familiesApi.putFamilyMember,
+    useHook: usePutFamilyMember,
+    variables: { familyId: 'f1', userId: 'u1', move: true },
+    args: ['f1', 'u1', true],
+    invalidates: [
+      queryKeys.families.all,
+      queryKeys.memberDetails.all,
+      queryKeys.users.all,
+      queryKeys.audit.all,
+    ],
+  },
+  {
+    name: 'useUpdateFamily',
+    api: familiesApi.updateFamily,
+    useHook: useUpdateFamily,
+    variables: { id: 'f1', input: { familyName: 'Ng' } },
+    args: ['f1', { familyName: 'Ng' }],
+    invalidates: [
+      queryKeys.families.all,
+      queryKeys.memberDetails.all,
+      queryKeys.users.all,
+      queryKeys.audit.all,
+    ],
+  },
 ];
+
+describe.each([
+  {
+    name: 'useDeleteGroup',
+    api: groupsApi.deleteGroup,
+    useHook: useDeleteGroup as () => { mutateAsync: (id: string) => Promise<unknown> },
+    key: queryKeys.groups,
+  },
+  {
+    name: 'useDeleteFamily',
+    api: familiesApi.deleteFamily,
+    useHook: useDeleteFamily as () => { mutateAsync: (id: string) => Promise<unknown> },
+    key: queryKeys.families,
+  },
+])('$name', ({ api, useHook, key }) => {
+  it('drops the deleted object from the cache instead of refetching it, and keeps the rest', async () => {
+    api.mockResolvedValue(undefined);
+    const client = makeTestQueryClient();
+    client.setQueryData(key.detail('x1'), { id: 'x1' });
+    client.setQueryData(key.detail('x2'), { id: 'x2' });
+    client.setQueryData(queryKeys.users.list({}), { users: [] });
+    const { result } = renderHook(useHook, { wrapper: queryWrapper(client) });
+    await result.current.mutateAsync('x1');
+    expect(client.getQueryState(key.detail('x1'))).toBeUndefined();
+    expect(client.getQueryState(key.detail('x2'))?.isInvalidated).toBe(true);
+    expect(client.getQueryState(queryKeys.users.list({}))?.isInvalidated).toBe(true);
+  });
+});
 
 describe.each(mutationCases)('$name', ({ api, useHook, variables, args, invalidates }) => {
   it('calls the API with only the variables and invalidates the affected queries', async () => {

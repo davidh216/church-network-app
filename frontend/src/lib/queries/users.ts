@@ -72,7 +72,10 @@ export function useCreateUser() {
   });
 }
 
-/** Refetches member lists, that member's profile and analytics after an update. */
+/**
+ * Refetches member lists, that member's profile and analytics after an update, and the group and
+ * family pages, whose rosters show each member's name and active status.
+ */
 export function useUpdateUser() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -82,6 +85,8 @@ export function useUpdateUser() {
         queryClient.invalidateQueries({ queryKey: queryKeys.users.all }),
         queryClient.invalidateQueries({ queryKey: queryKeys.memberDetails.detail(id) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.analytics.all }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.groups.all }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.families.all }),
         // A role or status change is audited.
         queryClient.invalidateQueries({ queryKey: queryKeys.audit.all }),
       ]),
