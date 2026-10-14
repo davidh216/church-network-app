@@ -1,7 +1,14 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import { prisma } from '../src/lib/prisma';
+import { audit } from '../src/lib/audit';
 import { app, bearer, createUser, login, resetDatabase } from './helpers';
+
+// Wrap the real helper so a test can hold one write at its audit call.
+vi.mock('../src/lib/audit', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../src/lib/audit')>();
+  return { ...real, audit: vi.fn(real.audit) };
+});
 
 // Concurrent family writes (review findings I-F1 to I-F3). Every family write locks the family
 // row before it reads the members, the head or the relationships, so racing requests run one
@@ -145,5 +152,68 @@ describe('family write races', () => {
       await prisma.auditEvent.deleteMany();
       await prisma.user.updateMany({ data: { familyId: null } });
     }
+  });
+
+  it('refuses to create a family around a head who joined another family meanwhile', async () => {
+    for (let round = 0; round < ROUNDS; round++) {
+      const familyId = await familyWith(`Taken ${round}`, []);
+      const [create, put] = await Promise.all([
+        request(app)
+          .post('/api/families')
+          .set(admin)
+          .send({ familyName: `New ${round}`, headOfFamilyId: cyId }),
+        request(app).put(`/api/families/${familyId}/members/${cyId}`).set(admin),
+      ]);
+      // Exactly one of them places Cy; the other is refused and writes nothing.
+      expect([create.status, put.status].sort()).toEqual([201, 409]);
+      const placedIn = await familyOf(cyId);
+      if (create.status === 201) {
+        expect(put.body.code).toBe('IN_OTHER_FAMILY');
+        expect(placedIn).toBe(create.body.family.id);
+      } else {
+        expect(create.body.code).toBe('IN_OTHER_FAMILY');
+        expect(placedIn).toBe(familyId);
+        expect(await prisma.family.count({ where: { familyName: `New ${round}` } })).toBe(0);
+      }
+      const added = await prisma.auditEvent.findMany({
+        where: { action: 'family_member_added', metadata: { path: ['memberId'], equals: cyId } },
+      });
+      expect(added.map((e) => e.targetId)).toEqual([placedIn]);
+      await prisma.auditEvent.deleteMany();
+      await prisma.user.updateMany({ data: { familyId: null } });
+    }
+  });
+
+  it('refuses to create a family around a head placed in another family after it was read', async () => {
+    const familyId = await familyWith('Taken', []);
+    const { audit: realAudit } =
+      await vi.importActual<typeof import('../src/lib/audit')>('../src/lib/audit');
+    let reached!: () => void;
+    let release!: () => void;
+    const atGate = new Promise<void>((resolve) => (reached = resolve));
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    // createFamily has read Cy (no family) and created the family; it waits at family_created.
+    vi.mocked(audit).mockImplementationOnce(async (...args) => {
+      reached();
+      await gate;
+      return realAudit(...args);
+    });
+    const creating = request(app)
+      .post('/api/families')
+      .set(admin)
+      .send({ familyName: 'New', headOfFamilyId: cyId })
+      .then((res) => res);
+    await atGate;
+    const put = await request(app).put(`/api/families/${familyId}/members/${cyId}`).set(admin);
+    expect(put.status).toBe(200);
+    release();
+    const create = await creating;
+    expect(create.status).toBe(409);
+    expect(create.body).toEqual({
+      error: 'Cy already belongs to the Taken family',
+      code: 'IN_OTHER_FAMILY',
+    });
+    expect(await familyOf(cyId)).toBe(familyId);
+    expect(await prisma.family.count({ where: { familyName: 'New' } })).toBe(0);
   });
 });

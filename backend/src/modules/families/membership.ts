@@ -71,19 +71,23 @@ export async function putMember(
     const family = await findFamily(tx, familyId);
     const user = await tx.user.findUnique({ where: { id: userId }, select: memberSelect });
     if (!user) throw new HttpError(404, USER_NOT_FOUND);
-    if (user.familyId && !locked.has(user.familyId))
-      throw new HttpError(409, MOVE_RACED, 'CONFLICT');
     if (user.familyId === familyId)
       return { member: toMember(user, family.headOfFamilyId), movedFrom: null };
     const old = user.familyId && user.family ? { id: user.familyId, ...user.family } : null;
     if (old && !move) throw inOtherFamily(user.name, old.familyName);
+    if (old && !locked.has(old.id)) throw new HttpError(409, MOVE_RACED, 'CONFLICT');
 
     // Only if they are still where we read them: a concurrent move is refused, not overwritten.
     const { count } = await tx.user.updateMany({
       where: { id: userId, familyId: user.familyId },
       data: { familyId },
     });
-    if (count === 0) throw new HttpError(409, MOVE_RACED, 'CONFLICT');
+    if (count === 0) {
+      // Placed in a family since the read above (createFamily does not lock the user's family).
+      const now = await tx.user.findUnique({ where: { id: userId }, select: memberSelect });
+      if (!move && now?.family) throw inOtherFamily(user.name, now.family.familyName);
+      throw new HttpError(409, MOVE_RACED, 'CONFLICT');
+    }
     const memberMeta = { memberId: user.id, memberName: user.name };
     if (old) {
       const removed = await leave(tx, old.id, userId);

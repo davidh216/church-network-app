@@ -206,7 +206,24 @@ export async function createFamily(
       { metadata: { name: family.familyName } },
     );
     if (head) {
-      await tx.user.update({ where: { id: head.id }, data: { familyId: family.id } });
+      // Only if they still have no family: a concurrent assignment is refused, not overwritten.
+      const { count } = await tx.user.updateMany({
+        where: { id: head.id, familyId: null },
+        data: { familyId: family.id },
+      });
+      if (count === 0) {
+        const now = await tx.user.findUnique({
+          where: { id: head.id },
+          select: { family: { select: { familyName: true } } },
+        });
+        if (!now) throw fieldError('headOfFamilyId', 'User not found');
+        if (now.family) throw inOtherFamily(head.name, now.family.familyName);
+        throw new HttpError(
+          409,
+          'The family changed while saving; reload and try again',
+          'CONFLICT',
+        );
+      }
       await tx.family.update({ where: { id: family.id }, data: { headOfFamilyId: head.id } });
       await audit(
         tx,
