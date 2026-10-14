@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { searchQuery, type SearchQuery } from '@embrace/shared';
 import { getErrorMessage } from '@/lib/errors';
 import { predefinedSearches } from '@/lib/members/predefinedSearches';
-import { describeQuery, NAME_ONLY_SAVE_NOTE } from '@/lib/members/searchQuery';
+import { describeQuery, NAME_ONLY_SAVE_NOTE, referencesDeleted } from '@/lib/members/searchQuery';
+import { useSearchNames } from '@/lib/members/useSearchNames';
 import {
   useCreateSavedSearch,
   useDeleteSavedSearch,
@@ -46,6 +47,7 @@ export default function SavedSearches({
   const createSearch = useCreateSavedSearch();
   const deleteSearch = useDeleteSavedSearch();
   const recordUse = useRecordSavedSearchUse();
+  const { names } = useSearchNames(true);
   const [error, setError] = useState('');
   const [showSaveForm, setShowSaveForm] = useState(false);
 
@@ -137,7 +139,7 @@ export default function SavedSearches({
 
       {showSaveForm && currentQuery && (
         <SaveSearchForm
-          summary={describeQuery(currentQuery)}
+          summary={describeQuery(currentQuery, names)}
           note={nameOnly ? NAME_ONLY_SAVE_NOTE : undefined}
           saving={createSearch.isPending}
           onSave={(values) => void save(values)}
@@ -183,6 +185,8 @@ export default function SavedSearches({
               <SavedSearchItem
                 key={search.id}
                 search={search}
+                // A search naming a deleted tag or group still applies; that condition matches no one.
+                deletedReferences={!search.invalid && referencesDeleted(search.query, names)}
                 onApply={() => apply(search)}
                 onDelete={() => void remove(search)}
               />

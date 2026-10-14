@@ -26,11 +26,12 @@ import {
 import { queryKeys } from './keys';
 
 /** The directory (member or staff shape, as the API decides); the previous list stays while filters change. */
-export function useGroups(params: GroupListParams = {}) {
+export function useGroups(params: GroupListParams = {}, options: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: queryKeys.groups.list(params),
     queryFn: ({ signal }) => listGroups(params, signal),
     placeholderData: keepPreviousData,
+    enabled: options.enabled ?? true,
   });
 }
 

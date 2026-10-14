@@ -1,5 +1,6 @@
 import type { ListUsersParams, SortOrder, UserSortField } from '@embrace/shared';
 import { stageLabel } from './display';
+import { NO_NAMES, referenceName, type SearchNames } from './searchNames';
 
 /** The member list's quick filters as the inputs hold them; '' and 'all' mean unset. */
 export interface MemberFilters {
@@ -14,6 +15,10 @@ export interface MemberFilters {
   joinedFrom: string;
   /** `YYYY-MM-DD`, inclusive to the end of that day (the API treats date-only bounds so). */
   joinedTo: string;
+  /** A tag id: members carrying the tag. */
+  tag: string;
+  /** A group id: members with an active membership of the (active) group. */
+  group: string;
 }
 
 export const EMPTY_FILTERS: MemberFilters = {
@@ -25,6 +30,8 @@ export const EMPTY_FILTERS: MemberFilters = {
   engagement: 'all',
   joinedFrom: '',
   joinedTo: '',
+  tag: 'all',
+  group: 'all',
 };
 
 export interface MemberSort {
@@ -77,6 +84,8 @@ export function buildListParams(
     risk: unlessAll(filters.risk) as ListUsersParams['risk'],
     joinedFrom: datesValid ? filters.joinedFrom || undefined : undefined,
     joinedTo: datesValid ? filters.joinedTo || undefined : undefined,
+    tagId: unlessAll(filters.tag),
+    groupId: unlessAll(filters.group),
     ...sortParams,
     page,
     pageSize,
@@ -95,7 +104,7 @@ const isSet = (value: string) => value.trim() !== '' && value !== 'all';
 interface ChipRule {
   /** The filters one chip shows and clears together. */
   keys: (keyof MemberFilters)[];
-  label: (filters: MemberFilters) => string;
+  label: (filters: MemberFilters, names: SearchNames) => string;
 }
 
 /** One row per active-filter chip, in display order; every quick filter has one. */
@@ -115,6 +124,11 @@ const CHIP_RULES: ChipRule[] = [
     label: ({ joinedFrom: from, joinedTo: to }) =>
       from && to ? `Joined: ${from} to ${to}` : from ? `Joined from ${from}` : `Joined until ${to}`,
   },
+  { keys: ['tag'], label: (f, names) => `Tag: ${referenceName(names, 'tag', f.tag).label}` },
+  {
+    keys: ['group'],
+    label: (f, names) => `Group: ${referenceName(names, 'group', f.group).label}`,
+  },
 ];
 
 export interface FilterChip {
@@ -123,10 +137,13 @@ export interface FilterChip {
   keys: (keyof MemberFilters)[];
 }
 
-/** The chips for the quick filters that are set. */
-export function activeFilterChips(filters: MemberFilters): FilterChip[] {
+/** The chips for the quick filters that are set; `names` labels the tag and group. */
+export function activeFilterChips(
+  filters: MemberFilters,
+  names: SearchNames = NO_NAMES,
+): FilterChip[] {
   return CHIP_RULES.filter(({ keys }) => keys.some((key) => isSet(filters[key]))).map(
-    ({ keys, label }) => ({ keys, label: label(filters) }),
+    ({ keys, label }) => ({ keys, label: label(filters, names) }),
   );
 }
 

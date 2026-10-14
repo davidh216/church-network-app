@@ -11,6 +11,7 @@ import {
   activeFilterChips,
   clearChip,
 } from './filters';
+import type { SearchNames } from './searchNames';
 
 const all = {
   search: '  ann ',
@@ -21,6 +22,13 @@ const all = {
   engagement: 'all',
   joinedFrom: '2026-01-01',
   joinedTo: '2026-01-31',
+  tag: 'tag-1',
+  group: 'group-1',
+};
+
+const names: SearchNames = {
+  tags: new Map([['tag-1', 'Choir']]),
+  groups: new Map([['group-1', 'Youth']]),
 };
 
 describe('buildListParams', () => {
@@ -33,6 +41,8 @@ describe('buildListParams', () => {
       risk: undefined,
       joinedFrom: undefined,
       joinedTo: undefined,
+      tagId: undefined,
+      groupId: undefined,
       page: 1,
       pageSize: 25,
     });
@@ -47,6 +57,8 @@ describe('buildListParams', () => {
       risk: 'high',
       joinedFrom: '2026-01-01',
       joinedTo: '2026-01-31',
+      tagId: 'tag-1',
+      groupId: 'group-1',
       sort: 'createdAt',
       order: 'desc',
       page: 3,
@@ -112,6 +124,8 @@ describe('hasActiveFilters', () => {
     expect(hasActiveFilters({ ...EMPTY_FILTERS, search: '   ' })).toBe(false);
     expect(hasActiveFilters({ ...EMPTY_FILTERS, risk: 'low' })).toBe(true);
     expect(hasActiveFilters({ ...EMPTY_FILTERS, joinedTo: '2026-01-01' })).toBe(true);
+    expect(hasActiveFilters({ ...EMPTY_FILTERS, tag: 'tag-1' })).toBe(true);
+    expect(hasActiveFilters({ ...EMPTY_FILTERS, group: 'group-1' })).toBe(true);
   });
 });
 
@@ -143,7 +157,7 @@ describe('selection across pages', () => {
 describe('activeFilterChips', () => {
   it('has a chip for every quick filter that is set, with the joined range as one chip', () => {
     expect(activeFilterChips(EMPTY_FILTERS)).toEqual([]);
-    const chips = activeFilterChips({ ...all, engagement: 'medium' });
+    const chips = activeFilterChips({ ...all, engagement: 'medium' }, names);
     expect(chips.map((c) => c.label)).toEqual([
       'Search: ann',
       'Role: Leader',
@@ -152,8 +166,22 @@ describe('activeFilterChips', () => {
       'Status: Inactive',
       'Engagement: Medium (50-79)',
       'Joined: 2026-01-01 to 2026-01-31',
+      'Tag: Choir',
+      'Group: Youth',
     ]);
-    expect(chips.at(-1)!.keys).toEqual(['joinedFrom', 'joinedTo']);
+    expect(chips.find((c) => c.label.startsWith('Joined'))!.keys).toEqual([
+      'joinedFrom',
+      'joinedTo',
+    ]);
+  });
+
+  it('names a deleted tag or group "(deleted)", and waits for the names to load', () => {
+    const filters = { ...EMPTY_FILTERS, tag: 'gone', group: 'group-1' };
+    expect(activeFilterChips(filters, names).map((c) => c.label)).toEqual([
+      'Tag: (deleted)',
+      'Group: Youth',
+    ]);
+    expect(activeFilterChips(filters).map((c) => c.label)).toEqual(['Tag: …', 'Group: …']);
   });
 
   it('labels a one-sided joined range', () => {
@@ -169,5 +197,7 @@ describe('activeFilterChips', () => {
     expect(clearChip(filters, joined)).toEqual({ ...filters, joinedFrom: '', joinedTo: '' });
     const risk = activeFilterChips(filters).find((c) => c.label.startsWith('Risk'))!;
     expect(clearChip(filters, risk)).toEqual({ ...filters, risk: 'all' });
+    const tag = activeFilterChips(filters).find((c) => c.label.startsWith('Tag'))!;
+    expect(clearChip(filters, tag)).toEqual({ ...filters, tag: 'all' });
   });
 });

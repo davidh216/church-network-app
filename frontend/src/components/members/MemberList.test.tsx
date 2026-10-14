@@ -46,6 +46,41 @@ const tagsApi = vi.hoisted(() => ({
 }));
 vi.mock('@/lib/api/tags', () => tagsApi);
 
+const groupsApi = vi.hoisted(() => ({ listGroups: vi.fn() }));
+vi.mock('@/lib/api/groups', () => groupsApi);
+
+// Well-formed ids: a saved search's tag condition must parse.
+const TAG_ID = 'clh3am8hi0000qwer1234abcd';
+const ARCHIVED_TAG_ID = 'clh3am8hi0001qwer1234abcd';
+const GROUP_ID = 'clh3am8hi0002qwer1234abcd';
+const ARCHIVED_GROUP_ID = 'clh3am8hi0003qwer1234abcd';
+const DELETED_ID = 'clh3am8hi0009qwer1234abcd';
+
+const tag = (id: string, name: string, isActive = true) => ({
+  id,
+  name,
+  color: '#123456',
+  category: 'general',
+  isActive,
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
+  usageCount: 1,
+});
+const group = (id: string, name: string, isActive = true) => ({
+  id,
+  name,
+  type: 'ministry',
+  description: null,
+  meetingDay: null,
+  meetingTime: null,
+  location: null,
+  leaders: [],
+  isActive,
+  memberCount: 1,
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
+});
+
 function member(id: string, name: string, roleName: string, extra: Partial<Member> = {}): Member {
   return {
     id,
@@ -103,6 +138,8 @@ function rowNames(): string[] {
 beforeEach(() => {
   vi.resetAllMocks();
   usersApi.listUsers.mockResolvedValue(page(directory));
+  tagsApi.listTags.mockResolvedValue([]);
+  groupsApi.listGroups.mockResolvedValue([]);
 });
 
 describe('MemberList', () => {
@@ -703,5 +740,91 @@ describe('MemberList', () => {
     await renderAs(['member']);
     expect(screen.queryByRole('button', { name: 'Manage Tags' })).toBeNull();
     expect(screen.queryByRole('list', { name: 'Tags' })).toBeNull();
+    // Members may not list tags or archived groups, and get no tag or group filter.
+    expect(screen.queryByLabelText('Tag')).toBeNull();
+    expect(screen.queryByLabelText('Group')).toBeNull();
+    expect(tagsApi.listTags).not.toHaveBeenCalled();
+    expect(groupsApi.listGroups).not.toHaveBeenCalled();
+  });
+
+  it('filters staff rows by tag and by group, with named chips', async () => {
+    usersApi.listUsers.mockResolvedValue(page(staffRows));
+    tagsApi.listTags.mockResolvedValue([tag(TAG_ID, 'Choir'), tag(ARCHIVED_TAG_ID, 'Old', false)]);
+    groupsApi.listGroups.mockResolvedValue([
+      group(GROUP_ID, 'Youth'),
+      group(ARCHIVED_GROUP_ID, 'Gone', false),
+    ]);
+    await renderAs(['leader']);
+    const tagSelect = screen.getByLabelText('Tag');
+    // Archived tags still match their members; archived groups match no one, so are not offered.
+    await waitFor(() =>
+      expect(
+        within(tagSelect)
+          .getAllByRole('option')
+          .map((o) => o.textContent),
+      ).toEqual(['All Tags', 'Choir', 'Old (archived)']),
+    );
+    expect(
+      within(screen.getByLabelText('Group'))
+        .getAllByRole('option')
+        .map((o) => o.textContent),
+    ).toEqual(['All Groups', 'Youth']);
+    expect(groupsApi.listGroups).toHaveBeenCalledWith({ status: 'all' }, expect.anything());
+
+    fireEvent.change(tagSelect, { target: { value: TAG_ID } });
+    await waitFor(() => expect(lastParams()).toMatchObject({ tagId: TAG_ID }));
+    expect(lastParams().groupId).toBeUndefined();
+    fireEvent.change(screen.getByLabelText('Group'), { target: { value: GROUP_ID } });
+    await waitFor(() => expect(lastParams()).toMatchObject({ tagId: TAG_ID, groupId: GROUP_ID }));
+    expect(screen.getByRole('button', { name: 'Clear Group: Youth' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Clear Tag: Choir' }));
+    await waitFor(() => expect(lastParams().tagId).toBeUndefined());
+    expect(screen.getByLabelText('Tag')).toHaveValue('all');
+  });
+
+  it('applies a saved search naming a deleted tag and marks it "(deleted)"', async () => {
+    usersApi.listUsers.mockResolvedValue(page(staffRows));
+    usersApi.searchUsers.mockResolvedValue(page([]));
+    tagsApi.listTags.mockResolvedValue([tag(TAG_ID, 'Choir')]);
+    const query = {
+      conditions: [{ field: 'tags', operator: 'includesAny', value: [TAG_ID, DELETED_ID] }],
+      logic: 'AND',
+    };
+    savedApi.listSavedSearches.mockResolvedValue([
+      {
+        id: 's1',
+        name: 'Choir list',
+        description: null,
+        createdAt: '2026-10-01T00:00:00.000Z',
+        isPublic: false,
+        invalid: false,
+        query,
+      },
+    ]);
+    savedApi.useSavedSearch.mockResolvedValue(undefined);
+    await renderAs(['admin']);
+    fireEvent.click(screen.getByRole('button', { name: 'Saved Searches' }));
+    const apply = await screen.findByRole('button', { name: 'Apply Choir list' });
+    const item = apply.closest('li')!;
+    await waitFor(() => expect(within(item).getByText('(deleted)')).toBeInTheDocument());
+    expect(item).toHaveTextContent('names a deleted tag or group');
+
+    fireEvent.click(apply);
+    await waitFor(() =>
+      expect(usersApi.searchUsers).toHaveBeenCalledWith(
+        expect.objectContaining({ conditions: query.conditions }),
+        expect.anything(),
+      ),
+    );
+    expect(savedApi.useSavedSearch).toHaveBeenCalledWith('s1');
+    const chip = screen.getByRole('group', { name: 'Advanced query' });
+    expect(chip).toHaveTextContent('Tags include any of Choir, (deleted)');
+    expect(within(chip).getByText('(deleted)')).toHaveClass('bg-amber-100');
+
+    // The builder keeps the deleted id as a checked choice that can be removed.
+    fireEvent.click(screen.getByRole('button', { name: 'Edit query' }));
+    const values = screen.getByRole('group', { name: 'Condition 1 values' });
+    expect(within(values).getByRole('checkbox', { name: 'Choir' })).toBeChecked();
+    expect(within(values).getByRole('checkbox', { name: '(deleted)' })).toBeChecked();
   });
 });
