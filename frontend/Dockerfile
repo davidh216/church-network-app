@@ -4,7 +4,7 @@
 
 # Pinned by digest (the multi-arch index of node:24-alpine), so a rebuild uses the same base
 # image; Dependabot proposes new digests weekly (.github/dependabot.yml).
-FROM node:24-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS build
+FROM node:24-alpine@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adeea09ea8017f6e85f5 AS build
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY package.json package-lock.json tsconfig.base.json ./
@@ -21,7 +21,7 @@ ARG API_URL=http://localhost:5000
 ENV API_URL=$API_URL
 RUN npm run -w frontend build
 
-FROM node:24-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS runtime
+FROM node:24-alpine@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adeea09ea8017f6e85f5 AS runtime
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0
 WORKDIR /app
 # outputFileTracingRoot is the workspace root, so the standalone tree mirrors the repository.
